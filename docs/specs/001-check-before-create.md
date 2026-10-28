@@ -154,7 +154,7 @@ Review Queue, Review Decisions, Merge and Split (candidate 002); groups of relat
 
 Done before the task set: Drizzle schema, migration and repository on pgvector (468751a); contracts, ports and Crewday seed data (bd88faa).
 
-- [ ] 01: Verdict agent: embedder and judge (#6)
+- [x] 01: Verdict agent: embedder and judge (#6) — [209ae92](https://github.com/gaboesquivel/meta-cto/commit/209ae921ccf958b79f809c9c000e6d8a23a76c6b)
 - [ ] 02: Signal service: check, create, support, comment, search, get, metrics (#10)
 - [ ] 03: Seed and database wiring (#3)
 - [ ] 04: Eval set and runner (#9)
