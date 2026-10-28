@@ -6,6 +6,7 @@ import {
   genuiPreviewResourceDescription,
   readGenuiPreviewHtml,
 } from "./genui-preview-resource";
+import { registerSignalMcpTools } from "./register-signal-tools";
 import { registerStarterMcpTools } from "./register-tools";
 
 export const createStarterMcpServer = () => {
@@ -33,5 +34,6 @@ export const createStarterMcpServer = () => {
   );
 
   registerStarterMcpTools(server);
+  registerSignalMcpTools(server);
   return server;
 };

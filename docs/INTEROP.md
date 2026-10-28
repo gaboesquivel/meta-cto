@@ -31,6 +31,14 @@ MCP **server names** are template-specific (`flow-next` / `flow-mono` and `*-ope
 - `health`
 - `list_component_catalog`
 - `compose_ui`
+- `check_feature_request` (call before `create_feature_request`)
+- `create_feature_request`
+- `support_feature_request`
+- `comment_on_feature_request`
+- `search_feature_requests`
+- `get_feature_request`
+
+Signal tool errors are MCP tool errors (`isError: true`) whose content is `{ error: { code, message, resolution } }`.
 
 ## Operator-only MCP tool names
 

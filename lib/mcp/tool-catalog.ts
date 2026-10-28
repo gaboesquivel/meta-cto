@@ -1,4 +1,5 @@
 import { GENUI_PREVIEW_RESOURCE_URI } from "./genui-preview-resource";
+import { signalMcpToolNames, signalToolDescriptions } from "./signal-tool-descriptions";
 
 const starterMcpAppResourceUri = GENUI_PREVIEW_RESOURCE_URI;
 
@@ -20,11 +21,13 @@ export const starterMcpToolCatalog: StarterMcpToolCard[] = [
     description: "Generate a validated OpenUI composition from a natural-language UI request.",
     name: "compose_ui",
   },
+  ...signalMcpToolNames.map((name) => ({ description: signalToolDescriptions[name], name })),
 ];
 
 export const buildMcpServerCard = (origin: string) => ({
   authentication: { required: false },
-  description: "Agentic UI starter — compose OpenUI layouts with synthetic data over MCP.",
+  description:
+    "Signal — check feature requests for the same need before creating them, then support, comment or create over MCP. Also composes OpenUI layouts with synthetic data.",
   resources: [
     {
       description: "GenUI Preview MCP App",
@@ -60,7 +63,8 @@ export const buildMcpRegistryManifest = (origin: string) => ({
 export const buildAiCatalog = (origin: string) => ({
   servers: [
     {
-      description: "Meta Cto MCP — GenUI compose and catalog tools.",
+      description:
+        "Meta Cto MCP — Signal feature request tools (check before create) and GenUI compose tools.",
       name: "meta-cto",
       transport: {
         type: "streamable-http",
