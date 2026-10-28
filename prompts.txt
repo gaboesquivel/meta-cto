@@ -136,3 +136,7 @@ Outcome: resolved direction for spec 001; brief unchanged (time-box cut belongs 
 
 2026-10-28T20:05:00Z — Prompt: "Use TDD for the agent, api and mcp service"
 Summary: Recorded TDD as a build constraint for spec 001 (verdict agent unit-tested with a mocked model, real quality via frozen eval; API route tests; MCP tool parity and smoke tests; real Postgres only for pgvector and seed idempotency). Saved a feedback memory. Skills used: none. Docs changed/created: none.
+
+2026-10-28T20:15:00Z — Prompt: "we have identified term for glossary.md update it accordingly to DDD patterns"
+Summary: Ran domain-modeling (user explicitly asked for DDD structure, overriding the skill's default of not introducing it). Rewrote GLOSSARY.md as Signal's ubiquitous language by bounded context (Intake, People and tenancy, Review, Measurement, Platform) and pattern (aggregate root Feature Request; entities Check, Support, Comment, Related Link; value objects Draft, Verdict, Same Need/Related Need/Different, Reason, Underlying Need, Shared Dimension, Skip Reason, Account Context, Review Decision; domain events). Naming calls: Support (not upvote), Workspace/Account/Requester (not "customer"), "Feature Request" in full, Actor split into Staff Actor and Agent Actor, Verdict (Check) vs Review Decision (PM), Same Need vs Duplicate. Kept template terms; Operator marked as not a Signal role. No decision record (none passed the decision test).
+Skills used: domain-modeling. Docs changed/created: GLOSSARY.md.
