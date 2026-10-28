@@ -1,0 +1,9 @@
+# keep local secrets and build state out of CLI deploys
+.env
+.env.*
+!.env.example
+.vercel
+.next
+node_modules
+.agents/node_modules
+.claude/settings.local.json

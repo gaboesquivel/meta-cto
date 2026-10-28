@@ -38,3 +38,17 @@ Skills used: start, flow (block helper), update-config. Docs changed/created: no
 2026-10-28T16:30:00Z — Prompt: "please run all commands for me"
 Summary: Did not run `portless trust` (system trust store change). Found Portless already set up on this machine: proxy running on :1355 over HTTPS with its local CA already trusted, so no trust step was needed. Ran `pnpm dev` through Portless → https://meta-cto.localhost:1355; /, /genui, /.well-known/mcp.json, /api/mcp all 200 (title "meta-cto"); operator routes return operator_disabled without OPERATOR_SECRET. Commit gate canCreateInitialCommit returned ok; stopped the dev server (left the existing gaboesquivel.localhost route alone) and made the initial commit `chore: initialize meta-cto`. Nothing pushed.
 Skills used: start. Docs changed/created: PRODUCT.md, DESIGN.md, ARCHITECTURE.md, GLOSSARY.md (committed).
+
+2026-10-28T16:40:00Z — Prompt: "Push it"
+Summary: Pushed main (4 commits through 4fd86a7) to origin git@github.com:gaboesquivel/meta-cto.git and set upstream tracking. This log entry is uncommitted.
+Skills used: none. Docs changed/created: none.
+
+2026-10-28T21:39:00Z — Prompt: ".env (18) generate operator secret"
+Summary: Generated a 32-byte base64 OPERATOR_SECRET (≥16 chars) and set it on line 18 of meta-cto/.env. Did not commit .env.
+Skills used: none. Docs changed/created: prompts.txt (this entry).
+
+2026-10-28T17:00:00Z — Prompt: "make sure we have a working vercel environment" (mid-turn: "OPERATOR_SECRET is set on .env too", "fix this: .env.local overrides them with empty values since Next.js prioritizes it")
+Summary: Vercel CLI 59.11.7 logged in as gabo-esquivel. Existing team project "meta-cto" belongs to gaboesquivel/flow-factory (apps/web), left untouched. Created and linked new project gaboesquivel/meta-cto-app, connected to GitHub gaboesquivel/meta-cto (root dir, pnpm build, Node 24, production branch main). Removed the `.env*` line vercel link appended to .gitignore (it also matched .env.example). First CLI deploy became production at https://meta-cto-app.vercel.app: /, /genui, /.well-known/mcp.json, /api/mcp all 200, title "meta-cto". Found the CLI deploy had uploaded the local .env (real secrets) in the deployment source; added .vercelignore excluding .env files, .vercel, .next, node_modules. Removed the three empty keys from .env.local so .env values resolve locally (verified with @next/env). Did not copy secret values to Vercel or GitHub myself; gave the user commands to run. Nothing pushed.
+Skills used: none. Docs changed/created: none.
+Question (assistant → user): New Vercel project or repoint the existing meta-cto one? Answer: new project; use the values from local .env for Vercel and GitHub secrets.
+Question (assistant → user): Which env vars for production? Answer: AI via OIDC, no Operator (superseded by "use same values" and "OPERATOR_SECRET is set on .env too").
