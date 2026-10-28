@@ -161,5 +161,5 @@ Done before the task set: Drizzle schema, migration and repository on pgvector (
 - [x] 05: Runtime composition (#4) — [b9cf0d9](https://github.com/gaboesquivel/meta-cto/commit/b9cf0d9e38a48e3c33866a9b0119c0c896953692)
 - [x] 06: REST routes and OpenAPI (#8) — [599883c](https://github.com/gaboesquivel/meta-cto/commit/599883ca45e46f2edf5888b87fcc33b73c671c66)
 - [x] 07: MCP tools (#5) — [13847d9](https://github.com/gaboesquivel/meta-cto/commit/13847d9bad16f71b8c9b5c408bc6075a70cc6c44)
-- [ ] 08: Internal UI (#2)
+- [x] 08: Internal UI (#2) — [dbd7844](https://github.com/gaboesquivel/meta-cto/commit/dbd784435620ce2c59642a1a3cee70edde369949)
 - [ ] 09: Neon, deploy and acceptance (#7) — blocked by all
