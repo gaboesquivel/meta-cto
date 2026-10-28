@@ -156,10 +156,10 @@ Done before the task set: Drizzle schema, migration and repository on pgvector (
 
 - [x] 01: Verdict agent: embedder and judge (#6) — [209ae92](https://github.com/gaboesquivel/meta-cto/commit/209ae921ccf958b79f809c9c000e6d8a23a76c6b)
 - [ ] 02: Signal service: check, create, support, comment, search, get, metrics (#10)
-- [ ] 03: Seed and database wiring (#3)
-- [ ] 04: Eval set and runner (#9)
+- [x] 03: Seed and database wiring (#3) — [685d82b](https://github.com/gaboesquivel/meta-cto/commit/685d82b8902668df443bb1d2dedc5896332e306d)
+- [x] 04: Eval set and runner (#9) — [9a38e41](https://github.com/gaboesquivel/meta-cto/commit/9a38e4194aa740f65313086d2548696c6392ade9)
 - [ ] 05: Runtime composition (#4) — blocked by 01, 02
 - [ ] 06: REST routes and OpenAPI (#8)
-- [ ] 07: MCP tools (#5)
+- [x] 07: MCP tools (#5) — [13847d9](https://github.com/gaboesquivel/meta-cto/commit/13847d9bad16f71b8c9b5c408bc6075a70cc6c44)
 - [ ] 08: Internal UI (#2)
 - [ ] 09: Neon, deploy and acceptance (#7) — blocked by all
