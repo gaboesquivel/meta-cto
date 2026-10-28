@@ -109,3 +109,11 @@ Question (assistant → user): Write the brief with these changes to PRODUCT.md 
 2026-10-28T19:20:00Z — Prompt: "yes, but emphasize our differentiator"
 Summary: Wrote the Signal brief to PRODUCT.md on explore/signal, adding a dedicated "Differentiator" section (a verdict before every create, not a merge after it; three-way verdict with reasons; for staff and agents over API/MCP; comparison table vs everyone else; table stakes named; edge = verdict quality). Exploration is spec-ready.
 Skills used: explore. Docs changed/created: PRODUCT.md.
+
+2026-10-28T19:35:00Z — Prompt: "before specs, lets review the initial requirements, MVP definition can be broaden while keeping first implementation slice we have defined (ingestion optimization and it's key metric)" + pasted core requirements
+Summary: Mapped core requirements against the brief: submit, support and AI-first covered; view/discover and understand-grouping/evaluation were gaps; brief's "no end-user UI" and "no prioritization" conflicted with requirements (brief is unmerged, no gate). Proposed a 3-slice MVP keeping slice 1 (Capture → Connect, fragmentation rate) first. Showed exact PRODUCT.md changes (MVP sentence, new MVP slices section, journeys 4–5, later-slice signals, new out-of-scope) for approval.
+Skills used: explore. Docs changed/created: none yet.
+Question (assistant → user): Human UI in the MVP? Answer: yes, as slice 2 (minimal internal UI).
+Question (assistant → user): How far on grouped/evaluated/prioritized? Answer: group + evaluate (underlying need, related view with reasons, evidence summaries); no AI priority scores.
+Question (assistant → user): Who uses discover/support? Answer: internal teams (staff, agents, PMs).
+Question (assistant → user): Write these PRODUCT.md changes? Answer: pending.
