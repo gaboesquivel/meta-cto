@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { describe, test } from "vitest";
+import { describe, it, test } from "vitest";
 
-import { computeMetrics, KILL_LINE } from "./metrics";
+import { computeMetrics, isCorrect, KILL_LINE } from "./metrics";
 import type { ScoredPair } from "./metrics";
 
 const pair = (
@@ -52,14 +52,14 @@ describe("computeMetrics", () => {
     assert.equal(metrics.relatedNeed.precision, null);
   });
 
-  test("counts totals, exact matches and the confusion matrix", () => {
+  test("counts totals, correct pairs and the confusion matrix", () => {
     const metrics = computeMetrics([
       pair("same_need", "same_need"),
       pair("related_need", "unknown"),
       pair("different", "absent"),
     ]);
     assert.equal(metrics.total, 3);
-    assert.equal(metrics.exactMatches, 1);
+    assert.equal(metrics.exactMatches, 2);
     assert.equal(metrics.unknown, 1);
     assert.equal(metrics.confusion.same_need.same_need, 1);
     assert.equal(metrics.confusion.related_need.unknown, 1);
@@ -74,5 +74,23 @@ describe("computeMetrics", () => {
     assert.equal(above.belowKillLine, false);
     const empty = computeMetrics([]);
     assert.equal(empty.belowKillLine, null);
+  });
+});
+
+describe("isCorrect", () => {
+  it("counts an absent target as correct when the expected verdict is different", () => {
+    assert.equal(isCorrect({ expected: "different", predicted: "absent" }), true);
+    assert.equal(isCorrect({ expected: "different", predicted: "different" }), true);
+    assert.equal(isCorrect({ expected: "same_need", predicted: "absent" }), false);
+    assert.equal(isCorrect({ expected: "related_need", predicted: "related_need" }), true);
+  });
+
+  it("uses it for correct-pair counts", () => {
+    const m = computeMetrics([
+      { expected: "different", predicted: "absent" },
+      { expected: "same_need", predicted: "same_need" },
+      { expected: "related_need", predicted: "absent" },
+    ]);
+    assert.equal(m.exactMatches, 2);
   });
 });

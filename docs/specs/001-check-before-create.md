@@ -150,6 +150,12 @@ Review Queue, Review Decisions, Merge and Split (candidate 002); groups of relat
 - **Candidate specs** (GitHub mode, issues opened only on request): 002 Review Queue, Merge and Split, live Fragmentation Rate with Review Coverage; 003 Understand and evaluate (Underlying Need on every Feature Request, related groups, evidence summaries by Account and segment).
 - Preview deployments get their own Neon branch through the integration when enabled; otherwise they share the production database, and the idempotent seed keeps that safe.
 
+## Verification (2026-10-28)
+
+- **Held-Out eval** (`pnpm exec tsx evals/signal-verdict/run.ts --local`, real AI Gateway embedder and Claude Sonnet 5.5 judge on an in-memory seeded copy): Same-Need Precision **100% (10/10)**, recall 100% (10/10), reproduced on two runs; 19 of 25 pairs correct. Related-Need precision 62.5% (5/8): the two-slot cap drops lower-ranked related needs, and some neighbors the set labels different are judged related. First reading on 25 pairs, above the 85% kill line. Report: [evals/signal-verdict/report.md](../../evals/signal-verdict/report.md).
+- **Acceptance on the branch preview** (own Neon branch): the human journey passed through the REST API and pages (Same Need on Sofia's request with reasons; Support from Cedar Market; repeat Support 409; Same Need on Daniel's request plus two Related Needs, create refused without a Skip Reason then created with Related Links; detail shows Supports by Account and Related Links; metrics count Checks and Suggestion Acceptance). Step 4 returned other Related Needs in the two slots instead of Sofia's request. The MCP journey passed: tools listed, `check_feature_request` verdicts, `support_feature_request` handle, `create_feature_request` without a Check returns `check_required` with a resolution.
+- **Fixes found while verifying:** the judge now defaults to a model the AI Gateway serves (`anthropic/claude-sonnet-5.5`); the judge timeout is 20 s (8 s degraded real Checks).
+
 ## Tasks
 
 Done before the task set: Drizzle schema, migration and repository on pgvector (468751a); contracts, ports and Crewday seed data (bd88faa).

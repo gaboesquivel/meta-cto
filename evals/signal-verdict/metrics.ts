@@ -7,6 +7,11 @@ export type ExpectedVerdict = Exclude<Verdict, "unknown">;
 /** The Check's verdict for the target, or "absent" when the target was not among the candidates. */
 export type PredictedVerdict = Verdict | "absent";
 
+/** The service drops "different" candidates, so an absent target is correct when "different" was expected. */
+export const isCorrect = (pair: { expected: Verdict; predicted: PredictedVerdict }): boolean =>
+  pair.expected === pair.predicted ||
+  (pair.expected === "different" && pair.predicted === "absent");
+
 export const EXPECTED_VERDICTS: ExpectedVerdict[] = ["same_need", "related_need", "different"];
 export const PREDICTED_VERDICTS: PredictedVerdict[] = [
   "same_need",
@@ -79,7 +84,7 @@ export const computeMetrics = (pairs: ScoredPair[]): EvalMetrics => {
     absent: pairs.filter((p) => p.predicted === "absent").length,
     belowKillLine: sameNeed.precision === null ? null : sameNeed.precision < KILL_LINE,
     confusion,
-    exactMatches: pairs.filter((p) => p.expected === p.predicted).length,
+    exactMatches: pairs.filter((p) => isCorrect(p)).length,
     relatedNeed: classMetrics(pairs, "related_need"),
     sameNeed,
     total: pairs.length,

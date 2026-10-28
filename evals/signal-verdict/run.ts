@@ -6,7 +6,9 @@ import { loadRootEnv } from "@/lib/env";
 import type { SignalService } from "@/lib/signal/contracts";
 import { getSignalService } from "@/lib/signal/runtime";
 
-import { computeMetrics, formatRate, KILL_LINE } from "./metrics";
+import { createLocalEvalService } from "./local-service";
+
+import { computeMetrics, formatRate, isCorrect, KILL_LINE } from "./metrics";
 import type { EvalMetrics, PredictedVerdict } from "./metrics";
 import { loadEvalSet } from "./sets";
 import type { EvalPair, EvalSetName } from "./sets";
@@ -79,7 +81,7 @@ const runPair = async (
 
 const tableRows = (results: PairResult[]): string[] =>
   results.map(({ pair, predicted }) => {
-    const mark = pair.expected === predicted ? "ok" : "MISS";
+    const mark = isCorrect({ expected: pair.expected, predicted }) ? "ok" : "MISS";
     return `| ${pair.id} | ${pair.target} | ${pair.expected} | ${predicted} | ${mark} |`;
   });
 
@@ -89,7 +91,7 @@ const summaryLines = (metrics: EvalMetrics): string[] => {
   if (metrics.belowKillLine === true) killLine = `Kill line: BELOW ${KILL_LINE * 100}%.`;
   if (metrics.belowKillLine === false) killLine = `Kill line: at or above ${KILL_LINE * 100}%.`;
   return [
-    `- Pairs: ${metrics.total} (exact matches ${metrics.exactMatches}, absent ${metrics.absent}, unknown ${metrics.unknown})`,
+    `- Pairs: ${metrics.total} (correct ${metrics.exactMatches}, absent ${metrics.absent}, unknown ${metrics.unknown})`,
     `- Same-Need Precision: ${formatRate(sameNeed.precision)} (${sameNeed.truePositives}/${sameNeed.predicted} predicted same_need)`,
     `- Same-Need Recall: ${formatRate(sameNeed.recall)} (${sameNeed.truePositives}/${sameNeed.expected} expected same_need)`,
     `- Related-Need Precision: ${formatRate(relatedNeed.precision)} (${relatedNeed.truePositives}/${relatedNeed.predicted} predicted related_need)`,
@@ -114,7 +116,9 @@ const report = (set: EvalSetName, results: PairResult[], metrics: EvalMetrics): 
 const main = async () => {
   loadRootEnv();
   const set = parseSet(process.argv.slice(2));
-  const service = getSignalService();
+  const service = process.argv.includes("--local")
+    ? await createLocalEvalService()
+    : getSignalService();
   if (!service) {
     console.error(
       "Signal service unavailable: configure DATABASE_URL and AI keys (.env.local) and seed the Crewday Demo Workspace.",
