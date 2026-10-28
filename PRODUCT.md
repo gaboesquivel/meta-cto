@@ -4,7 +4,7 @@
 
 Signal is an AI-first feature intelligence product. It helps product teams turn unstructured customer feedback and feature requests into evidence-backed product decisions: Capture → Understand → Connect → Evaluate → Decide. AI improves the workflow itself; product managers keep responsibility for consequential prioritization and roadmap decisions.
 
-The MVP covers **Capture → Connect**: stopping feedback fragmentation at the moment a request is submitted.
+The MVP covers **Capture → Connect → Understand** in three slices, built API and MCP first. The first slice stops feedback fragmentation at the moment a request is submitted.
 
 Positioning: Signal is the system of record for feature requests, and its check before every create gives staff and agents a verdict on each similar request (same need, related need, or different) with reasons. Integrations with trackers come later.
 
@@ -30,6 +30,14 @@ Why this is different ([landscape](docs/research/2026-10-28-feature-request-land
 
 Lossless merges, a review queue and account context on requests are table stakes that Signal must match; they are not the differentiator. The edge has to be **verdict quality**, measured as same-need precision on a held-out set, because incumbents (Linear, Atlassian, Canny, Pylon) already have most of the pieces to follow.
 
+## MVP slices
+
+1. **Capture → Connect (first implementation slice).** The pre-create verdict over API and MCP, support and comment with account context, create with a stated reason, a PM review queue, lossless merge and split, the seeded Crewday history and the frozen held-out eval set. Measured by fragmentation rate with review coverage.
+2. **Discover and support.** Browse, search and request-detail endpoints, plus a minimal internal UI: submit with the live verdict while drafting, browse and search, support or comment, and a request page that shows its evidence (supporters, accounts, comments, related links with reasons).
+3. **Understand and evaluate.** AI extracts the underlying need behind a proposed solution, shows related requests as a group with the reasons they relate, and summarizes evidence per request or group, including demand by account and segment. It explains; it does not score priority. The PM decides.
+
+The MVP is for internal teams (staff, agents, PMs). Customers stay informed through the people who file for them.
+
 ## Problem
 
 Product teams receive feature requests from customers, prospects, support and internal stakeholders. The same underlying need arrives in many different words, so evidence and demand fragment across near-duplicate requests, and product managers spend their time finding, merging and summarizing instead of deciding. Related but distinct needs are the hard part: they must stay separate and linked, not be flattened into one.
@@ -52,11 +60,14 @@ AI makes judging "same need versus related need" cheap enough to run on every su
 1. **Staff submitter:** drafts a request → sees similar requests labeled same need / related / different, each with a reason → supports or comments on one with the customer's context, or creates a new request with a stated reason.
 2. **Agent submitter:** checks similarity over MCP with the draft and customer context → supports or creates → returns a citable request handle to the customer.
 3. **Product manager:** works the review queue (new requests next to their nearest matches) → marks each duplicate, related or distinct → merges and splits never lose who supported what for which account.
+4. **Internal user discovering:** browses or searches requests → opens one → sees its underlying need, supporters by account, comments and related requests with reasons → supports or comments.
+5. **Product manager evaluating:** opens a group of related requests → reads the underlying needs and the evidence summary (demand by account and segment, supporting and contradicting feedback) → decides what to pursue, outside Signal for now.
 
 ## Main metric and kill criterion
 
 - **Main metric: fragmentation rate.** The share of new requests later marked as duplicates of an existing request. Lower is better. Always reported with **review coverage** (the share of new requests a reviewer has judged), so a low rate can't hide missing review. Baseline unknown: measured first by replaying the seeded Crewday history, then live from review-queue decisions.
 - **Supporting metrics:** suggestion acceptance (supports or comments instead of creates), wrong-merge rate (merges later split), and same-need precision and recall on the held-out eval set.
+- **Later-slice signals (measured, not targets yet):** time from a new request to a reviewed state, and how often PMs edit or reject an extracted underlying need.
 - **Kill criterion:** same-need precision below **85%** on the frozen held-out Crewday eval set after a few prompt and retrieval iterations → drop suggest-before-submit and fall back to PM-only grouping.
 
 ## Riskiest assumptions
@@ -84,7 +95,7 @@ See the [landscape](docs/research/2026-10-28-feature-request-landscape.md) for s
 
 ## Out of scope (MVP)
 
-Any end-user UI (no voting board or portal), prioritization scoring, decision briefs, themes beyond pairwise related links, customer sign-in, stakeholder status updates, and external integrations beyond MCP (tracker sync comes later). Crewday is demo data, not Signal's target market.
+Customer-facing UI and customer sign-in (no public voting board or portal), AI priority scores and recommendations, decision briefs, stakeholder status updates, emerging-needs detection, automated triage routing, and external integrations beyond MCP (tracker sync comes later). These are candidates after the MVP. Crewday is demo data, not Signal's target market.
 
 ## Technical baseline
 
