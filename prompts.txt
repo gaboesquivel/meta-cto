@@ -1,0 +1,16 @@
+2026-10-28T15:16:00Z — Prompt: "remove all code, remove .git and leave only AGENTS.md and CLAUDE.md"
+Summary: Deleted all project files, node_modules, .next, .claude, .agents and .git (no remote; history unrecoverable). Only AGENTS.md and CLAUDE.md remain.
+Skills used: none. Docs changed/created: none (ARCHITECTURE.md, DESIGN.md, GLOSSARY.md, PRODUCT.md, README.md deleted).
+
+2026-10-28T15:20:00Z — Prompt: "remove leftover"
+Summary: Removed the Next.js agent-rules block from AGENTS.md.
+Skills used: none. Docs changed/created: AGENTS.md.
+
+2026-10-28T15:25:00Z — Prompt: "on the summary rule in agents.md add listing what skills where used and what docs files changed or created"
+Summary: Extended the Prompt Logging rule so summaries list skills used and docs files changed or created.
+Skills used: none. Docs changed/created: AGENTS.md.
+Question (assistant → user): Should prompts.txt be created to start logging? Answer: "ok".
+
+2026-10-28T15:30:00Z — Prompt: "ok git init initial commit"
+Summary: Created prompts.txt with entries for this session, ran git init and made the initial commit.
+Skills used: none. Docs changed/created: prompts.txt.
