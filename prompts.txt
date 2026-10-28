@@ -105,3 +105,7 @@ Summary (cont.): Presented patterns, opening, threats, falsifiers and proposed b
 2026-10-28T19:10:00Z — Prompt: "Own the records"
 Summary: Positioning set: Signal is the system of record for feature requests; tracker integrations later. Showed the updated brief sections (Definition positioning line, evidence-based Why now, new incumbent-timing assumption, Alternatives by class) for approval before writing PRODUCT.md on explore/signal. Skills used: explore. Docs changed/created: none.
 Question (assistant → user): Write the brief with these changes to PRODUCT.md on explore/signal? Answer: pending.
+
+2026-10-28T19:20:00Z — Prompt: "yes, but emphasize our differentiator"
+Summary: Wrote the Signal brief to PRODUCT.md on explore/signal, adding a dedicated "Differentiator" section (a verdict before every create, not a merge after it; three-way verdict with reasons; for staff and agents over API/MCP; comparison table vs everyone else; table stakes named; edge = verdict quality). Exploration is spec-ready.
+Skills used: explore. Docs changed/created: PRODUCT.md.
