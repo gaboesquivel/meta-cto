@@ -3,17 +3,19 @@ import type { LanguageModel } from "ai";
 
 import { resolveChatModel } from "@/lib/ai/resolve-chat-model";
 
-/** `SIGNAL_JUDGE_MODEL` (an AI Gateway model id), or null to use the template chat model. */
-export const judgeModelId = (): string | null => process.env.SIGNAL_JUDGE_MODEL?.trim() || null;
+/** Served by the AI Gateway; the template's chat default is not. */
+export const DEFAULT_JUDGE_MODEL = "anthropic/claude-sonnet-5.5";
+
+/** `SIGNAL_JUDGE_MODEL` (an AI Gateway model id), defaulting to `DEFAULT_JUDGE_MODEL`. */
+export const judgeModelId = (): string =>
+  process.env.SIGNAL_JUDGE_MODEL?.trim() || DEFAULT_JUDGE_MODEL;
 
 /**
- * The verdict model: `SIGNAL_JUDGE_MODEL` through the AI Gateway when set, otherwise the
- * template's chat model resolution (`CHAT_MODEL`, gateway or direct Anthropic override).
- * Returns null when no credentials are configured.
+ * The verdict model through the AI Gateway. Without a gateway key it falls back to the
+ * template's direct Anthropic override. Returns null when no credentials are configured.
  */
 export const resolveJudgeModel = (): LanguageModel | null => {
-  const modelId = judgeModelId();
   const gatewayKey = process.env.AI_GATEWAY_API_KEY?.trim();
-  if (modelId && gatewayKey) return createGateway({ apiKey: gatewayKey })(modelId);
+  if (gatewayKey) return createGateway({ apiKey: gatewayKey })(judgeModelId());
   return resolveChatModel();
 };

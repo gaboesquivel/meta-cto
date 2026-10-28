@@ -60,7 +60,6 @@ export const createLlmJudge = (options: {
       output: Output.object({ name: "check_verdicts", schema: judgeOutputSchema }),
       prompt: buildJudgePrompt({ candidates, draft }),
       system: JUDGE_SYSTEM,
-      temperature: 0,
       timeout: options.timeoutMs,
     });
     return {
