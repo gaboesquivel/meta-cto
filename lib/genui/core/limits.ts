@@ -1,0 +1,4 @@
+export const GENUI_MAX_STACK_CHILDREN = 6;
+export const GENUI_MAX_DOCUMENT_BYTES = 64 * 1024;
+export const GENUI_MAX_STATEMENT_COUNT = 1;
+export const MAX_QUERY_CODE_POINTS = 2000;

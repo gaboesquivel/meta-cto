@@ -1,0 +1,15 @@
+packages:
+  - "."
+allowBuilds:
+  "@openuidev/lang-core": true
+  esbuild: true
+  simple-git-hooks: true
+overrides:
+  undici: ">=8.12.2"
+  body-parser: ">=2.4.0"
+  zod: ">=4.6.6"
+  "@modelcontextprotocol/sdk": ">=1.32.2"
+  esbuild: ">=0.25.12"
+minimumReleaseAgeExclude:
+  - "@ai-sdk/gateway@4.0.125"
+  - "ai@7.0.152"

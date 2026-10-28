@@ -1,0 +1,33 @@
+# dependencies
+node_modules
+.pnpm-store
+
+# next
+.next
+out
+
+# env
+.env
+.env.local
+.env.*.local
+
+# build artifacts
+mcp-app/dist
+*.tsbuildinfo
+
+# eve
+.eve
+
+# agent skills tooling
+.agents/node_modules
+
+# misc
+.DS_Store
+*.pem
+.vercel
+test-results
+playwright-report
+AGENTS.md
+
+# Claude Code personal settings
+.claude/settings.local.json
