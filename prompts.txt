@@ -133,3 +133,6 @@ Question (assistant → user): Retrieval? Answer: pgvector embeddings (against r
 Question (assistant → user): Ship order? Answer: service → MCP → UI (against recommendation of service → UI → MCP).
 Question (assistant → user): Reviewer access? Answer: open demo, rate-limited.
 Outcome: resolved direction for spec 001; brief unchanged (time-box cut belongs to the spec). Skills used: interview, grill. Docs changed/created: none.
+
+2026-10-28T20:05:00Z — Prompt: "Use TDD for the agent, api and mcp service"
+Summary: Recorded TDD as a build constraint for spec 001 (verdict agent unit-tested with a mocked model, real quality via frozen eval; API route tests; MCP tool parity and smoke tests; real Postgres only for pgvector and seed idempotency). Saved a feedback memory. Skills used: none. Docs changed/created: none.
