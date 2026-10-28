@@ -149,3 +149,17 @@ Review Queue, Review Decisions, Merge and Split (candidate 002); groups of relat
 - **Time risk:** pgvector setup and the embedding pipeline compete with the UI for the 3 hours. If time runs short, the UI shrinks to `/requests/new` with Verdict cards, which carries the reviewer moment.
 - **Candidate specs** (GitHub mode, issues opened only on request): 002 Review Queue, Merge and Split, live Fragmentation Rate with Review Coverage; 003 Understand and evaluate (Underlying Need on every Feature Request, related groups, evidence summaries by Account and segment).
 - Preview deployments get their own Neon branch through the integration when enabled; otherwise they share the production database, and the idempotent seed keeps that safe.
+
+## Tasks
+
+Done before the task set: Drizzle schema, migration and repository on pgvector (468751a); contracts, ports and Crewday seed data (bd88faa).
+
+- [ ] 01: Verdict agent: embedder and judge (#6)
+- [ ] 02: Signal service: check, create, support, comment, search, get, metrics (#10)
+- [ ] 03: Seed and database wiring (#3)
+- [ ] 04: Eval set and runner (#9)
+- [ ] 05: Runtime composition (#4) — blocked by 01, 02
+- [ ] 06: REST routes and OpenAPI (#8)
+- [ ] 07: MCP tools (#5)
+- [ ] 08: Internal UI (#2)
+- [ ] 09: Neon, deploy and acceptance (#7) — blocked by all
