@@ -117,3 +117,7 @@ Question (assistant → user): Human UI in the MVP? Answer: yes, as slice 2 (min
 Question (assistant → user): How far on grouped/evaluated/prioritized? Answer: group + evaluate (underlying need, related view with reasons, evidence summaries); no AI priority scores.
 Question (assistant → user): Who uses discover/support? Answer: internal teams (staff, agents, PMs).
 Question (assistant → user): Write these PRODUCT.md changes? Answer: pending.
+
+2026-10-28T19:40:00Z — Prompt: "Yes, write it"
+Summary: Applied the MVP changes to PRODUCT.md on explore/signal: MVP sentence (Capture → Connect → Understand in three slices), new "MVP slices" section, journeys 4–5, later-slice signals, updated out of scope. Brief is spec-ready.
+Skills used: explore. Docs changed/created: PRODUCT.md.
