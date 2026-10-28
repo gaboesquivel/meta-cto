@@ -1,8 +1,17 @@
-# meta-cto — design notes
+# Signal — design notes
 
-## Experience baseline
+## Experience principle
 
-The UI inherits the flow-next template: a minimal home page, GenUI playground at `/genui`, and developer links at `/dev`. Replace the home experience when the product direction is known.
+The pre-create verdict is the hero moment. Before anything is filed, the person (or agent) sees the Draft's Underlying Need and each similar Feature Request labeled Same Need, Related Need or Different, with a Reason. Same Need is styled as the strongest signal and leads to Support or Comment; creating anyway asks for a Skip Reason.
+
+## Internal UI (spec 001)
+
+- `/`: one paragraph on the differentiator (a verdict before every create) and links into the flow.
+- `/requests/new`: Draft → Check → Underlying Need and Verdict cards → Support, Comment or Create.
+- `/requests`: semantic search and a list with Support and Account counts.
+- `/requests/[id]`: Underlying Need, Supports grouped by Account with Account Context and quotes, Related Links with Shared Dimension and Reason, Comments, and Support and Comment forms.
+
+UI copy uses the [glossary](GLOSSARY.md) terms. Pages work at phone width. There is no sign-in: the MVP is an internal tool on the Crewday Demo Workspace.
 
 ## Constraints carried from the template
 
