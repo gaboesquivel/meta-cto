@@ -1,0 +1,5 @@
+interface:
+  display_name: "Competitors"
+  short_description: "Map alternatives and differentiation"
+policy:
+  allow_implicit_invocation: true

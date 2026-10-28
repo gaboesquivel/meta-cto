@@ -1,0 +1,5 @@
+interface:
+  display_name: "Jobs To Be Done"
+  short_description: "Frame jobs and progress"
+policy:
+  allow_implicit_invocation: true

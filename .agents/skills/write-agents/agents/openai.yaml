@@ -1,0 +1,5 @@
+interface:
+  display_name: "Write Agents"
+  short_description: "Write or edit agent instructions and project context"
+policy:
+  allow_implicit_invocation: true

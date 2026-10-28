@@ -1,0 +1,5 @@
+interface:
+  display_name: "Flow"
+  short_description: "Align root context docs and set up the Flow block"
+policy:
+  allow_implicit_invocation: true

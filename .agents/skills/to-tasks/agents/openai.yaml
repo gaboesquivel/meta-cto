@@ -1,0 +1,5 @@
+interface:
+  display_name: "To Tasks"
+  short_description: "Split a plan into verifiable task slices"
+policy:
+  allow_implicit_invocation: true

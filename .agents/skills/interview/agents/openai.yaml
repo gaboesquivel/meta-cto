@@ -1,0 +1,5 @@
+interface:
+  display_name: "Interview"
+  short_description: "Extract what you want, with a guess on every question"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,5 @@
+interface:
+  display_name: "Board"
+  short_description: "Read-only progress board of specs from git"
+policy:
+  allow_implicit_invocation: true

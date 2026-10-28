@@ -1,0 +1,5 @@
+interface:
+  display_name: "Review"
+  short_description: "Five-axis review against intent, spec, and context"
+policy:
+  allow_implicit_invocation: true

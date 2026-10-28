@@ -1,0 +1,5 @@
+interface:
+  display_name: "Prototype"
+  short_description: "Prototype to answer a design, API, or logic question"
+policy:
+  allow_implicit_invocation: true

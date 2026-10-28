@@ -1,0 +1,5 @@
+interface:
+  display_name: "Council"
+  short_description: "Independent expert review for decisions"
+policy:
+  allow_implicit_invocation: true

@@ -1,0 +1,5 @@
+interface:
+  display_name: "TL;DR"
+  short_description: "Visual session recap and alignment check"
+policy:
+  allow_implicit_invocation: true

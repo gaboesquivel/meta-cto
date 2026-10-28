@@ -1,0 +1,5 @@
+interface:
+  display_name: "Domain Modeling"
+  short_description: "Refine glossary terms and decision records"
+policy:
+  allow_implicit_invocation: true

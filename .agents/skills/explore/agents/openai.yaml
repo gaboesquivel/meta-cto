@@ -1,0 +1,5 @@
+interface:
+  display_name: "Explore"
+  short_description: "Understand problem, context, and uncertainty"
+policy:
+  allow_implicit_invocation: true

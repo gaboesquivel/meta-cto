@@ -1,0 +1,5 @@
+interface:
+  display_name: "Start"
+  short_description: "Bootstrap flow-next or flow-mono while exploring the product"
+policy:
+  allow_implicit_invocation: true

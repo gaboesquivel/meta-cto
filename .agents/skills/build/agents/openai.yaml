@@ -1,0 +1,5 @@
+interface:
+  display_name: "Build"
+  short_description: "Build work from a spec or tasks"
+policy:
+  allow_implicit_invocation: true
