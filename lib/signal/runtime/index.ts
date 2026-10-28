@@ -14,6 +14,7 @@ export const createRuntimeService = (deps: {
   db: SignalDb;
   embedder: Embedder;
   judge: Judge;
+  judgeTimeoutMs?: number;
 }): SignalService => {
   const repo = createRepository(deps.db);
   let ready: Promise<SignalService> | null = null;
@@ -22,6 +23,7 @@ export const createRuntimeService = (deps: {
       createSignalService({
         embedder: deps.embedder,
         judge: deps.judge,
+        judgeTimeoutMs: deps.judgeTimeoutMs,
         repo,
         workspaceId: row.id,
       }),
@@ -40,6 +42,12 @@ export const createRuntimeService = (deps: {
   };
 };
 
+/** `SIGNAL_JUDGE_TIMEOUT_MS` when it is a positive number; otherwise the service default. */
+export const judgeTimeoutFromEnv = (): number | undefined => {
+  const value = Number(process.env.SIGNAL_JUDGE_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
 let cached: SignalService | null = null;
 
 /** Composed Signal service, or null when the database or AI keys are not configured. */
@@ -50,6 +58,11 @@ export const getSignalService = (): SignalService | null => {
   const embedder = createGatewayEmbedder();
   const model = resolveJudgeModel();
   if (!(embedder && model)) return null;
-  cached = createRuntimeService({ db, embedder, judge: createLlmJudge({ model }) });
+  cached = createRuntimeService({
+    db,
+    embedder,
+    judge: createLlmJudge({ model }),
+    judgeTimeoutMs: judgeTimeoutFromEnv(),
+  });
   return cached;
 };

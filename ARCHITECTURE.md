@@ -18,7 +18,7 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 
 - `contracts.ts`: zod input schemas, response types, `SignalError` codes, and the ports (`Embedder`, `Judge`, `SignalService`) shared by REST, MCP and UI.
 - `agent/`: AI Gateway embedder (`openai/text-embedding-3-small`, 1536 dimensions) and the LLM judge (one structured-output call returning the Underlying Need and a Verdict, Reason and Shared Dimension per candidate).
-- `service/`: the domain service. A Check embeds the Draft, takes the 10 nearest Feature Requests by cosine distance, asks the judge, caps the result (≤ 3 Same Need, ≤ 2 Related Need) and falls back to `unknown` verdicts (`degraded`) on judge failure or an 8 s timeout. Create requires a matching, unexpired Check and a Skip Reason after Same Need. Every action records a domain event.
+- `service/`: the domain service. A Check embeds the Draft, takes the 10 nearest Feature Requests by cosine distance, asks the judge, caps the result (≤ 3 Same Need, ≤ 2 Related Need) and falls back to `unknown` verdicts (`degraded`) on judge failure or a 20 s timeout. Create requires a matching, unexpired Check and a Skip Reason after Same Need. Every action records a domain event.
 - `repository.ts`, `schema.ts`, `db.ts`: Drizzle on Neon Postgres with pgvector ([decision 0001](docs/decisions/0001-postgres-pgvector-neon-drizzle.md)); migrations in `drizzle/`.
 - `seed/`: idempotent Crewday Demo Workspace seed from `data/crewday/`.
 - `runtime/`: `getSignalService()` composes the above, or returns null when `DATABASE_URL` or AI keys are missing (routes then answer 503 `service_unavailable`).

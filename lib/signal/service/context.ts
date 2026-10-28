@@ -24,7 +24,7 @@ export interface ServiceContext {
   workspaceId: string;
 }
 
-export const DEFAULT_JUDGE_TIMEOUT_MS = 8000;
+export const DEFAULT_JUDGE_TIMEOUT_MS = 20_000;
 
 export const toContext = (deps: SignalServiceDeps): ServiceContext => ({
   embedder: deps.embedder,

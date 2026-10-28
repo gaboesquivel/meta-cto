@@ -87,7 +87,7 @@ MCP tools are added to the **Public MCP** (`lib/mcp/register-tools.ts`) and `sta
 - A domain service `lib/signal/` with ports for the embedder, the verdict model and the repository, so tests inject fakes.
 - Retrieval: embed `title + description` with an AI Gateway embedding model (`openai/text-embedding-3-small`, 1536 dimensions), take the 10 nearest Feature Requests by cosine distance in the Workspace.
 - Judgment: one structured-output call (AI SDK `generateObject` with a zod schema) through the AI Gateway chat model, given the Draft and the 10 candidates (title, description, Underlying Need). It returns the Draft's Underlying Need and a Verdict, Reason and Shared Dimension per candidate. The service enforces the caps and drops `different`.
-- Failure: on model error, timeout (8 s) or schema failure, return candidates with `unknown` and `degraded: true`. Never fabricate a Verdict.
+- Failure: on model error, timeout (20 s; measured 7.7 s for 10 candidates on Claude Sonnet 5.5, so 8 s degraded real Checks; `SIGNAL_JUDGE_TIMEOUT_MS` overrides) or schema failure, return candidates with `unknown` and `degraded: true`. Never fabricate a Verdict.
 - Eval items never appear in prompts or few-shot examples.
 
 ### Data (Drizzle on Neon Postgres with pgvector, see decision 0001)

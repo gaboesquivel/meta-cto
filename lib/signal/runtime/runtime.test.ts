@@ -4,7 +4,9 @@ import { afterEach, describe, it } from "vitest";
 import type { Embedder, Judge } from "@/lib/signal/contracts";
 import { createTestDb } from "@/lib/signal/test-db";
 
-import { createRuntimeService, getSignalService } from "./index";
+import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
+
+import { createRuntimeService, getSignalService, judgeTimeoutFromEnv } from "./index";
 
 const embedder: Embedder = {
   embed: (text) => {
@@ -50,5 +52,20 @@ describe("signal runtime", () => {
     assert.equal(result.nextAction, "create");
     const metrics = await service.metrics();
     assert.equal(metrics.checks, 1);
+  });
+});
+
+describe("judgeTimeoutFromEnv", () => {
+  it("reads SIGNAL_JUDGE_TIMEOUT_MS and ignores invalid values", () => {
+    process.env.SIGNAL_JUDGE_TIMEOUT_MS = "15000";
+    assert.equal(judgeTimeoutFromEnv(), 15_000);
+    process.env.SIGNAL_JUDGE_TIMEOUT_MS = "nope";
+    assert.equal(judgeTimeoutFromEnv(), undefined);
+    delete process.env.SIGNAL_JUDGE_TIMEOUT_MS;
+    assert.equal(judgeTimeoutFromEnv(), undefined);
+  });
+
+  it("defaults the service judge timeout to 20 seconds", () => {
+    assert.equal(DEFAULT_JUDGE_TIMEOUT_MS, 20_000);
   });
 });
