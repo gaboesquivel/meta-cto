@@ -20,13 +20,13 @@ Each verdict comes with a reason a person or an agent can act on, and a stated r
 
 Why this is different ([landscape](docs/research/2026-10-28-feature-request-landscape.md)):
 
-| | Everyone else | Signal |
-| --- | --- | --- |
-| When | After creation: batch linking, triage suggestions, auto-merge inboxes | Before creation, at draft time |
-| Outcome | Binary: duplicate or not | Three-way: same need, related need, different |
-| Explanation | None, or a similarity score | A reason per verdict |
-| Who it serves | End users on public forms, or PMs cleaning up | Staff and agents filing for a customer, over API and MCP |
-| Agent access | MCP for create, read, update and search; agents stitch "search, then decide" themselves | One MCP call returns the verdict and the next action |
+|               | Everyone else                                                                           | Signal                                                   |
+| ------------- | --------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| When          | After creation: batch linking, triage suggestions, auto-merge inboxes                   | Before creation, at draft time                           |
+| Outcome       | Binary: duplicate or not                                                                | Three-way: same need, related need, different            |
+| Explanation   | None, or a similarity score                                                             | A reason per verdict                                     |
+| Who it serves | End users on public forms, or PMs cleaning up                                           | Staff and agents filing for a customer, over API and MCP |
+| Agent access  | MCP for create, read, update and search; agents stitch "search, then decide" themselves | One MCP call returns the verdict and the next action     |
 
 Lossless merges, a review queue and account context on requests are table stakes that Signal must match; they are not the differentiator. The edge has to be **verdict quality**, measured as same-need precision on a held-out set, because incumbents (Linear, Atlassian, Canny, Pylon) already have most of the pieces to follow.
 
@@ -72,14 +72,14 @@ AI makes judging "same need versus related need" cheap enough to run on every su
 
 ## Riskiest assumptions
 
-| Assumption | Confidence |
-| --- | --- |
-| AI can tell "same need" from "related need" at ≥85% precision on wording the team didn't tune against | Low–medium. Tested last (the build comes first), so the held-out set is frozen before any tuning. |
-| Staff and agents will support an existing request instead of creating one when the suggestion is right | Medium. Search-before-create and a support response as citable as a create are meant to make this true. |
-| A support plus a comment keeps enough nuance that PMs don't lose signal | Medium. |
-| Pairwise "related" links (at most two, each with a shared-dimension note) are useful without themes | Medium. |
-| PMs will work a review queue through API/MCP before a UI exists | Low–medium. Coverage makes the gap visible. |
-| Incumbents (Linear, Atlassian, Canny, Pylon) don't ship a labeled check-before-create over MCP during the MVP window | Low–medium. All four have most of the pieces; the edge has to be verdict quality, not being first. |
+| Assumption                                                                                                           | Confidence                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| AI can tell "same need" from "related need" at ≥85% precision on wording the team didn't tune against                | Low–medium. Tested last (the build comes first), so the held-out set is frozen before any tuning.       |
+| Staff and agents will support an existing request instead of creating one when the suggestion is right               | Medium. Search-before-create and a support response as citable as a create are meant to make this true. |
+| A support plus a comment keeps enough nuance that PMs don't lose signal                                              | Medium.                                                                                                 |
+| Pairwise "related" links (at most two, each with a shared-dimension note) are useful without themes                  | Medium.                                                                                                 |
+| PMs will work a review queue through API/MCP before a UI exists                                                      | Low–medium. Coverage makes the gap visible.                                                             |
+| Incumbents (Linear, Atlassian, Canny, Pylon) don't ship a labeled check-before-create over MCP during the MVP window | Low–medium. All four have most of the pieces; the edge has to be verdict quality, not being first.      |
 
 ## Alternatives
 
