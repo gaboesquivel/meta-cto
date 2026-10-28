@@ -2,7 +2,7 @@ import { loadRootEnv } from "../lib/env";
 import { getDb } from "../lib/signal/db";
 import { createRepository } from "../lib/signal/repository";
 import { seedCrewday } from "../lib/signal/seed";
-import { createGatewayEmbedder } from "../lib/signal/seed/gateway-embedder";
+import { createGatewayEmbedder } from "../lib/signal/agent";
 
 loadRootEnv();
 
