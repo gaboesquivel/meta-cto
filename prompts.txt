@@ -121,3 +121,8 @@ Question (assistant → user): Write these PRODUCT.md changes? Answer: pending.
 2026-10-28T19:40:00Z — Prompt: "Yes, write it"
 Summary: Applied the MVP changes to PRODUCT.md on explore/signal: MVP sentence (Capture → Connect → Understand in three slices), new "MVP slices" section, journeys 4–5, later-slice signals, updated out of scope. Brief is spec-ready.
 Skills used: explore. Docs changed/created: PRODUCT.md.
+
+2026-10-28T19:50:00Z — Prompt: "interview me more, grill this"
+Summary: Started a second interview pass before grilling the broadened MVP. Hypothesis (~60%): scope is right; biggest unknown is the build context (reviewed time-boxed build vs product for paying teams), which sets polish, depth and real-world plumbing (workspaces, import, billing).
+Skills used: interview, grill. Docs changed/created: none.
+Question (assistant → user): Is Signal a time-boxed build someone will review, or the start of a product for paying teams? Guess: time-boxed reviewed build. Answer: pending.
