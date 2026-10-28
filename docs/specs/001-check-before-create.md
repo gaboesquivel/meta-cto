@@ -1,6 +1,6 @@
 # 001 — Check before create
 
-Status: accepted (2026-10-28) · Issue: [#1](https://github.com/gaboesquivel/meta-cto/issues/1)
+Status: implemented (2026-10-28) · Issue: [#1](https://github.com/gaboesquivel/meta-cto/issues/1)
 Slice: MVP slice 1, Capture → Connect ([PRODUCT.md](../../PRODUCT.md#mvp-slices)), plus a minimal internal UI pulled forward from slice 2
 Decisions: [0001 Postgres with pgvector on Neon, via Drizzle](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 Time box: one 3-hour reviewed build (2026-10-28)
@@ -168,4 +168,4 @@ Done before the task set: Drizzle schema, migration and repository on pgvector (
 - [x] 06: REST routes and OpenAPI (#8) — [599883c](https://github.com/gaboesquivel/meta-cto/commit/599883ca45e46f2edf5888b87fcc33b73c671c66)
 - [x] 07: MCP tools (#5) — [13847d9](https://github.com/gaboesquivel/meta-cto/commit/13847d9bad16f71b8c9b5c408bc6075a70cc6c44)
 - [x] 08: Internal UI (#2) — [dbd7844](https://github.com/gaboesquivel/meta-cto/commit/dbd784435620ce2c59642a1a3cee70edde369949)
-- [ ] 09: Neon, deploy and acceptance (#7) — blocked by all
+- [x] 09: Neon, deploy and acceptance (#7) — [ec1afbb](https://github.com/gaboesquivel/meta-cto/commit/ec1afbb1f7badcf21e33325bdc417017e0c95370)
