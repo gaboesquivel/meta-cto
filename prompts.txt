@@ -52,3 +52,12 @@ Summary: Vercel CLI 59.11.7 logged in as gabo-esquivel. Existing team project "m
 Skills used: none. Docs changed/created: none.
 Question (assistant → user): New Vercel project or repoint the existing meta-cto one? Answer: new project; use the values from local .env for Vercel and GitHub secrets.
 Question (assistant → user): Which env vars for production? Answer: AI via OIDC, no Operator (superseded by "use same values" and "OPERATOR_SECRET is set on .env too").
+
+2026-10-28T17:20:00Z — Prompt: "Done, redeploy" (mid-turn: "you run the github and vercle commands")
+Summary: Secrets were not yet set on either side, so at the user's request ran the commands: set AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY and OPERATOR_SECRET from local .env as sensitive Vercel env vars (production, preview) on meta-cto-app and as GitHub Actions secrets on gaboesquivel/meta-cto (values piped from .env, never printed). Pushed main (6078388) to trigger the Git production deploy dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX; verifying once ready.
+Skills used: none. Docs changed/created: none.
+Result: Git production deploy dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX READY, aliased to meta-cto-app.vercel.app. /, /genui, /.well-known/mcp.json, /api/mcp 200; Operator 401 without or with a wrong secret, 200 with OPERATOR_SECRET. Live AI calls not exercised. First CLI deployment (meta-cto-khh0fbdeu, contains uploaded .env) still exists; awaiting user OK to remove.
+
+2026-10-28T17:35:00Z — Prompt: "Yes, remove it"
+Summary: Confirmed meta-cto-app.vercel.app points to dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX, then removed the first CLI deployment meta-cto-khh0fbdeu (dpl_AtbnEaCuVmvWRUx9jbibxPQtRHh1) that contained the uploaded .env. Production still returns 200.
+Skills used: none. Docs changed/created: none.
