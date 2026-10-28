@@ -155,11 +155,11 @@ Review Queue, Review Decisions, Merge and Split (candidate 002); groups of relat
 Done before the task set: Drizzle schema, migration and repository on pgvector (468751a); contracts, ports and Crewday seed data (bd88faa).
 
 - [x] 01: Verdict agent: embedder and judge (#6) — [209ae92](https://github.com/gaboesquivel/meta-cto/commit/209ae921ccf958b79f809c9c000e6d8a23a76c6b)
-- [ ] 02: Signal service: check, create, support, comment, search, get, metrics (#10)
+- [x] 02: Signal service: check, create, support, comment, search, get, metrics (#10) — [d067f0f](https://github.com/gaboesquivel/meta-cto/commit/d067f0f705feca7ddc5fad75c2a184de54d9d3c7)
 - [x] 03: Seed and database wiring (#3) — [685d82b](https://github.com/gaboesquivel/meta-cto/commit/685d82b8902668df443bb1d2dedc5896332e306d)
 - [x] 04: Eval set and runner (#9) — [9a38e41](https://github.com/gaboesquivel/meta-cto/commit/9a38e4194aa740f65313086d2548696c6392ade9)
-- [ ] 05: Runtime composition (#4) — blocked by 01, 02
-- [ ] 06: REST routes and OpenAPI (#8)
+- [x] 05: Runtime composition (#4) — [b9cf0d9](https://github.com/gaboesquivel/meta-cto/commit/b9cf0d9e38a48e3c33866a9b0119c0c896953692)
+- [x] 06: REST routes and OpenAPI (#8) — [599883c](https://github.com/gaboesquivel/meta-cto/commit/599883ca45e46f2edf5888b87fcc33b73c671c66)
 - [x] 07: MCP tools (#5) — [13847d9](https://github.com/gaboesquivel/meta-cto/commit/13847d9bad16f71b8c9b5c408bc6075a70cc6c44)
 - [ ] 08: Internal UI (#2)
 - [ ] 09: Neon, deploy and acceptance (#7) — blocked by all
