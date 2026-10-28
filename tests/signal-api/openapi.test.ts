@@ -26,4 +26,19 @@ describe("OpenAPI document for Signal routes", () => {
       expect.arrayContaining(["201", "400", "409", "410", "422", "429", "503"]),
     );
   });
+
+  it.each([
+    "check_feature_request",
+    "create_feature_request",
+    "support_feature_request",
+    "comment_on_feature_request",
+    "search_feature_requests",
+    "get_feature_request",
+  ])("catalogs MCP tool %s with x-mcp-tool and a description", (tool) => {
+    const schemas = doc.components.schemas as Record<string, Record<string, unknown>>;
+    const schema = schemas[`McpTool_${tool}`];
+    expect(schema?.["x-mcp-tool"]).toBe(tool);
+    expect(schema?.description).toEqual(expect.any(String));
+    expect(schema?.type).toBe("object");
+  });
 });

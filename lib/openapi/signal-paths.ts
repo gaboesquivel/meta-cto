@@ -327,3 +327,93 @@ export const signalPaths = {
 };
 
 export const signalTag = { description: "Check before create (Feature Requests)", name: "signal" };
+
+const featureRequestId = { maxLength: 200, minLength: 1, type: "string" };
+
+/** Signal tools on the public MCP, listed as `McpTool_*` components with `x-mcp-tool`. */
+export const signalMcpTools = {
+  check_feature_request: {
+    operationId: "mcpCheckFeatureRequest",
+    requestBody: {
+      properties: {
+        actor: ref("SignalActor"),
+        draft: ref("SignalDraft"),
+        onBehalfOf: ref("SignalOnBehalfOf"),
+      },
+      required: ["draft", "actor"],
+      type: "object",
+    },
+    summary:
+      "Check a Draft before creating: Underlying Need and Same Need / Related Need verdicts with Reasons",
+  },
+  comment_on_feature_request: {
+    operationId: "mcpCommentOnFeatureRequest",
+    requestBody: {
+      properties: {
+        actor: ref("SignalActor"),
+        body: { maxLength: 2000, minLength: 1, type: "string" },
+        featureRequestId,
+        onBehalfOf: ref("SignalOnBehalfOf"),
+      },
+      required: ["featureRequestId", "actor", "body"],
+      type: "object",
+    },
+    summary: "Comment on a Feature Request",
+  },
+  create_feature_request: {
+    operationId: "mcpCreateFeatureRequest",
+    requestBody: {
+      properties: {
+        actor: ref("SignalActor"),
+        checkId: {
+          description: "From check_feature_request; omitting it returns check_required",
+          format: "uuid",
+          type: "string",
+        },
+        draft: ref("SignalDraft"),
+        onBehalfOf: ref("SignalOnBehalfOf"),
+        skipReason: { maxLength: 500, minLength: 3, type: "string" },
+      },
+      required: ["draft", "actor"],
+      type: "object",
+    },
+    summary:
+      "Create a Feature Request after a Check (Skip Reason required after a Same Need verdict)",
+  },
+  get_feature_request: {
+    operationId: "mcpGetFeatureRequest",
+    requestBody: {
+      properties: { featureRequestId },
+      required: ["featureRequestId"],
+      type: "object",
+    },
+    summary: "Get a Feature Request with Supports by Account, Comments and Related Links",
+  },
+  search_feature_requests: {
+    operationId: "mcpSearchFeatureRequests",
+    requestBody: {
+      properties: {
+        cursor: { minimum: 0, type: "integer" },
+        limit: { maximum: 50, minimum: 1, type: "integer" },
+        q: { maxLength: 200, type: "string" },
+      },
+      type: "object",
+    },
+    summary: "Semantic search over Feature Requests",
+  },
+  support_feature_request: {
+    operationId: "mcpSupportFeatureRequest",
+    requestBody: {
+      properties: {
+        actor: ref("SignalActor"),
+        checkId: { format: "uuid", type: "string" },
+        featureRequestId,
+        onBehalfOf: ref("SignalOnBehalfOf"),
+        quote: { maxLength: 500, type: "string" },
+      },
+      required: ["featureRequestId", "actor", "onBehalfOf"],
+      type: "object",
+    },
+    summary: "Support an existing Feature Request on behalf of an Account",
+  },
+};

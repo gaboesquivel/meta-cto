@@ -1,4 +1,4 @@
-import { signalPaths, signalSchemas, signalTag } from "@/lib/openapi/signal-paths";
+import { signalMcpTools, signalPaths, signalSchemas, signalTag } from "@/lib/openapi/signal-paths";
 
 const toolPaths = {
   compose_ui: {
@@ -22,6 +22,7 @@ const toolPaths = {
     requestBody: { properties: {}, type: "object" },
     summary: "List registered GenUI components",
   },
+  ...signalMcpTools,
 } as const;
 
 const mcpToolSchemaName = (name: string) => `McpTool_${name.replaceAll("-", "_")}`;
