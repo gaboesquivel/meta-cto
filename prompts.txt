@@ -126,3 +126,10 @@ Skills used: explore. Docs changed/created: PRODUCT.md.
 Summary: Started a second interview pass before grilling the broadened MVP. Hypothesis (~60%): scope is right; biggest unknown is the build context (reviewed time-boxed build vs product for paying teams), which sets polish, depth and real-world plumbing (workspaces, import, billing).
 Skills used: interview, grill. Docs changed/created: none.
 Question (assistant → user): Is Signal a time-boxed build someone will review, or the start of a product for paying teams? Guess: time-boxed reviewed build. Answer: pending.
+Answer (user): Reviewed build.
+Question (assistant → user): Time box? Answer: today, 3 hours (AI-assisted dev with the Flow process). Reviewers weigh: AI-first product thinking. Access: deployed URL.
+Summary (grill): Three-slice MVP doesn't fit 3 hours; proposed today's cut — seeded Crewday (~40 requests incl. Sofia/Daniel/Patricia), one check service returning underlying need + same/related/different verdicts with reasons (API, MCP, UI), support/comment/create-with-reason, minimal internal UI (submit with live verdict, list, detail), ~25-pair frozen eval, event logging for fragmentation rate. Cut today but kept in brief: review queue, merge/split, account-aware verdicts, groups, per-integration API keys, large held-out set.
+Question (assistant → user): Retrieval? Answer: pgvector embeddings (against recommendation of LLM over full catalog).
+Question (assistant → user): Ship order? Answer: service → MCP → UI (against recommendation of service → UI → MCP).
+Question (assistant → user): Reviewer access? Answer: open demo, rate-limited.
+Outcome: resolved direction for spec 001; brief unchanged (time-box cut belongs to the spec). Skills used: interview, grill. Docs changed/created: none.
