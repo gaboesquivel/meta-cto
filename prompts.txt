@@ -61,3 +61,42 @@ Result: Git production deploy dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX READY, aliased to
 2026-10-28T17:35:00Z — Prompt: "Yes, remove it"
 Summary: Confirmed meta-cto-app.vercel.app points to dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX, then removed the first CLI deployment meta-cto-khh0fbdeu (dpl_AtbnEaCuVmvWRUx9jbibxPQtRHh1) that contained the uploaded .env. Production still returns 200.
 Skills used: none. Docs changed/created: none.
+
+2026-10-28T17:50:00Z — Prompt: "Explore this. We're building Signal, an AI-first Feature Intelligence platform…" (full Signal brief with Crewday demo dataset; explore only, no implementation)
+Summary: Started Flow `explore` for a new product. Background reader found: root docs are template stubs; no database, ORM, vector store or embeddings; only auth is the single OPERATOR_SECRET (no users/tenants); MCP has only template tools (register via registerAppTool, keep tool-catalog.ts and tests/mcp parity); AI goes through AI Gateway (Sonnet defaults); GenUI/eve agents are framed around UI prototyping on synthetic data; no docs/decisions or docs/specs; no unmerged branches; "Operator" is a reserved glossary term. Opened the interview with a hypothesis (~65%).
+Skills used: explore, interview. Docs changed/created: none.
+Question (assistant → user): Which AI workflow anchors slice 1 (problem grouping / duplicate check on submit / priority + decision brief), who is the primary user (PM / customer submitter / product leader), and how requests enter (seeded data + form / public portal / agents via MCP too)? Answer: not answered yet (form dismissed).
+Answer (user, in place of the form): Focus on submissions first; API/MCP-first before any UI; while drafting a feature request the system should suggest similar requests to upvote or comment on instead of creating a new one.
+Question (assistant → user): Who calls the submission API first in practice: customer-facing staff and agents filing on a customer's behalf (assistant's guess), or end customers via an embedded widget? Answer: pending.
+Answer (user): Use Neon Postgres via Vercel's integration, with Drizzle migrations or a better option.
+Summary: Recommended Neon via Vercel Marketplace (DATABASE_URL on meta-cto-app), Drizzle + drizzle-kit (SQL-first, native pgvector support, TS schema shared with API/MCP validation), pgvector in the same DB with embeddings via AI Gateway, and a retrieve-then-classify step (vector candidates, then one LLM call labeling same need / related / different with a reason). Recorded as technical direction for ARCHITECTURE.md and spec 001, not the product brief; nothing provisioned. Re-asked who calls the submission API first. Skills used: explore. Docs changed/created: none.
+
+2026-10-28T18:05:00Z — Prompt: "dont update previous specs, create new specs… before we spec this out, we should explore more our problem, identify our key metrics and journeys… clear defined mvp goals"
+Summary: Confirmed no docs/specs exist yet; future specs will be new numbered files. Drafted MVP framing as hypotheses: problem = fragmentation at intake while keeping related-but-distinct needs separate; journeys = human submitter, agent submitter via MCP, PM reviewing consolidated evidence; metric candidates; riskiest assumptions. Flagged that fragmentation rate requires a PM merge/split capability in API/MCP. Saved a feedback memory about new specs and exploring before specs.
+Skills used: explore, interview. Docs changed/created: none.
+Question (assistant → user): Main metric? Answer: fragmentation rate (share of new requests a PM later marks as duplicates).
+Question (assistant → user): Who calls the submission API first? Answer: customer-facing staff and agents filing on a customer's behalf, with account context.
+Question (assistant → user): How to prove AI tells "same need" from "related need"? Answer: labeled Crewday eval set (precision/recall offline).
+Question (assistant → user): Kill criterion — ~85% precision on "same need" on the labeled set, or a line on wrong-merge rate? Answer: pending.
+Answer (user): Yes, 85% precision on "same need" on the labeled Crewday set is the kill line.
+Summary: Restated intent (outcome, users, why now [assistant guess], success, kill criterion, constraints, out of scope) for explicit confirmation; 4 guesses accepted unchanged, 1 overridden. Skills used: explore, interview. Docs changed/created: none.
+Question (assistant → user): Is the restated intent right as written, or what would you change? Answer: pending.
+
+2026-10-28T18:15:00Z — Prompt: "Yes, confirmed"
+Summary: Intent confirmed explicitly (includes the assistant's "why now" guess). Per explore/interview, ended the turn and named the grill (with a parallel pre-mortem) as the next step; nothing written. Skills used: explore, interview. Docs changed/created: none.
+
+2026-10-28T18:30:00Z — Prompt: "Grill it"
+Summary: Ran grill on the riskiest claims with a parallel pre-mortem worker (failure modes: metric never measured, eval leakage, callers always create, "related" noise, wrong merges losing account context, inflated supports). Took F4/F5/F6 mitigations as spec defaults (≤2 related results above a threshold with a shared-dimension note; append-only merges keeping original request per support; actor vs on_behalf_of, one support per customer org per request). Outcome: resolved direction; drafted the PRODUCT.md brief for approval.
+Skills used: explore, grill. Docs changed/created: none.
+Question (assistant → user): How to measure fragmentation before real PMs exist? Answer: add seed data; run migrations and non-destructive, repeatable seeding on Vercel deployments and app startup, maybe local startup too.
+Question (assistant → user): How to keep the eval honest? Answer: frozen held-out set.
+Question (assistant → user): Require a similarity check before create? Answer: search before create.
+Question (assistant → user): Test the kill criterion with a 1-week spike before building? Answer: build, then measure.
+Question (assistant → user): Include a PM review-queue tool with coverage? Answer: yes, with coverage.
+Question (assistant → user): Write the shown PRODUCT.md brief to explore/signal? Answer: not yet — first run /competitors to identify opportunities and patterns.
+
+2026-10-28T18:45:00Z — Prompt: "first lets do some /competitors analysis to identify opportunities and patterns"
+Summary: Ran the competitors skill to inform positioning and MVP scope. Launched four parallel web-research workers: feedback boards/voting portals; PM suites with AI insights; AI-native feedback analytics; intake inside support/issue tools and agent/MCP ecosystems. Manual status quo covered in the main thread. Results pending.
+Skills used: competitors. Docs changed/created: none yet (research file to be saved under docs/research/ on explore/signal).
+Result: Four workers returned; verified key claims against vendor pages (Productboard MCP feedback creation contradicted between marketing and support docs → unverified; GitHub duplicate detection is web-form only, unlabeled; Canny MCP has no similarity tool; Pylon match-or-create confirmed, no API/MCP documented; Linear Triage Intelligence is post-creation; VoteShip unverifiable). Saved docs/research/2026-10-28-feature-request-landscape.md on new branch explore/signal. Main finding: no documented agent-facing check-before-create with same/related/different verdicts and reasons; review queues, lossless merges and MRR context are table stakes; Linear, Atlassian, Canny, Pylon are fast-follow threats.
+Skills used: competitors, explore. Docs changed/created: docs/research/2026-10-28-feature-request-landscape.md.
