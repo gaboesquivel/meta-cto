@@ -1,0 +1,252 @@
+[
+  {
+    "id": "ho-01",
+    "draft": {
+      "title": "traded my shift but im still on the schedule??",
+      "description": "swapped my saturday close w/ jess thru the app, it said trade complete. my boss's schedule still had me on it and i got written up for no call no show. this is the 2nd time"
+    },
+    "target": "swap-sync",
+    "expected": "same_need",
+    "note": "Must-pass. Reworded swap-sync complaint: a completed trade did not reach everyone's schedule and the employee was held responsible."
+  },
+  {
+    "id": "ho-02",
+    "draft": {
+      "title": "Manager sign-off on shift changes",
+      "description": "Need mgr approval on every shift change. Nothing final until I OK it."
+    },
+    "target": "change-approvals",
+    "expected": "same_need",
+    "note": "Must-pass. Manager's terse approval ask: control over coverage before a change takes effect."
+  },
+  {
+    "id": "ho-03",
+    "draft": {
+      "title": "Manager sign-off on shift changes",
+      "description": "Need mgr approval on every shift change. Nothing final until I OK it."
+    },
+    "target": "swap-sync",
+    "expected": "related_need",
+    "note": "Must-pass. Same draft as ho-02: shares how a shift change becomes final with swap-sync, but asks for control, not reliable propagation."
+  },
+  {
+    "id": "ho-04",
+    "draft": {
+      "title": "One screen for all my stores",
+      "description": "I run 15 grocery stores across two districts. Clicking into every store's schedule one at a time is killing me. I want to see every store's staffing together, spot who's short, and shift people over."
+    },
+    "target": "multi-location-view",
+    "expected": "same_need",
+    "note": "Must-pass. Multi-store visibility to find gaps and rebalance staff."
+  },
+  {
+    "id": "ho-05",
+    "draft": {
+      "title": "One screen for all my stores",
+      "description": "I run 15 grocery stores across two districts. Clicking into every store's schedule one at a time is killing me. I want to see every store's staffing together, spot who's short, and shift people over."
+    },
+    "target": "change-approvals",
+    "expected": "related_need",
+    "note": "Must-pass. Same draft as ho-04: shares manager control of coverage with change-approvals, but the need is cross-location visibility."
+  },
+  {
+    "id": "ho-06",
+    "draft": {
+      "title": "PTO requests getting lost in WhatsApp",
+      "description": "Customer (owner, 4 cafes) says her staff ask for days off over WhatsApp and she misses half of them, then finds out the morning of. She's asking for a way for staff to submit time off in Crewday and for her to approve or deny it, with a calendar of who's out."
+    },
+    "target": "time-off-requests",
+    "expected": "same_need",
+    "note": "Support-agent paraphrase of the time-off need."
+  },
+  {
+    "id": "ho-07",
+    "draft": {
+      "title": "let staff put in when there free",
+      "description": "pls let my employees enter what days/times there availible. i keep puting college kids on shifts during there classes and then redoing the whole week"
+    },
+    "target": "availability",
+    "expected": "same_need",
+    "note": "Typo-heavy availability ask."
+  },
+  {
+    "id": "ho-08",
+    "draft": {
+      "title": "Build an ADP Workforce Now connector",
+      "description": "Add an ADP WFN connector that pushes approved timecards nightly via their payroll API. Our payroll team re-keys every timesheet biweekly and keeps making mistakes."
+    },
+    "target": "adp-export",
+    "expected": "same_need",
+    "note": "Solution-first phrasing of hours-to-ADP without manual re-entry."
+  },
+  {
+    "id": "ho-09",
+    "draft": {
+      "title": "ping ppl before their shift",
+      "description": "folks keep rolling in late and the excuse is always 'forgot lol'. can the app just ping them like an hour before?"
+    },
+    "target": "shift-reminders",
+    "expected": "same_need",
+    "note": "Slang version of shift reminders."
+  },
+  {
+    "id": "ho-10",
+    "draft": {
+      "title": "Block punch-ins outside the store radius",
+      "description": "Only accept a clock-in when the phone's GPS puts it inside the store. People are clocking in from the parking lot and from their couch."
+    },
+    "target": "geofenced-clock-in",
+    "expected": "same_need",
+    "note": "Solution-first geofence ask."
+  },
+  {
+    "id": "ho-11",
+    "draft": {
+      "title": "Repeat last week's schedule",
+      "description": "Rebuilding the week from zero = 3 hrs every Sunday. Copy prior week, I'll adjust."
+    },
+    "target": "copy-last-week",
+    "expected": "same_need",
+    "note": "Manager's terse note."
+  },
+  {
+    "id": "ho-12",
+    "draft": {
+      "title": "Show labor $ vs target as I build",
+      "description": "Holiday weeks we always overshoot labor and payroll tells us two weeks later. I want the schedule to show what it costs against our labor target while I'm dragging shifts around, before I publish."
+    },
+    "target": "labor-cost-forecast",
+    "expected": "same_need",
+    "note": "Cost-versus-budget while scheduling."
+  },
+  {
+    "id": "ho-13",
+    "draft": {
+      "title": "Coworkers never see my trade offer",
+      "description": "I offer my shift for trade and nobody gets told. It sits there until the day before and then I'm stuck working it. Can my coworkers get a push when I post a trade?"
+    },
+    "target": "swap-sync",
+    "expected": "related_need",
+    "note": "Trade offers reaching coworkers (trade-notifications) shares shift trades with swap-sync, but swap-sync is about completed trades propagating."
+  },
+  {
+    "id": "ho-14",
+    "draft": {
+      "title": "Hard cap for part-timer hours",
+      "description": "Let me cap part-timers at 29 hrs/week. If they go over they become benefits eligible and corporate kills me."
+    },
+    "target": "overtime-alerts",
+    "expected": "related_need",
+    "note": "Hour caps share hour limits while scheduling with overtime warnings, but the need is employment-status guardrails, not cost visibility."
+  },
+  {
+    "id": "ho-15",
+    "draft": {
+      "title": "Shifts in my iPhone calendar",
+      "description": "Can my shifts just show up in my phone calendar automatically? I live in my calendar and never open the scheduling app."
+    },
+    "target": "shift-reminders",
+    "expected": "related_need",
+    "note": "Calendar sync shares 'don't miss shifts' with reminders but asks for shifts in the employee's own calendar."
+  },
+  {
+    "id": "ho-16",
+    "draft": {
+      "title": "Expiring food handler cards",
+      "description": "Health inspector found two cooks with expired food handler cards. Warn me a month ahead when someone's card is about to lapse."
+    },
+    "target": "skill-based-scheduling",
+    "expected": "related_need",
+    "note": "Certification expiry shares qualified, compliant coverage with station-based scheduling but asks for keeping certs current."
+  },
+  {
+    "id": "ho-17",
+    "draft": {
+      "title": "Blast a text when someone calls out",
+      "description": "Line cook calls out sick at 4pm, I'm on the phone for an hour. Let me text every off-duty cook at once and the first yes gets the shift."
+    },
+    "target": "cross-store-open-shifts",
+    "expected": "related_need",
+    "note": "Call-out fill shares filling gaps with qualified staff with cross-store open shifts, but is about last-minute speed, not other locations."
+  },
+  {
+    "id": "ho-18",
+    "draft": {
+      "title": "Let servers see what they'll take home",
+      "description": "Servers keep asking me what their check will be. Show each employee their wages so far this week plus their tip share, before payday."
+    },
+    "target": "tip-pooling",
+    "expected": "related_need",
+    "note": "Earnings preview including tips shares tip visibility with tip pooling, but the need is knowing earnings before payday, not fair distribution."
+  },
+  {
+    "id": "ho-19",
+    "draft": {
+      "title": "Text reminder the night before",
+      "description": "Send each employee a text the evening before they work with their start time. No-shows are up this month."
+    },
+    "target": "trade-notifications",
+    "expected": "different",
+    "note": "Shift reminders vs trade notifications: both 'notify employees', different needs."
+  },
+  {
+    "id": "ho-20",
+    "draft": {
+      "title": "App logs me out every day",
+      "description": "Every morning I open Crewday on my phone and it's signed me out again. I have to reset my password just to see when I work."
+    },
+    "target": "manager-edits-not-on-phone",
+    "expected": "different",
+    "note": "Login persistence vs schedule changes not reaching phones: both 'can't see my shifts on my phone'."
+  },
+  {
+    "id": "ho-21",
+    "draft": {
+      "title": "PDF of the week for the break room",
+      "description": "Half my dishwashers don't use the app. Give me a one-page printable of the week I can tape up in the back."
+    },
+    "target": "team-announcements",
+    "expected": "different",
+    "note": "Printable schedule vs announcements: both reach staff, but one is schedule visibility, the other event messaging."
+  },
+  {
+    "id": "ho-22",
+    "draft": {
+      "title": "Who changed the schedule?",
+      "description": "HR is handling a dispute and needs a record of every edit to the schedule: who changed what, and when. We have nothing to show them."
+    },
+    "target": "swap-sync",
+    "expected": "different",
+    "note": "Audit history of schedule changes vs trades propagating: both about schedule changes, different needs."
+  },
+  {
+    "id": "ho-23",
+    "draft": {
+      "title": "QuickBooks payroll export",
+      "description": "Two-location restaurant on QuickBooks Payroll. Can approved hours flow over so I don't type them in?"
+    },
+    "target": "earnings-preview",
+    "expected": "different",
+    "note": "Payroll export vs employee earnings preview: both about pay, different needs."
+  },
+  {
+    "id": "ho-24",
+    "draft": {
+      "title": "Missed meal breaks",
+      "description": "California. Flag me when a server is coming up on 5 hours without a meal break, and log the ones we missed so we can pay the premium."
+    },
+    "target": "overtime-alerts",
+    "expected": "different",
+    "note": "Break compliance vs overtime warnings: both scheduling-time warnings about labor rules, different needs."
+  },
+  {
+    "id": "ho-25",
+    "draft": {
+      "title": "night mode pls",
+      "description": "we close at 1am and opening the app in the dark back hallway is like staring at the sun"
+    },
+    "target": "login-persistence",
+    "expected": "different",
+    "note": "Dark mode vs staying logged in: both employee-app comfort complaints, different needs."
+  }
+]
