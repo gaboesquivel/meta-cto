@@ -1,7 +1,8 @@
 ---
-status: proposed
+status: accepted
 category: architecture
 date: 2026-10-28
+accepted: 2026-10-28
 ---
 
 # Postgres with pgvector on Neon, via Drizzle

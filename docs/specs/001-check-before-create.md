@@ -1,8 +1,8 @@
 # 001 — Check before create
 
-Status: draft (2026-10-28)
+Status: accepted (2026-10-28)
 Slice: MVP slice 1, Capture → Connect ([PRODUCT.md](../../PRODUCT.md#mvp-slices)), plus a minimal internal UI pulled forward from slice 2
-Decisions: [0001 Postgres with pgvector on Neon, via Drizzle](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Proposed)
+Decisions: [0001 Postgres with pgvector on Neon, via Drizzle](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 Time box: one 3-hour reviewed build (2026-10-28)
 
 ## Problem Statement
