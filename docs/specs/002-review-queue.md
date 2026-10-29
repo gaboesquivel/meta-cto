@@ -1,6 +1,6 @@
 # 002 — Review queue: confirm duplicates, keep the evidence, show prevention
 
-Status: accepted (2026-10-29) · Issue: [#13](https://github.com/gaboesquivel/meta-cto/issues/13)
+Status: implemented (2026-10-29) · Issue: [#13](https://github.com/gaboesquivel/meta-cto/issues/13)
 Slice: MVP slice 1, journey 3 (Product Manager review) ([PRODUCT.md](../../PRODUCT.md#core-journeys)); builds on [spec 001](001-check-before-create.md)
 Decisions: [0002 Measure prevention with confirmed duplicates; duplicates as reversible associations](../decisions/0002-fragmentation-and-duplicate-association.md) (Accepted), [0001](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 
@@ -89,6 +89,19 @@ Moving Supports or Comments between rows, bulk or automatic decisions, AI-sugges
 - **What prevention means here:** a lower Intake Duplicate Rate than the backlog baseline suggests prevention works. It is not proof: new requests are fewer and younger.
 - **Candidate follow-ups:** themes/groups and evidence summaries (slice 3); a real Product Manager identity; scheduled scans.
 
+## Verification (2026-10-29)
+
+Acceptance on a branch preview with its own Neon branch (build migrated and seeded; no AI scan in the build):
+
+- **Open reads, refused writes:** metrics and queue readable without credentials; a decision without Operator access returned 401 `operator_required`.
+- **Scan as an Operator action:** five batches scanned all 41 Feature Requests and stored 11 Suspected Duplicates, each with a Reason (for example ADP and Gusto payroll, geofenced and photo clock-in, multi-location views). Suspected Duplication read 39% (16/41).
+- **Decisions:** Duplicate, Distinct, and Related with a Shared Dimension succeeded; Related without one returned 422 `invalid_decision`. Backlog baseline and Suspected Duplication updated with counts.
+- **Provenance:** a canonical Feature Request shows its duplicates' original words, Account and requester ("via duplicate") and counts each Account once. This was a gap found during acceptance and fixed (8b88556).
+- **Undo:** the association ended, history kept the decision as undone, a second Undo returned 409 `already_undone`, and metrics returned to their previous values.
+- **Checks respect decisions:** with a confirmed duplicate, a matching draft was offered only the canonical Feature Request.
+- **Intake:** two new requests created through Checks (one skipping Same Need, which recorded Suspected Duplicates from its Check with no extra AI call) were reviewed; Intake Duplicate Rate read 1/2 with Review Coverage 2/3 and the backlog baseline alongside. The duplicate was created deliberately, so this demonstrates the mechanics, not prevention.
+- **Accepted difference:** unauthenticated Operator MCP calls are refused at the route with 401 `operator_unauthorized` (template auth) while REST returns 401 `operator_required`; both refuse before the service.
+
 ## Tasks
 
 - [x] 01: Review contracts and data model (#15) — [a348b8e](https://github.com/gaboesquivel/meta-cto/commit/a348b8e992265789eab559eab982afe4e530469a)
@@ -97,4 +110,4 @@ Moving Supports or Comments between rows, bulk or automatic decisions, AI-sugges
 - [x] 04: Review REST API with Operator access (#14) — [6c23f14](https://github.com/gaboesquivel/meta-cto/commit/6c23f1437f646b7c72ccadeba52fb640fb1f0acd)
 - [x] 05: Operator MCP review tools (#18) — [690c079](https://github.com/gaboesquivel/meta-cto/commit/690c079ad6275ee89b57d0d8924505baaa71fd28)
 - [x] 06: Review UI and canonical evidence (#17) — [64e7097](https://github.com/gaboesquivel/meta-cto/commit/64e7097a21604ce075724c1a7cddeade92614eb4)
-- [ ] 07: Wire, verify and align docs (#20) — blocked by 02–06
+- [x] 07: Wire, verify and align docs (#20) — [8b88556](https://github.com/gaboesquivel/meta-cto/commit/8b885567f340d87b91053d7d1321893e007c5f94)
