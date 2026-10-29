@@ -41,6 +41,8 @@ const run = async () => {
   const row = await repo.ensureWorkspace(workspace);
   const judgeTimeoutMs = judgeTimeoutFromEnv();
   const scan = createBacklogScan({
+    // The CLI is not a serverless function: no per-call deadline, up to 200 rows.
+    deadlineMs: Number.POSITIVE_INFINITY,
     judge: createLlmJudge({ model, timeoutMs: judgeTimeoutMs }),
     judgeTimeoutMs,
     model: typeof model === "string" ? model : model.modelId,
@@ -54,7 +56,11 @@ const run = async () => {
     );
   } catch (error) {
     if (!(error instanceof SignalError)) throw error;
-    console.error(`signal:scan: ${error.message} Use --limit with a number from 1 to 200.`);
+    const hint =
+      error.code === "invalid_input"
+        ? "Use --limit with a number from 1 to 200."
+        : error.resolution;
+    console.error(`signal:scan: ${error.message} ${hint}`);
     process.exitCode = 1;
   }
 };
