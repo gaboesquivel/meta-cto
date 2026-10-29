@@ -7,7 +7,7 @@ export const OperatorSignIn = ({ compact = false }: { compact?: boolean }) => (
   <div className="flex flex-wrap items-center gap-3">
     <Link
       className={buttonVariants({ size: compact ? "sm" : "default", variant: "outline" })}
-      href="/operator/access"
+      href="/operator/access?next=/review"
     >
       Sign in as Operator
     </Link>

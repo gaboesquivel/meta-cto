@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, it, vi } from "vitest";
 
 import type { Embedder, Judge } from "@/lib/signal/contracts";
 import { createTestDb } from "@/lib/signal/test-db";
 
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
-import { createRuntimeService, getSignalService, judgeTimeoutFromEnv } from "./index";
+import {
+  createRuntimeReviewService,
+  createRuntimeService,
+  getSignalService,
+  judgeTimeoutFromEnv,
+} from "./index";
 
 const embedder: Embedder = {
   embed: (text) => {
@@ -88,5 +93,32 @@ describe("judgeTimeoutFromEnv", () => {
 
   it("defaults the service judge timeout to 20 seconds", () => {
     assert.equal(DEFAULT_JUDGE_TIMEOUT_MS, 20_000);
+  });
+});
+
+describe("review runtime", () => {
+  it("returns null without a database", async () => {
+    delete process.env.DATABASE_URL;
+    vi.resetModules();
+    const fresh = await import("./index");
+    assert.equal(fresh.getReviewService(), null);
+  });
+
+  it("composes a working review service on the Crewday workspace", async () => {
+    const db = await createTestDb();
+    const review = createRuntimeReviewService({ db, judge });
+    const queue = await review.queue();
+    assert.deepEqual(queue.counts, { backlog: 0, new: 0 });
+    const result = await review.scan({ limit: 5 });
+    assert.equal(result.scanned, 0);
+  });
+
+  it("reports the scan unavailable without a judge", async () => {
+    const db = await createTestDb();
+    const review = createRuntimeReviewService({ db });
+    await assert.rejects(review.scan({ limit: 5 }), (error: Error & { code?: string }) => {
+      assert.equal(error.code, "service_unavailable");
+      return true;
+    });
   });
 });

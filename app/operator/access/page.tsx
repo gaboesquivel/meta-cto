@@ -6,6 +6,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+/** Same-site path to return to after sign-in; anything else falls back to the console. */
+const safeNext = (search: string): string => {
+  const next = new URLSearchParams(search).get("next");
+  return next?.startsWith("/") && !next.startsWith("//") ? next : "/operator";
+};
+
 export default function OperatorAccessPage() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -35,7 +41,7 @@ export default function OperatorAccessPage() {
             setError(body.message ?? "Access denied");
             return;
           }
-          router.replace("/operator");
+          router.replace(safeNext(window.location.search));
           router.refresh();
         }}
       >
