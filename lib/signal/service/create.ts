@@ -1,31 +1,47 @@
 import type { Candidate, CheckResult, CreateInput, FeatureRequestDetail } from "../contracts";
-import { SignalError, createInputSchema } from "../contracts";
+import { CHECK_TTL_MINUTES, SignalError, createInputSchema } from "../contracts";
 import type { CheckRow } from "../repository";
 import type { ServiceContext } from "./context";
 import { draftHash, draftText, parseInput, upsertOnBehalfOf } from "./context";
 import { buildDetail } from "./views";
 
-const CHECK_FIRST = "Call check_feature_request with this Draft and pass the returned checkId.";
+/** Reaches UI, REST and MCP callers alike, so it names both ways to Check. */
+const CHECK_AGAIN =
+  "Check this Draft again (POST /api/checks or check_feature_request) and use the new checkId.";
+const ALREADY_USED =
+  "This Check was already used to create a Feature Request; check the Draft again.";
 
-/** Loads the Check for a create and enforces existence, Draft match, expiry and Skip Reason. */
+const checkRequired = (resolution: string, message?: string) =>
+  new SignalError({
+    code: "check_required",
+    message: message ?? "Creating a Feature Request requires a recent Check of the same Draft.",
+    resolution,
+    status: 409,
+  });
+
+const alreadyUsed = () =>
+  checkRequired(ALREADY_USED, "The Check already created a Feature Request.");
+
+/** Postgres unique violation, possibly wrapped by the driver or Drizzle. */
+const isUniqueViolation = (error: unknown): boolean => {
+  if (typeof error !== "object" || error === null) return false;
+  const { cause, code } = error as { cause?: unknown; code?: unknown };
+  return code === "23505" || isUniqueViolation(cause);
+};
+
+/** Loads the Check for a create and enforces existence, single use, Draft match, expiry and Skip Reason. */
 const requireValidCheck = async (
   context: ServiceContext,
-  input: CreateInput,
+  input: CreateInput & { checkId: string },
 ): Promise<{ check: CheckRow; result: CheckResult }> => {
   const check = await context.repo.getCheck(input.checkId);
-  if (!check || check.workspaceId !== context.workspaceId) {
-    throw new SignalError({
-      code: "check_required",
-      message: "Creating a Feature Request requires a recent Check of the same Draft.",
-      resolution: CHECK_FIRST,
-      status: 409,
-    });
-  }
+  if (!check || check.workspaceId !== context.workspaceId) throw checkRequired(CHECK_AGAIN);
+  if (await context.repo.getFeatureRequestByCheckId(check.id)) throw alreadyUsed();
   if (check.draftHash !== draftHash(input.draft)) {
     throw new SignalError({
       code: "check_mismatch",
       message: "The Draft differs from the one that was checked.",
-      resolution: `${CHECK_FIRST} Check again after editing the Draft.`,
+      resolution: CHECK_AGAIN,
       status: 409,
     });
   }
@@ -33,7 +49,7 @@ const requireValidCheck = async (
     throw new SignalError({
       code: "check_expired",
       message: "The Check has expired.",
-      resolution: `${CHECK_FIRST} Checks are valid for 30 minutes.`,
+      resolution: `${CHECK_AGAIN} Checks are valid for ${CHECK_TTL_MINUTES} minutes.`,
       status: 410,
     });
   }
@@ -71,6 +87,7 @@ const addRelatedLink = async (
   await context.repo.insertRelatedLink({
     a: id,
     b: candidate.featureRequestId,
+    isDemo: context.markDemo,
     reason: candidate.reason ?? "",
     sharedDimension,
     source: "check",
@@ -95,23 +112,32 @@ export const runCreate = async (
   context: ServiceContext,
   raw: CreateInput,
 ): Promise<FeatureRequestDetail> => {
-  const input = parseInput(createInputSchema, raw);
+  const parsed = parseInput(createInputSchema, raw);
+  const { checkId } = parsed;
+  if (!checkId) throw checkRequired(CHECK_AGAIN);
+  const input = { ...parsed, checkId };
   const { result } = await requireValidCheck(context, input);
   const account = await upsertOnBehalfOf(context, input.onBehalfOf);
-  const row = await context.repo.insertFeatureRequest({
-    checkId: input.checkId,
-    createdByActorName: input.actor.name,
-    createdByActorType: input.actor.type,
-    description: input.draft.description,
-    embedding: await embedOrNull(context, draftText(input.draft)),
-    onBehalfOfAccountId: account?.id ?? null,
-    requesterName: input.onBehalfOf?.requester?.name ?? null,
-    requesterRole: input.onBehalfOf?.requester?.role ?? null,
-    skipReason: input.skipReason ?? null,
-    title: input.draft.title,
-    underlyingNeed: result.underlyingNeed,
-    workspaceId: context.workspaceId,
-  });
+  const row = await context.repo
+    .insertFeatureRequest({
+      checkId,
+      createdByActorName: input.actor.name,
+      createdByActorType: input.actor.type,
+      description: input.draft.description,
+      embedding: await embedOrNull(context, draftText(input.draft)),
+      isDemo: context.markDemo,
+      onBehalfOfAccountId: account?.id ?? null,
+      requesterName: input.onBehalfOf?.requester?.name ?? null,
+      requesterRole: input.onBehalfOf?.requester?.role ?? null,
+      skipReason: input.skipReason ?? null,
+      title: input.draft.title,
+      underlyingNeed: result.underlyingNeed,
+      workspaceId: context.workspaceId,
+    })
+    .catch((error: unknown) => {
+      // A concurrent create with the same Check lost the race on the unique index.
+      throw isUniqueViolation(error) ? alreadyUsed() : error;
+    });
   await context.repo.insertEvent({
     payload: {
       actor: input.actor,

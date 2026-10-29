@@ -37,6 +37,19 @@ describe("signal service search", () => {
     assert.equal(second.nextCursor, null);
   });
 
+  it("returns service_unavailable when the embedder fails for q", async () => {
+    const harness = await createHarness({});
+    harness.embedder.embedder.embed = async () => {
+      await Promise.resolve();
+      throw new Error("embedder down");
+    };
+
+    await assert.rejects(harness.service.search({ q: "swap" }), {
+      code: "service_unavailable",
+      status: 503,
+    });
+  });
+
   it("lists newest first without q", async () => {
     const harness = await createHarness({});
     await addRequest(harness, "Older", unit(0));
@@ -183,5 +196,48 @@ describe("signal service metrics", () => {
       reviewCoverage: 0,
       suggestionAcceptance: 0.5,
     });
+  });
+
+  it("counts a comment citing a same need check as acceptance", async () => {
+    const harness = await createHarness({ vectors: { Traded: unit(0) } });
+    const sofia = await addRequest(harness, "Shift swaps don't sync", unit(0));
+    const draft = { description: "Trades vanish", title: "Traded shifts missing" };
+    harness.judge.state.behavior = {
+      build: () => ({
+        judgments: [
+          {
+            featureRequestId: sofia.id,
+            reason: "same trades",
+            sharedDimension: null,
+            verdict: "same_need",
+          },
+        ],
+        underlyingNeed: "need",
+      }),
+      kind: "output",
+    };
+    const commented = await harness.service.check({ actor: staff, draft });
+    const supported = await harness.service.check({ actor: staff, draft });
+    await harness.service.check({ actor: staff, draft });
+
+    await harness.service.comment(sofia.id, {
+      actor: staff,
+      body: "Same at Cedar",
+      checkId: commented.checkId,
+    });
+    await harness.service.support(sofia.id, {
+      actor: staff,
+      checkId: supported.checkId,
+      onBehalfOf: cedar,
+    });
+    await harness.service.comment(sofia.id, {
+      actor: staff,
+      body: "And again",
+      checkId: supported.checkId,
+    });
+
+    const metrics = await harness.service.metrics();
+    assert.equal(metrics.checksWithSameNeed, 3);
+    assert.equal(metrics.suggestionAcceptance, 2 / 3);
   });
 });

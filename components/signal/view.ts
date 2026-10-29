@@ -1,4 +1,10 @@
-import type { Candidate, CheckResult, OnBehalfOf, SupportView } from "@/lib/signal/contracts";
+import type {
+  Candidate,
+  CheckResult,
+  CommentInput,
+  OnBehalfOf,
+  SupportView,
+} from "@/lib/signal/contracts";
 
 /** Pure view helpers for the Signal UI. */
 
@@ -60,6 +66,22 @@ export const buildOnBehalfOf = (fields: OnBehalfOfFields): OnBehalfOf | undefine
   if (segment) account.segment = segment;
   const requesterName = fields.requesterName.trim();
   return requesterName ? { account, requester: { name: requesterName } } : { account };
+};
+
+/** Builds a Comment body; a `checkId` cites the Check whose Same Need Verdict led here. */
+export const buildCommentBody = (input: {
+  body: string;
+  checkId?: string;
+  onBehalfOf?: OnBehalfOf;
+  staffName: string;
+}): CommentInput => {
+  const comment: CommentInput = {
+    actor: { name: input.staffName.trim(), type: "staff" },
+    body: input.body,
+    onBehalfOf: input.onBehalfOf,
+  };
+  if (input.checkId) comment.checkId = input.checkId;
+  return comment;
 };
 
 export interface ApiError {

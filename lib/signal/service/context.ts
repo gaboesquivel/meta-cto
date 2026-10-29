@@ -10,6 +10,8 @@ export interface SignalServiceDeps {
   embedder: Embedder;
   judge: Judge;
   judgeTimeoutMs?: number;
+  /** Marks every row the service writes as demo data; the MVP has only the demo Workspace. */
+  markDemo?: boolean;
   now?: () => Date;
   repo: SignalRepository;
   workspaceId: string;
@@ -19,6 +21,7 @@ export interface ServiceContext {
   embedder: Embedder;
   judge: Judge;
   judgeTimeoutMs: number;
+  markDemo: boolean;
   now: () => Date;
   repo: SignalRepository;
   workspaceId: string;
@@ -30,10 +33,26 @@ export const toContext = (deps: SignalServiceDeps): ServiceContext => ({
   embedder: deps.embedder,
   judge: deps.judge,
   judgeTimeoutMs: deps.judgeTimeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS,
+  markDemo: deps.markDemo ?? true,
   now: deps.now ?? (() => new Date()),
   repo: deps.repo,
   workspaceId: deps.workspaceId,
 });
+
+/** Embeds text or throws `service_unavailable` so callers never see a raw model error. */
+export const embedOrUnavailable = async (context: ServiceContext, text: string) => {
+  try {
+    return await context.embedder.embed(text);
+  } catch (error) {
+    throw new SignalError({
+      code: "service_unavailable",
+      details: error instanceof Error ? error.message : undefined,
+      message: "The embedding model is unavailable.",
+      resolution: "Retry in a few seconds.",
+      status: 503,
+    });
+  }
+};
 
 /** Validates input at the service boundary so REST and MCP get the same `invalid_input`. */
 export const parseInput = <T extends z.ZodType>(schema: T, input: unknown): z.infer<T> => {
@@ -89,6 +108,7 @@ export const upsertOnBehalfOf = async (
   const { account } = onBehalfOf;
   return await context.repo.upsertAccount({
     externalId: account.externalId ?? null,
+    isDemo: context.markDemo,
     name: account.name,
     plan: account.plan ?? null,
     segment: account.segment ?? null,

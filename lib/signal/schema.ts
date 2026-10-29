@@ -69,7 +69,11 @@ export const featureRequests = pgTable(
       .notNull()
       .references(() => workspaces.id),
   },
-  (table) => [index("feature_requests_workspace").on(table.workspaceId)],
+  (table) => [
+    index("feature_requests_workspace").on(table.workspaceId),
+    // One Check, one create: a Check authorizes at most one Feature Request.
+    uniqueIndex("feature_requests_check_id").on(table.checkId),
+  ],
 );
 
 export const supports = pgTable(

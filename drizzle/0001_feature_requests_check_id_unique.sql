@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "feature_requests_check_id" ON "feature_requests" USING btree ("check_id");

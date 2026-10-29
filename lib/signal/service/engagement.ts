@@ -16,6 +16,7 @@ export const runSupport = async (context: ServiceContext, id: string, raw: Suppo
     actorType: input.actor.type,
     checkId: input.checkId ?? null,
     featureRequestId: row.id,
+    isDemo: context.markDemo,
     quote: input.quote ?? null,
     requesterName: input.onBehalfOf.requester?.name ?? null,
     requesterRole: input.onBehalfOf.requester?.role ?? null,
@@ -51,9 +52,15 @@ export const runComment = async (
     actorType: input.actor.type,
     body: input.body,
     featureRequestId: row.id,
+    isDemo: context.markDemo,
   });
   await context.repo.insertEvent({
-    payload: { accountId: account?.id ?? null, actor: input.actor, commentId: comment.id },
+    payload: {
+      accountId: account?.id ?? null,
+      actor: input.actor,
+      checkId: input.checkId ?? null,
+      commentId: comment.id,
+    },
     subjectId: row.id,
     type: "comment_added",
     workspaceId: context.workspaceId,

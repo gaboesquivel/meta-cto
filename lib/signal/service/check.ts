@@ -6,28 +6,13 @@ import {
   CHECK_TTL_MINUTES,
   MAX_RELATED_NEED,
   MAX_SAME_NEED,
-  SignalError,
   checkInputSchema,
 } from "../contracts";
 import type { FeatureRequestRow } from "../repository";
 import type { ServiceContext } from "./context";
-import { draftHash, draftText, parseInput } from "./context";
+import { draftHash, draftText, embedOrUnavailable, parseInput } from "./context";
 
 const DEGRADED_CANDIDATES = 5;
-
-const embedOrUnavailable = async (context: ServiceContext, text: string) => {
-  try {
-    return await context.embedder.embed(text);
-  } catch (error) {
-    throw new SignalError({
-      code: "service_unavailable",
-      details: error instanceof Error ? error.message : undefined,
-      message: "The embedding model is unavailable.",
-      resolution: "Retry in a few seconds.",
-      status: 503,
-    });
-  }
-};
 
 /** Runs the judge with a deadline; null on error or timeout so the caller degrades. */
 const judgeWithTimeout = async (

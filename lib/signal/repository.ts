@@ -111,6 +111,14 @@ export const createRepository = (db: SignalDb) => ({
     return row ?? null;
   },
 
+  async getFeatureRequestByCheckId(checkId: string) {
+    const [row] = await db
+      .select({ id: featureRequests.id })
+      .from(featureRequests)
+      .where(eq(featureRequests.checkId, checkId));
+    return row ?? null;
+  },
+
   async getFeatureRequests(ids: string[]) {
     if (ids.length === 0) return [];
     return await db.select().from(featureRequests).where(inArray(featureRequests.id, ids));
