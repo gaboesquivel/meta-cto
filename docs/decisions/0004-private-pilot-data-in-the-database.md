@@ -1,12 +1,13 @@
 ---
-status: proposed
+status: accepted
 category: product
 date: 2026-10-29
+accepted: 2026-10-29
 ---
 
 # Keep pilot ground truth out of the public repo; production reads it from the database
 
-Status: Proposed (2026-10-29). Amends [spec 003](../specs/003-prove-the-verdict.md) (where the pilot files, Held-Out Set v2 and the v2 run log live, and how the Proof Report reads them). [Decision 0003](0003-proof-before-slice-3.md)'s bars and ground-truth rules are unchanged.
+Status: Accepted (2026-10-29). Amends [spec 003](../specs/003-prove-the-verdict.md) (where the pilot files, Held-Out Set v2 and the v2 run log live, and how the Proof Report reads them). [Decision 0003](0003-proof-before-slice-3.md)'s bars and ground-truth rules are unchanged.
 
 **Context.** Spec 003 keeps the pilot backlog, feedback set, Answer Key, Held-Out Set v2 and the v2 run log as committed files, and production's Proof Report reads them from the deployment bundle. The repository is public. Once filled, any pilot agent or model with web access could read the expected answer for each feedback item and each v2 pair, which breaks "written without sight of the current prompt" and makes Agent Correctness measure lookup, not verdict quality.
 

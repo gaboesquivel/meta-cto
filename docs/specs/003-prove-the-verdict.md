@@ -1,6 +1,6 @@
 # 003 — Prove the verdict before slice 3
 
-Status: implemented (2026-10-29) · Issue: [#22](https://github.com/gaboesquivel/meta-cto/issues/22)
+Status: implemented (2026-10-29) · Issue: [#22](https://github.com/gaboesquivel/meta-cto/issues/22) · Amended by [0004](../decisions/0004-private-pilot-data-in-the-database.md) (pilot ground truth and v2 readings private; production reads the database)
 Slice: proof run between MVP slice 1 and slice 3 ([PRODUCT.md](../../PRODUCT.md#mvp-slices)); builds on [spec 001](001-check-before-create.md) and [spec 002](002-review-queue.md)
 Decisions: [0003 Prove the verdict before slice 3](../decisions/0003-proof-before-slice-3.md) (Accepted), [0002](../decisions/0002-fragmentation-and-duplicate-association.md) (Accepted), [0001](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 

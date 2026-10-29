@@ -1,8 +1,8 @@
 # 004 — Keep pilot ground truth private
 
-Status: draft (2026-10-29)
+Status: accepted (2026-10-29)
 Slice: hardening of the proof slice ([spec 003](003-prove-the-verdict.md)) before any pilot data is written
-Decisions: [0004 Keep pilot ground truth out of the public repo](../decisions/0004-private-pilot-data-in-the-database.md) (Proposed), [0003](../decisions/0003-proof-before-slice-3.md) (Accepted)
+Decisions: [0004 Keep pilot ground truth out of the public repo](../decisions/0004-private-pilot-data-in-the-database.md) (Accepted), [0003](../decisions/0003-proof-before-slice-3.md) (Accepted)
 
 ## Problem Statement
 
@@ -52,7 +52,7 @@ Test-first with PGlite and mocks, as in spec 003: loading stores the data with i
 ## Direction changes
 
 - [Spec 003](003-prove-the-verdict.md) (implemented): the pilot files, Held-Out Set v2 and the v2 run log are no longer committed or read from the deployment; production reads them from the database (decision 0004). Freeze locks are still committed.
-- `ARCHITECTURE.md` and the `data/pilot` and `evals/signal-verdict` READMEs change to match on acceptance.
+- `ARCHITECTURE.md` and the `data/pilot` and `evals/signal-verdict` READMEs change to match when this spec is built.
 
 ## Out of Scope
 
