@@ -1,6 +1,6 @@
 # 004 — Keep pilot ground truth private
 
-Status: accepted (2026-10-29)
+Status: accepted (2026-10-29) · Issue: [#32](https://github.com/gaboesquivel/meta-cto/issues/32)
 Slice: hardening of the proof slice ([spec 003](003-prove-the-verdict.md)) before any pilot data is written
 Decisions: [0004 Keep pilot ground truth out of the public repo](../decisions/0004-private-pilot-data-in-the-database.md) (Accepted), [0003](../decisions/0003-proof-before-slice-3.md) (Accepted)
 
@@ -63,3 +63,8 @@ Encrypting data at rest beyond what Neon provides, sharing the private folder be
 The v1 Held-Out Set stays public: it was published before this decision and remains the first reading.
 
 ## Tasks
+
+- [ ] 01: Private data folder outside the repository (#33)
+- [ ] 02: Store pilot ground truth and v2 readings in the database (#34)
+- [ ] 03: Proof Report reads the database (#35)
+- [ ] 04: Verify on a preview and align docs (#36)
