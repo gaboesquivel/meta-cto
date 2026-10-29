@@ -1,104 +1,90 @@
-# 002 — Review queue: turn suspected duplicates into decisions
+# 002 — Review queue: confirm duplicates, keep the evidence, show prevention
 
 Status: draft (2026-10-29)
 Slice: MVP slice 1, journey 3 (Product Manager review) ([PRODUCT.md](../../PRODUCT.md#core-journeys)); builds on [spec 001](001-check-before-create.md)
-Decisions: [0002 Fragmentation as unresolved duplication; duplicates as reversible associations](../decisions/0002-fragmentation-and-duplicate-association.md) (Proposed), [0001](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
+Decisions: [0002 Measure prevention with confirmed duplicates; duplicates as reversible associations](../decisions/0002-fragmentation-and-duplicate-association.md) (Proposed), [0001](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 
 ## Problem Statement
 
-Signal stops new duplicates at intake, but a Product Manager still can't answer the question that matters: can I understand what customers really need without losing the original evidence? Duplicates already in the backlog stay fragmented, the AI's suspicions are invisible, nothing records a human decision, and the main metric is unmeasurable (spec 001 reports `fragmentationRate: null`).
+Spec 001 stops duplicates before creation, but nobody can yet tell whether it works. Signal's main metric is unmeasured (`fragmentationRate: null`) because no human ever confirms a duplicate. Duplicates already in the backlog stay fragmented, the AI's suspicions about them are invisible, and a Product Manager can't answer the question that matters: _do I understand what customers really need, without losing the original evidence?_
 
 ## Solution
 
-One polished journey for a Product Manager:
+One journey for a Product Manager, centered on measurable product value:
 
-1. **Incoming feedback → AI matches.** The Review Queue lists Feature Requests with **suspected duplicates**: other open Feature Requests the AI judged Same Need, each with its Reason.
-2. **Review → Mark Duplicate, Related, or Distinct.** The Product Manager decides. Mark Duplicate associates the Feature Request with a canonical one; Related adds a Related Link; Distinct records that they are different needs.
-3. **Preserve provenance → Undo.** Nothing moves. The canonical Feature Request shows every Support and Comment from its duplicates, labeled with where it came from and in the customer's own words. Undo removes the association.
-4. **Metrics update.** Fragmentation, Duplicate Rate and Review Coverage update as decisions are made.
+1. **See what needs review.** New Feature Requests (created through a Check), plus backlog Feature Requests the AI suspects are the same need, each suspicion with its Reason.
+2. **Decide.** For each, the Product Manager confirms **Duplicate** of a canonical Feature Request, records **Related** with a Shared Dimension they state, or marks **Distinct**. The AI suggests; the human decides.
+3. **Keep the evidence.** A confirmed Duplicate is an association, not a move. The canonical Feature Request shows every customer's original words and Account from its duplicates, labeled with where they came from. **Undo** ends the association and keeps the history.
+4. **See the value.** Intake Duplicate Rate for requests created through Signal, next to the same rate for the pre-Signal backlog, with Review Coverage and counts. Suspected Duplication shows the review workload falling.
 
-The demo story leads with the product (feedback, AI judgment, human control, preserved evidence, measurable change). The API and MCP surfaces exist for agents and tests but are not the story.
+Review queues and reversible merging are table stakes in this category (see the [landscape](../research/2026-10-28-feature-request-landscape.md)). The differentiator is still the verdict before every create; this spec adds only the human confirmation that makes that differentiator measurable.
+
+## Definitions (from decision 0002)
+
+| Term                                | Meaning                                                                                                                                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Suspected duplicate                 | Two existing Feature Requests the AI judged **Same Need**. Unconfirmed; never counted as duplication.                                                                                    |
+| Review Decision                     | A Product Manager's **Duplicate** (with canonical), **Related** (with Shared Dimension) or **Distinct**, with who, when, and which AI suggestion (if any) it answered.                   |
+| Reviewed                            | A Feature Request whose review is complete as a whole: every suspected duplicate on it is decided, or the Product Manager confirmed it has none.                                         |
+| Intake Duplicate Rate (main metric) | Reviewed new Feature Requests confirmed Duplicate ÷ reviewed new Feature Requests. Shown with counts and the **backlog baseline** (same rate over reviewed pre-Signal Feature Requests). |
+| Review Coverage                     | Reviewed new Feature Requests ÷ new Feature Requests.                                                                                                                                    |
+| Suspected Duplication (supporting)  | Open Feature Requests with an undecided suspected duplicate ÷ open Feature Requests. Labeled AI-suspected.                                                                               |
+
+"New" means created through a Check (spec 001). Pre-Signal means seeded or imported without a Check.
 
 ## User Stories
 
-1. As a Product Manager, I want a queue of Feature Requests with suspected duplicates and the AI's Reason for each, so that I know where fragmentation is and why.
-2. As a Product Manager, I want to Mark Duplicate, Related or Distinct in one action per suggestion, so that review is fast.
-3. As a Product Manager, I want the canonical Feature Request to show every customer's original words and Account from its duplicates, so that no evidence is lost.
-4. As a Product Manager, I want to Undo a decision, so that a wrong call is cheap to fix.
-5. As a Product Manager, I want Fragmentation, Duplicate Rate and Review Coverage to update as I decide, so that I can see the backlog getting healthier.
-6. As a Staff Actor or Agent Actor, I want Checks to stop suggesting Feature Requests already marked Duplicate and point me at the canonical one, so that new evidence lands in the right place.
-7. As a reviewer of the build, I want the seeded Crewday backlog to already contain real suspected duplicates, so that the journey works on first open.
+1. As a Product Manager, I want to see which Feature Requests need review and why the AI suspects a duplicate, so that I spend time where fragmentation is likely.
+2. As a Product Manager, I want to confirm Duplicate, Related or Distinct in one step each, so that review is fast and the AI never decides for me.
+3. As a Product Manager, I want the canonical Feature Request to show every customer's original words and Account from its duplicates, each Account counted once, so that consolidating never loses evidence.
+4. As a Product Manager, I want to Undo a decision and still see that it happened, so that mistakes are cheap and the record is trustworthy.
+5. As a Product Manager, I want to compare Intake Duplicate Rate for Signal-created requests with the pre-Signal backlog, with coverage and counts, so that I can tell whether prevention is working.
+6. As a Staff Actor or Agent Actor, I want Checks to stop offering confirmed duplicates and point to the canonical Feature Request, so that new evidence lands in the right place.
 
 Failure cases:
 
-8. Review actions without Operator access are refused (fail closed when `OPERATOR_SECRET` is unset); the queue and metrics stay readable.
-9. Marking a Feature Request Duplicate of itself, of a Feature Request that is itself a Duplicate, or creating a cycle is refused; decisions always point at a canonical (non-duplicate) Feature Request.
-10. Undo of an already-undone decision is refused with a clear message.
+7. Review Decisions and Undo without Operator access are refused; the queue, evidence and metrics stay readable.
+8. A Duplicate must point at a canonical (non-duplicate) Feature Request; self-references and chains are refused.
+9. Related without a stated Shared Dimension is refused.
+10. Undo of an already-undone decision is refused.
 
-## Implementation Decisions
+## Capabilities
 
-**Exposure:** Runs at `https://meta-cto-app.vercel.app` and on per-branch previews. The Review Queue, canonical evidence and metrics are readable without sign-in like spec 001. **Review Decisions and Undo require Operator access** (the template's `OPERATOR_SECRET`: Operator session cookie in the UI, bearer or `X-Operator-Secret` for REST, and the Operator MCP for agents) and fail closed when the secret is unset.
+Contracts are written contract-first during tasks; this section states what each capability must do and for whom.
 
-### Domain (see decision 0002; glossary updated on acceptance)
+- **Review Queue:** lists new Feature Requests not yet reviewed and backlog Feature Requests with undecided suspected duplicates, each with the AI's Reason. Readable by anyone; available to people (`/review`) and agents (Operator MCP).
+- **Decide and Undo:** record and reverse Review Decisions. Operator access only. Every decision and undo is kept as history.
+- **Backlog scan:** finds suspected duplicates among existing Feature Requests using the spec 001 judge (Same Need only), once per Feature Request. It is an explicit Operator action, never part of a build or deploy, so AI cost and nondeterminism stay out of deployments. New Feature Requests get suspicions for free from their Check (a Same Need candidate that was skipped at create).
+- **Canonical evidence:** a Feature Request's detail shows its confirmed duplicates and their Supports and Comments with provenance. A duplicate's page points to its canonical Feature Request.
+- **Checks respect decisions:** confirmed duplicates are no longer Check candidates.
+- **Metrics:** Intake Duplicate Rate with backlog baseline, Review Coverage, and Suspected Duplication, each with numerator and denominator, alongside spec 001's Suggestion Acceptance.
 
-- **Suspected duplicate:** an unordered pair of open Feature Requests the AI judged Same Need, with the Reason, model and time. Sources: (a) a Check whose Same Need candidate was skipped at create (recorded at create, no extra model call); (b) a scan that runs the existing Check judge for each open Feature Request against its nearest open neighbors, for rows not yet scanned.
-- **Review Decision:** for a Feature Request and one suspected pair: `duplicate` (with canonical id), `related` (adds a Related Link with the AI's Reason as its Shared Dimension context), or `distinct`. Actor = Operator; time; `undoneAt` for Undo. A decision resolves its pair.
-- **Duplicate association:** `feature_requests.duplicate_of_id` (nullable) set by Mark Duplicate and cleared by Undo. Canonical = `duplicate_of_id is null`. No Support, Comment or Account row moves.
-- Duplicates are excluded from Check candidates and from suspected-pair scans; their page points to the canonical Feature Request.
-
-### Metrics (`GET /api/metrics`, extended)
-
-- `fragmentation` = open canonical Feature Requests with an unresolved suspected pair ÷ open canonical Feature Requests.
-- `duplicateRate` = Feature Requests decided Duplicate (not undone) ÷ Feature Requests with any non-undone decision; `null` when none reviewed.
-- `reviewCoverage` = Feature Requests with a non-undone decision ÷ all Feature Requests in the Workspace.
-- Existing `suggestionAcceptance` unchanged. Every metric ships with its numerator and denominator.
-
-### Contracts (contract-first)
-
-| Operation          | REST                                                                                                                         | MCP (Operator MCP)           | Access    |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------- | --------- |
-| Review Queue       | `GET /api/review/queue` → items: Feature Request summary + suspected pairs (other request, Reason, decision state)           | `review_queue`               | open read |
-| Decide             | `POST /api/review/decisions` `{ featureRequestId, otherId, decision: "duplicate" \| "related" \| "distinct", canonicalId? }` | `decide_review`              | Operator  |
-| Undo               | `POST /api/review/decisions/{id}/undo`                                                                                       | `undo_review_decision`       | Operator  |
-| Scan               | `pnpm signal:scan` (also after `db:seed` in the build, scanning only unscanned rows)                                         | —                            | build/CLI |
-| Canonical evidence | `GET /api/feature-requests/{id}` gains `duplicates[]` and each Support/Comment gains `via` (source Feature Request)          | `get_feature_request` (same) | open read |
-| Metrics            | `GET /api/metrics` gains `fragmentation`, `duplicateRate`, `reviewCoverage` with counts                                      | —                            | open read |
-
-Errors use the existing `{ code, error, resolution }` shape and the REST/MCP parity test gains rows for the new operations: `operator_required` (401), `invalid_decision` (422, self/cycle/non-canonical), `already_undone` (409), `not_found` (404).
-
-### UI (the demo)
-
-- `/review`: headline metrics (Fragmentation, Duplicate Rate, Review Coverage with counts), then the queue. Each item shows the Feature Request and its suspected duplicates side by side: titles, Underlying Needs, Account counts, the AI Reason, and three actions. Without Operator access the actions show "Sign in as Operator" (template `/operator/access`).
-- After Mark Duplicate: the item resolves, metrics update in place, and the canonical Feature Request link shows the merged evidence; an Undo toast stays available.
-- `/requests/[id]` (canonical): Supports grouped by Account include those from duplicates, labeled "via <duplicate title>" with the customer's original words. A duplicate's page shows a banner linking to its canonical Feature Request.
-
-### Data and seed
-
-- Migration adds `feature_requests.duplicate_of_id`, `suspected_duplicates` (pair, reason, model, judged_at, scanned source), `review_decisions` (feature request, other, decision, canonical, actor, created_at, undone_at), and a `suspicion_scanned_at` marker on `feature_requests`.
-- The seeded backlog already contains real near-duplicates (for example "Trade board doesn't update after pickup" and "Shift swaps don't sync reliably"; "Borrow staff from another location" and "Open shifts across nearby stores"), so the scan produces suspected pairs from the real judge, not hard-coded ones.
+**Exposure:** same deployment and open read access as spec 001. Writes in this spec (decisions, undo, scan) require the template's Operator access and fail closed when `OPERATOR_SECRET` is unset.
 
 ## Testing Decisions
 
-Test-first for the service, REST, MCP and scan, as in spec 001: mocked judge for decisions and scan logic; PGlite for association, exclusion from Checks, metrics math and the canonical evidence query; parity rows for the new operations; Operator access refused when unset or wrong. UI: view-helper unit tests plus the acceptance scenario on a preview.
+Test-first, as in spec 001, with the judge mocked: decisions, undo history, association rules, Check exclusion, metric definitions (including small and zero denominators), Operator access, and REST/MCP parity rows for the new operations. Model quality is not re-tested here; suspicions inherit spec 001's held-out same-need precision.
 
-**Acceptance scenario (Product Manager, deployed preview):**
+**Acceptance scenario (Product Manager, branch preview).** Steps assert behavior and use whatever the scan and Checks return, not specific AI outputs.
 
-1. Starting state: seeded Crewday Workspace after the scan; `/review` shows Fragmentation above 0 with counts, Duplicate Rate "—" (none reviewed), Review Coverage 0%.
-2. The queue lists "Trade board doesn't update after pickup" with suspected duplicate "Shift swaps don't sync reliably" and a Reason.
-3. Without Operator access the actions are disabled with "Sign in as Operator"; after signing in they are enabled.
-4. The Product Manager chooses Mark Duplicate with "Shift swaps don't sync reliably" as canonical → the item resolves; Fragmentation drops, Duplicate Rate shows 1/1, Review Coverage increases, all with counts.
-5. "Shift swaps don't sync reliably" now shows Golden Wok Express's Support from Kevin "via Trade board doesn't update after pickup", in his own words; the duplicate's page links to the canonical one.
-6. A new Check for "picked-up trades still show as open" no longer lists the duplicate as a candidate; Same Need points at the canonical Feature Request.
-7. Undo restores the item to the queue and the metrics to their previous values; the evidence label disappears.
+1. Starting state: seeded Crewday Workspace on a preview with its own Neon branch. Metrics show no reviewed requests yet, with counts.
+2. Without Operator access, the queue and metrics are visible and decision actions are refused. With Operator access, the Product Manager runs the backlog scan; the queue then lists at least one suspected duplicate with a Reason (the seed contains deliberate near-duplicates, which makes this likely but not certain; if none appear, steps 3 to 5 use a duplicate created in step 6).
+3. The Product Manager confirms one suspected pair as Duplicate. The canonical Feature Request shows the duplicate's Supports with their original words and a "via" label; an Account present on both is counted once. Suspected Duplication falls and the backlog baseline gains a reviewed request.
+4. The Product Manager decides another pair Distinct and a third Related with a stated Shared Dimension (if pairs remain). Related without a Shared Dimension is refused.
+5. Undo on the Duplicate: the association ends, the evidence label disappears, metrics return to their previous values, and the decision history still shows the decision and its undo.
+6. A Staff Actor creates two new Feature Requests through Checks (one skipping a Same Need suggestion with a Skip Reason). The Product Manager reviews both. Intake Duplicate Rate and Review Coverage show the result with counts, next to the backlog baseline.
+7. A Check for a draft matching a confirmed duplicate no longer offers the duplicate and points to its canonical Feature Request.
 
-**Acceptance scenario (agent, Operator MCP):** `review_queue` lists the same pair; `decide_review` without Operator credentials returns `operator_required`; with them, it marks the duplicate and `get_feature_request` on the canonical shows the `via` evidence.
+**Acceptance scenario (agent, Operator MCP):** the agent reads the queue, is refused a decision without Operator credentials, records one with them, and sees the canonical evidence with provenance.
 
 ## Out of Scope
 
-Moving Supports or Comments between rows, bulk decisions, automatic merging, customer notifications, themes or groups beyond pairs, prioritization, a Product Manager identity beyond Operator access, and re-judging pairs after edits.
+Moving Supports or Comments between rows, bulk or automatic decisions, AI-suggested Related or Distinct, scanning in builds or on a schedule, re-judging after edits, Product Manager identity beyond Operator access, themes or groups, prioritization, and customer notifications.
 
-## Further Notes
+## Assumptions and risks
 
-- The scan reuses the spec 001 judge and its 20 s timeout; it runs once per unscanned Feature Request, so per-branch Neon previews inherit scans from their parent branch.
-- Suspected pairs inherit the same-need precision of the judge (100% on the 10-pair held-out reading in spec 001); a wrong suspicion costs one Distinct decision, never lost evidence.
-- Candidate follow-ups: themes/groups and evidence summaries (slice 3); a real Product Manager identity.
+- **Reviewers need Operator access:** the `OPERATOR_SECRET` must be shared privately for the demo. Without it, the demo is read-only.
+- **Small samples:** early rates rest on a handful of requests; counts are always shown, and no target is set until there's a baseline.
+- **AI nondeterminism:** scan results vary between runs, so the demo depends on the seed's deliberate near-duplicates, not on specific pairs.
+- **What prevention means here:** a lower Intake Duplicate Rate than the backlog baseline suggests prevention works. It is not proof: new requests are fewer and younger.
+- **Candidate follow-ups:** themes/groups and evidence summaries (slice 3); a real Product Manager identity; scheduled scans.
