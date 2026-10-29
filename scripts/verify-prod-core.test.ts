@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
 import {
+  commitDeploymentStatus,
   latestStatus,
   pickDeployment,
   redirectTarget,
@@ -107,5 +108,25 @@ describe("vercelStatus", () => {
     assert.equal(vercelStatus([row("b", 1, "BUILDING")], sha)?.status.state, "in_progress");
     assert.equal(vercelStatus([row("c", 1, "CANCELED")], sha)?.status.state, "error");
     assert.equal(vercelStatus([row("x", 1, "READY", "abc")], sha), null);
+  });
+});
+
+const status = (context: string, state: string, updated_at: string) => ({
+  context,
+  state,
+  target_url: `https://vercel.com/${state}`,
+  updated_at,
+});
+
+describe("commitDeploymentStatus", () => {
+  it("maps the newest Vercel commit status and ignores other contexts", () => {
+    const result = commitDeploymentStatus([
+      status("Vercel", "pending", "2026-10-29T01:00:00Z"),
+      status("Vercel", "success", "2026-10-29T01:02:00Z"),
+      status("ci/other", "failure", "2026-10-29T01:03:00Z"),
+    ]);
+    assert.equal(result?.status.state, "success");
+    assert.equal(result?.status.log_url, "https://vercel.com/success");
+    assert.equal(commitDeploymentStatus([status("ci/other", "success", "x")]), null);
   });
 });

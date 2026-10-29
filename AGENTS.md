@@ -16,7 +16,9 @@ Run the narrowest check that proves the change while implementing; run the full 
 | Types         | `pnpm check-types`                                                               |
 | Full suite    | `pnpm security:check && pnpm qa && pnpm eval:offline && pnpm build` (same as CI) |
 
-CI runs on pushes to `main` and pull requests. Dispatch it (`gh workflow run CI --ref <branch>`) only when a head has no CI run.
+CI runs on pushes to `main` and pull requests. Dispatch it (`gh workflow run CI --ref <branch>`) only when a head has no CI run. Verify a shipped commit's deployment with `pnpm verify:prod [sha]`; do not poll GitHub Deployments, which this repository does not get.
+
+A task that implements a spec failure case, Exposure rule, or user story adds the test proving it in that task, so review finds missing behavior before landing instead of after.
 
 <!-- BEGIN FLOW -->
 

@@ -4,12 +4,14 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type {
   CheckRun,
+  CommitStatus,
   Deployment,
   DeploymentStatus,
   PageResult,
   VercelDeployment,
 } from "./verify-prod-core";
 import {
+  commitDeploymentStatus,
   latestStatus,
   pickDeployment,
   redirectTarget,
@@ -66,11 +68,17 @@ const readVercel = (sha: string) => {
   return vercelStatus((JSON.parse(output) as { deployments: VercelDeployment[] }).deployments, sha);
 };
 
+/** Vercel's commit status; no status at all means there is no deployment to wait for. */
+const readCommitStatus = (sha: string) =>
+  commitDeploymentStatus(
+    gh<{ statuses: CommitStatus[] }>("api", `repos/${repo}/commits/${sha}/status`).statuses,
+  ) ?? { id: null, status: { created_at: "", state: "missing" } };
+
 const readDeployment = (sha: string) => {
   const deployment = pickDeployment(
     gh<Deployment[]>("api", `repos/${repo}/deployments?sha=${sha}`),
   );
-  if (!deployment) return readVercel(sha) ?? { id: null, status: latestStatus([]) };
+  if (!deployment) return readVercel(sha) ?? readCommitStatus(sha);
   const statuses = gh<DeploymentStatus[]>(
     "api",
     `repos/${repo}/deployments/${deployment.id}/statuses`,
