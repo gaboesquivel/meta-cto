@@ -26,7 +26,7 @@ type ReviewToolName = (typeof reviewMcpToolNames)[number];
 
 export const reviewToolDescriptions = {
   decide_review:
-    "Record the Product Manager's Review Decision on a Feature Request (Operator only). The AI only suggests Same Need; the Product Manager decides: duplicate (canonicalId must be featureRequestId or otherId; new evidence goes to the canonical), related (sharedDimension: the Shared Dimension seen in both), distinct, or none (no otherId: confirms the Feature Request has no duplicate). Pass suggestionId when answering a Suspected Duplicate from review_queue. A rule violation returns invalid_decision; see the canonical evidence afterwards with get_feature_request.",
+    "Record the Product Manager's Review Decision on a Feature Request (Operator only). The AI only suggests Same Need; the Product Manager decides: duplicate (canonicalId must be featureRequestId or otherId; new evidence goes to the canonical), related (sharedDimension: the Shared Dimension seen in both), distinct, or none (no otherId: a decision that confirms the Feature Request has no duplicate; not the same as undecided). Pass suggestionId when answering a Suspected Duplicate from review_queue. A rule violation returns invalid_decision; see the canonical evidence afterwards with get_feature_request.",
   review_queue:
     "Read the Review Queue: new Feature Requests not yet reviewed and backlog Feature Requests with undecided Suspected Duplicates, each with the AI's Reason. Suspicions are suggestions only; nothing counts as a duplicate until the Product Manager decides it with decide_review.",
   scan_backlog:
@@ -59,7 +59,7 @@ const invalidInputError = (error: z.ZodError) => {
   const field = String(idIssue.path[0]);
   return asToolError({
     code: "not_found",
-    message: `${ID_FIELDS[field]} not found (${field} must be a UUID).`,
+    message: `Malformed ${field}: ${ID_FIELDS[field]} not found (${field} must be a UUID).`,
     resolution: "Call review_queue to find valid ids, then call again.",
   });
 };
@@ -71,7 +71,8 @@ const requireReview = (): ReviewService => {
   if (service) return service;
   throw new SignalError({
     code: "service_unavailable",
-    message: "Review is not configured on this deployment (database or AI keys missing).",
+    message:
+      "Review is not configured on this deployment (DATABASE_URL missing; the backlog scan also needs AI keys).",
     resolution: "Retry later or ask the operator to configure DATABASE_URL and the AI Gateway key.",
     status: 503,
   });
