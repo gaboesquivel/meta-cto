@@ -332,3 +332,7 @@ Question (assistant → user): Where should private pilot data and v2 readings l
 2026-10-29T04:12:59Z — "change my mind ... follow the recommended option"
 Answer (user): private store = database (filled files in a private folder outside the repo; load + eval runner write to Neon; repo keeps templates + fingerprint locks). Writing spec 004.
 Skills used: to-spec. Docs changed: (next entry).
+
+2026-10-29T04:13:44Z — to-spec 004
+Summary: Wrote spec 004 (draft) and decision 0004 (Proposed) on branch 004-private-pilot-data: private folder outside repo (SIGNAL_PRIVATE_DATA_DIR), repo keeps templates + locks, load and eval runner store data/readings in Neon, Proof Report reads DB only. Not pushed, no issue.
+Skills used: to-spec. Docs changed/created: docs/specs/004-private-pilot-data.md, docs/decisions/0004-private-pilot-data-in-the-database.md.
