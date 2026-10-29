@@ -110,6 +110,13 @@ const duplicateEvidence = {
   type: "object",
 };
 
+const originSchema = {
+  description:
+    "Origin: where Checks and events came from. Every count in one response reads this one Origin.",
+  enum: ["pilot", "demo", "seed", "eval"],
+  type: "string",
+};
+
 const metricsSchema = {
   properties: {
     backlogBaseline: countedRate(
@@ -123,6 +130,7 @@ const metricsSchema = {
       "Main metric: reviewed new Feature Requests confirmed Duplicate / reviewed new Feature Requests",
       ["duplicates", "reviewed"],
     ),
+    origin: originSchema,
     reviewCoverage: countedRate("Reviewed new Feature Requests / new Feature Requests", [
       "reviewed",
       "total",
@@ -138,6 +146,7 @@ const metricsSchema = {
     ]),
   },
   required: [
+    "origin",
     "checks",
     "checksWithSameNeed",
     "createsAfterSameNeed",
@@ -630,8 +639,17 @@ export const signalPaths = {
   "/api/metrics": {
     get: {
       operationId: "getSignalMetrics",
+      parameters: [
+        {
+          description: "The one Origin to read; defaults to the caller's own (demo).",
+          in: "query",
+          name: "origin",
+          schema: originSchema,
+        },
+      ],
       responses: {
         "200": ok("Signal metrics, each rate with its counts", ref("SignalMetrics")),
+        "400": invalidInput,
         "503": unavailable,
       },
       summary: "Prevention and review metrics",

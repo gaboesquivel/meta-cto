@@ -123,7 +123,7 @@ describe("review decide", () => {
     assert.equal(decision.undoneAt, null);
     assert.equal(await duplicateOfId(harness, duplicate.id), canonical.id);
     assert.equal(await duplicateOfId(harness, canonical.id), null);
-    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "review_decided");
+    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "review_decided", "demo");
     assert.equal(event?.subjectId, duplicate.id);
     assert.equal(payloadOf(event).decisionId, decision.id);
     assert.equal(payloadOf(event).decision, "duplicate");
@@ -204,7 +204,10 @@ describe("review decide", () => {
     assert.deepEqual(detail.reviewHistory, []);
     const metrics = await reviewMetrics(harness);
     assert.deepEqual(metrics.undoRate, { decisions: 0, rate: null, undone: 0 });
-    assert.deepEqual(await harness.repo.eventsOfType(harness.workspaceId, "review_decided"), []);
+    assert.deepEqual(
+      await harness.repo.eventsOfType(harness.workspaceId, "review_decided", "demo"),
+      [],
+    );
   });
 
   it("refuses and withdraws when the request became a duplicate meanwhile", async () => {
@@ -405,7 +408,7 @@ describe("review undo", () => {
       { ...before, undoRate: before.undoRate },
     );
     assert.deepEqual(after.undoRate, { decisions: 1, rate: 1, undone: 1 });
-    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "review_undone");
+    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "review_undone", "demo");
     assert.equal(payloadOf(event).decisionId, decision.id);
     const queue = await harness.review.queue();
     assert.equal(queue.counts.backlog, 2);
@@ -512,6 +515,7 @@ describe("canonical evidence", () => {
       description: "We use Gusto. Can Crewday send hours there automatically?",
       embedding: unit(1),
       onBehalfOfAccountId: saffron.id,
+      origin: "demo",
       requesterName: "Omar",
       title: "Gusto integration for hours",
       underlyingNeed: null,
@@ -581,6 +585,7 @@ describe("review metrics", () => {
       checksWithSameNeed: 0,
       createsAfterSameNeed: 0,
       intakeDuplicateRate: { duplicates: 0, rate: null, reviewed: 0 },
+      origin: "demo",
       reviewCoverage: { rate: null, reviewed: 0, total: 0 },
       suggestionAcceptance: null,
       suspectedDuplication: { open: 0, rate: null, total: 0 },
@@ -761,6 +766,7 @@ describe("checks and creates respect review", () => {
       draftHash: draftHash(draft),
       expiresAt: new Date(harness.clock.now.getTime() + 60_000),
       id: checkId,
+      origin: "demo",
       result: {
         candidates: [
           sameNeedCandidate(kept.id, "same approval flow"),

@@ -125,6 +125,21 @@ describe("review runtime", () => {
     assert.deepEqual(metrics.intakeDuplicateRate, { duplicates: 0, rate: null, reviewed: 0 });
   });
 
+  it("keeps an eval runtime's Checks out of demo metrics", async () => {
+    const db = await createTestDb();
+    const evalService = createRuntimeService({ db, embedder, judge, origin: "eval" });
+    await evalService.check({
+      actor: { name: "eval", type: "agent" },
+      draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+    });
+
+    const review = createRuntimeReviewService({ db });
+    const demo = await review.metrics();
+    const evalRun = await review.metrics({ origin: "eval" });
+    assert.equal(demo.checks, 0);
+    assert.equal(evalRun.checks, 1);
+  });
+
   it("reports the scan unavailable without a judge", async () => {
     const db = await createTestDb();
     const review = createRuntimeReviewService({ db });

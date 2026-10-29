@@ -86,6 +86,7 @@ export const metrics: ReviewMetrics = {
   checksWithSameNeed: 2,
   createsAfterSameNeed: 1,
   intakeDuplicateRate: { duplicates: 1, rate: 0.25, reviewed: 4 },
+  origin: "demo",
   reviewCoverage: { rate: 0.8, reviewed: 4, total: 5 },
   suggestionAcceptance: 0.5,
   suspectedDuplication: { open: 2, rate: 0.1, total: 20 },

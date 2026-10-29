@@ -5,7 +5,7 @@ import {
   judgeModelId,
   resolveJudgeModel,
 } from "@/lib/signal/agent";
-import type { Embedder, Judge, ReviewService, SignalService } from "@/lib/signal/contracts";
+import type { Embedder, Judge, Origin, ReviewService, SignalService } from "@/lib/signal/contracts";
 import { getDb } from "@/lib/signal/db";
 import type { SignalDb } from "@/lib/signal/db";
 import { createRepository } from "@/lib/signal/repository";
@@ -15,13 +15,15 @@ import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
 /**
  * Builds the service for the Crewday Demo Workspace. The workspace row is resolved lazily on
- * first use, so callers get a synchronous handle.
+ * first use, so callers get a synchronous handle. `origin` is recorded on everything it writes
+ * (demo by default; eval runs pass `eval`).
  */
 export const createRuntimeService = (deps: {
   db: SignalDb;
   embedder: Embedder;
   judge: Judge;
   judgeTimeoutMs?: number;
+  origin?: Origin;
 }): SignalService => {
   const repo = createRepository(deps.db);
   let ready: Promise<SignalService> | null = null;
@@ -32,6 +34,7 @@ export const createRuntimeService = (deps: {
         embedder: deps.embedder,
         judge: deps.judge,
         judgeTimeoutMs: deps.judgeTimeoutMs,
+        origin: deps.origin,
         repo,
         workspaceId: row.id,
       });
@@ -62,25 +65,31 @@ export const judgeTimeoutFromEnv = (): number | undefined => {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 };
 
-let cached: SignalService | null = null;
+const cached = new Map<Origin, SignalService>();
 
-/** Composed Signal service, or null when the database or AI keys are not configured. */
-export const getSignalService = (): SignalService | null => {
-  if (cached) return cached;
+/**
+ * Composed Signal service for one Origin (the demo caller's by default), or null when the
+ * database or AI keys are not configured.
+ */
+export const getSignalService = (origin: Origin = "demo"): SignalService | null => {
+  const existing = cached.get(origin);
+  if (existing) return existing;
   const db = getDb();
   if (!db) return null;
   const embedder = createGatewayEmbedder();
   const model = resolveJudgeModel();
   if (!(embedder && model)) return null;
   const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
-  cached = createRuntimeService({
+  const service = createRuntimeService({
     db,
     embedder,
     // The judge aborts its own model call at the same budget the service waits for.
     judge: createLlmJudge({ model, timeoutMs: judgeTimeoutMs }),
     judgeTimeoutMs,
+    origin,
   });
-  return cached;
+  cached.set(origin, service);
+  return service;
 };
 
 /**
@@ -120,7 +129,7 @@ export const createRuntimeReviewService = (deps: {
 
   return {
     decide: (input, actor) => resolve().then((service) => service.decide(input, actor)),
-    metrics: () => resolve().then((service) => service.metrics()),
+    metrics: (input) => resolve().then((service) => service.metrics(input)),
     queue: () => resolve().then((service) => service.queue()),
     scan: (options) => resolve().then((service) => service.scan(options)),
     undo: (decisionId, actor) => resolve().then((service) => service.undo(decisionId, actor)),

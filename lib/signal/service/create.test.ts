@@ -88,6 +88,7 @@ describe("signal service create", () => {
     const [createdEvent] = await harness.repo.eventsOfType(
       harness.workspaceId,
       "feature_request_created",
+      "demo",
     );
     assert.equal(createdEvent?.subjectId, created.id);
     assert.deepEqual(createdEvent?.payload, {
@@ -96,7 +97,11 @@ describe("signal service create", () => {
       hadSameNeed: false,
       skipReason: null,
     });
-    const linkEvents = await harness.repo.eventsOfType(harness.workspaceId, "related_link_added");
+    const linkEvents = await harness.repo.eventsOfType(
+      harness.workspaceId,
+      "related_link_added",
+      "demo",
+    );
     assert.equal(linkEvents.length, 1);
     assert.equal(payloadOf(linkEvents[0]).featureRequestId, sofia.id);
   });
@@ -116,7 +121,11 @@ describe("signal service create", () => {
       skipReason: "Different team owns approvals",
     });
     assert.equal(created.skipReason, "Different team owns approvals");
-    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "feature_request_created");
+    const [event] = await harness.repo.eventsOfType(
+      harness.workspaceId,
+      "feature_request_created",
+      "demo",
+    );
     assert.equal(payloadOf(event).hadSameNeed, true);
   });
 

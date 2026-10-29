@@ -35,6 +35,7 @@ describe("signal repository", () => {
       createdByActorType: "staff",
       description: `${title} description`,
       embedding,
+      origin: "demo",
       title,
       underlyingNeed: null,
       workspaceId,

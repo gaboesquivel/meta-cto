@@ -6,7 +6,7 @@ import type {
   ReviewService,
   ReviewSuspicionView,
 } from "../contracts";
-import { SignalError, actorSchema } from "../contracts";
+import { DEMO_ORIGIN, SignalError, actorSchema } from "../contracts";
 import type { SuspectedDuplicateRow } from "../repository";
 import { orderedPair, toReviewDecision } from "../repository";
 import { isUuid, parseInput } from "./context";
@@ -118,6 +118,7 @@ const runUndo = async (
       await context.repo.clearDuplicateOf(duplicate.id);
   }
   await context.repo.insertEvent({
+    origin: context.origin,
     payload: { actor, decision: row.decision, decisionId: row.id },
     subjectId: row.featureRequestId,
     type: "review_undone",
@@ -130,12 +131,13 @@ const runUndo = async (
 export const createReviewService = (deps: ReviewServiceDeps): ReviewService => {
   const context: ReviewContext = {
     now: deps.now ?? (() => new Date()),
+    origin: deps.origin ?? DEMO_ORIGIN,
     repo: deps.repo,
     workspaceId: deps.workspaceId,
   };
   return {
     decide: async (input, actor) => await runDecide(context, input, actor),
-    metrics: async () => await runMetrics(context),
+    metrics: async (input) => await runMetrics(context, input),
     queue: async () => await runQueue(context),
     scan: async (options) => {
       if (!deps.scan) {

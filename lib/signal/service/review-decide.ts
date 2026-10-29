@@ -129,6 +129,7 @@ export const runDecide = async (
   const decision = toReviewDecision(await insertDecision(context, input, actor, suggestionId));
   if (duplicate) await associate(context, decision, duplicate.id);
   await context.repo.insertEvent({
+    origin: context.origin,
     payload: {
       actor,
       canonicalId: decision.canonicalId,

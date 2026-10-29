@@ -1,9 +1,11 @@
-import type { Actor, ScanOptions, ScanResult } from "../contracts";
+import type { Actor, Origin, ScanOptions, ScanResult } from "../contracts";
 import { SignalError } from "../contracts";
 import type { SignalRepository } from "../repository";
 
 export interface ReviewServiceDeps {
   now?: () => Date;
+  /** The caller's Origin: recorded on review events and the default Origin for metrics. */
+  origin?: Origin;
   repo: SignalRepository;
   /** The backlog scan (spec 002 task 03); without it `scan()` is `service_unavailable`. */
   scan?: (options?: ScanOptions) => Promise<ScanResult>;
@@ -12,6 +14,7 @@ export interface ReviewServiceDeps {
 
 export interface ReviewContext {
   now: () => Date;
+  origin: Origin;
   repo: SignalRepository;
   workspaceId: string;
 }

@@ -105,6 +105,7 @@ describe("review repository", () => {
       createdByActorType: "staff",
       description: `${title} description`,
       embedding: extra.embedding ?? null,
+      origin: "demo",
       title,
       underlyingNeed: null,
       workspaceId,
@@ -317,7 +318,7 @@ describe("review repository", () => {
     assert.deepEqual(await queued(), ["Backlog A", "Backlog B", "Fresh", "Fresh dup"]);
     assert.equal(sizeOf(await repo.listUndecidedSuspectedDuplicates(workspaceId)), 1);
 
-    let counts = await repo.reviewMetricCounts(workspaceId);
+    let counts = await repo.reviewMetricCounts(workspaceId, "demo");
     assert.deepEqual(counts, {
       backlog: { duplicates: 0, reviewed: 0, total: 2 },
       duplicateDecisions: { total: 0, undone: 0 },
@@ -344,7 +345,7 @@ describe("review repository", () => {
 
     assert.deepEqual(await queued(), []);
     assert.equal(sizeOf(await repo.listUndecidedSuspectedDuplicates(workspaceId)), 0);
-    counts = await repo.reviewMetricCounts(workspaceId);
+    counts = await repo.reviewMetricCounts(workspaceId, "demo");
     // Both reviewed sides of an active Duplicate decision count as duplicates of the same need.
     assert.deepEqual(counts, {
       backlog: { duplicates: 2, reviewed: 2, total: 2 },

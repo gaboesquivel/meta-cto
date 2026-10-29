@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import type { z } from "zod";
 
-import type { Actor, Draft, Embedder, Judge, OnBehalfOf } from "../contracts";
-import { SignalError } from "../contracts";
+import type { Actor, Draft, Embedder, Judge, OnBehalfOf, Origin } from "../contracts";
+import { DEMO_ORIGIN, SignalError } from "../contracts";
 import type { SignalRepository } from "../repository";
 
 export interface SignalServiceDeps {
@@ -13,6 +13,8 @@ export interface SignalServiceDeps {
   /** Marks every row the service writes as demo data; the MVP has only the demo Workspace. */
   markDemo?: boolean;
   now?: () => Date;
+  /** The caller's Origin, recorded on every Check, Feature Request and event; defaults to demo. */
+  origin?: Origin;
   repo: SignalRepository;
   workspaceId: string;
 }
@@ -23,6 +25,7 @@ export interface ServiceContext {
   judgeTimeoutMs: number;
   markDemo: boolean;
   now: () => Date;
+  origin: Origin;
   repo: SignalRepository;
   workspaceId: string;
 }
@@ -35,6 +38,7 @@ export const toContext = (deps: SignalServiceDeps): ServiceContext => ({
   judgeTimeoutMs: deps.judgeTimeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS,
   markDemo: deps.markDemo ?? true,
   now: deps.now ?? (() => new Date()),
+  origin: deps.origin ?? DEMO_ORIGIN,
   repo: deps.repo,
   workspaceId: deps.workspaceId,
 });
