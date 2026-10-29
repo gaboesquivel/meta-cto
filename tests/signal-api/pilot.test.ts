@@ -2,6 +2,8 @@
  * Pilot Workspace over REST (spec 003 task 02): the Pilot Key header selects the Pilot Workspace
  * for every Signal and review route; a request without it is the Crewday demo, unchanged; a wrong
  * key, an empty key, or no key configured is refused with `pilot_key_required`, never demo.
+ * Pilot review writes (decide, undo, scan) need Operator access too: the agents' key alone only
+ * files and reads, so what agents file stays separate from what people decide.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,14 +62,19 @@ beforeEach(() => {
   vi.stubEnv("SIGNAL_PILOT_KEY", PILOT_KEY);
   vi.stubEnv("OPERATOR_SECRET", OPERATOR_SECRET);
   vi.stubEnv("OPERATOR_ACCESS_TOKEN", undefined);
+  auth.operator = false;
 });
 
 afterEach(() => {
   vi.unstubAllEnvs();
 });
 
+/** Whether requests built in this test also carry Operator access (Bearer OPERATOR_SECRET). */
+const auth = { operator: false };
+
 const withKey = (request: Request, key: string | null = PILOT_KEY) => {
   if (key !== null) request.headers.set(PILOT_KEY_HEADER, key);
+  if (auth.operator) request.headers.set("authorization", `Bearer ${OPERATOR_SECRET}`);
   return request;
 };
 
@@ -78,6 +85,7 @@ const routes: {
   name: string;
   signal?: keyof SignalService;
   review?: keyof ReviewService;
+  write?: boolean;
 }[] = [
   {
     act: (key) => postCheck(withKey(jsonRequest("/api/checks", { body: { actor, draft } }), key)),
@@ -156,6 +164,7 @@ const routes: {
       ),
     name: "review decision",
     review: "decide",
+    write: true,
   },
   {
     act: (key) =>
@@ -165,24 +174,59 @@ const routes: {
       ),
     name: "undo",
     review: "undo",
+    write: true,
   },
   {
     act: (key) => postScan(withKey(jsonRequest("/api/review/scan", { body: {} }), key)),
     name: "scan",
     review: "scan",
+    write: true,
   },
 ];
 
 const target = (route: (typeof routes)[number], origin: Origin) =>
   route.signal ? services[origin][route.signal] : reviews[origin][route.review ?? "queue"];
 
+const reads = routes.filter((route) => !route.write);
+const writes = routes.filter((route) => route.write);
+
 describe("Pilot Key over REST", () => {
-  it.each(routes)("$name with the Pilot Key acts on the Pilot Workspace only", async (route) => {
+  it.each(reads)("$name with the Pilot Key acts on the Pilot Workspace only", async (route) => {
     const response = await route.act(PILOT_KEY);
     expect(response.status).toBeLessThan(300);
     expect(target(route, "pilot")).toHaveBeenCalledTimes(1);
     expect(target(route, "demo")).not.toHaveBeenCalled();
   });
+
+  it.each(writes)("$name with the Pilot Key alone needs Operator access", async (route) => {
+    const response = await route.act(PILOT_KEY);
+    expect(response.status).toBe(401);
+    expect(await response.json()).toMatchObject({ code: "operator_required" });
+    expect(target(route, "pilot")).not.toHaveBeenCalled();
+    expect(target(route, "demo")).not.toHaveBeenCalled();
+  });
+
+  it.each(writes)(
+    "$name with Operator access and the Pilot Key acts on the pilot",
+    async (route) => {
+      auth.operator = true;
+      const response = await route.act(PILOT_KEY);
+      expect(response.status).toBeLessThan(300);
+      expect(target(route, "pilot")).toHaveBeenCalledTimes(1);
+      expect(target(route, "demo")).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(writes)(
+    "$name with Operator access and no Pilot Key stays on the demo",
+    async (route) => {
+      auth.operator = true;
+      const response = await route.act(null);
+      expect(response.status).toBeLessThan(300);
+      expect(target(route, "demo")).toHaveBeenCalledTimes(1);
+      expect(target(route, "pilot")).not.toHaveBeenCalled();
+    },
+  );
 
   it.each(routes)("$name with a wrong key is refused as invalid", async (route) => {
     const response = await route.act("not-the-pilot-key-at-all");
@@ -210,16 +254,13 @@ describe("Pilot Key over REST", () => {
     expect(target(route, "demo")).not.toHaveBeenCalled();
   });
 
-  it.each(routes.filter((route) => route.signal || route.name.match(/queue|metrics/u)))(
-    "$name without the header is the Crewday demo, as before",
-    async (route) => {
-      vi.stubEnv("SIGNAL_PILOT_KEY", undefined);
-      const response = await route.act(null);
-      expect(response.status).toBeLessThan(300);
-      expect(target(route, "demo")).toHaveBeenCalledTimes(1);
-      expect(target(route, "pilot")).not.toHaveBeenCalled();
-    },
-  );
+  it.each(reads)("$name without the header is the Crewday demo, as before", async (route) => {
+    vi.stubEnv("SIGNAL_PILOT_KEY", undefined);
+    const response = await route.act(null);
+    expect(response.status).toBeLessThan(300);
+    expect(target(route, "demo")).toHaveBeenCalledTimes(1);
+    expect(target(route, "pilot")).not.toHaveBeenCalled();
+  });
 
   it("still needs Operator access for demo review writes", async () => {
     const response = await postDecision(

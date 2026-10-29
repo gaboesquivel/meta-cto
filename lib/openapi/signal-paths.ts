@@ -40,8 +40,8 @@ const operatorUnavailable = err(
   ["service_unavailable", "operator_required"],
 );
 /**
- * Operator access for demo review writes (any one is enough), and the Pilot Key, which selects
- * the Pilot Workspace on every Signal route and alone authorizes its review writes.
+ * Operator access for review writes (any one is enough), and the Pilot Key, which selects the
+ * Pilot Workspace on every Signal route; a review write needs Operator access with it.
  */
 export const signalSecuritySchemes = {
   operatorBearer: {
@@ -671,7 +671,7 @@ const demoPaths = {
   "/api/review/decisions": {
     post: {
       description:
-        "Operator access (or the Pilot Key, in the Pilot Workspace). Confirm Duplicate, Related, Distinct, or none (no duplicate).",
+        "Operator access only; add the Pilot Key to act on the Pilot Workspace. Confirm Duplicate, Related, Distinct, or none (no duplicate).",
       operationId: "decideReview",
       requestBody: jsonBody("SignalReviewDecideInput"),
       responses: {
@@ -698,7 +698,7 @@ const demoPaths = {
   "/api/review/decisions/{id}/undo": {
     post: {
       description:
-        "Operator access (or the Pilot Key, in the Pilot Workspace). Ends the decision's effect; the decision and its undo stay in history.",
+        "Operator access only; add the Pilot Key to act on the Pilot Workspace. Ends the decision's effect; the decision and its undo stay in history.",
       operationId: "undoReviewDecision",
       parameters: [{ ...idParameter, description: "Review Decision id (uuid)" }],
       requestBody: jsonBody("SignalUndoInput"),
@@ -736,7 +736,7 @@ const demoPaths = {
   "/api/review/scan": {
     post: {
       description:
-        "Operator access (or the Pilot Key, in the Pilot Workspace). Judges unscanned backlog Feature Requests for suspected duplicates (paid AI calls); call again while remaining > 0.",
+        "Operator access only; add the Pilot Key to act on the Pilot Workspace. Judges unscanned backlog Feature Requests for suspected duplicates (paid AI calls); call again while remaining > 0.",
       operationId: "scanBacklog",
       requestBody: {
         content: { "application/json": { schema: ref("SignalScanInput") } },
@@ -769,7 +769,8 @@ const describedWith = (response: unknown, extra: string) => {
 
 /**
  * Every Signal operation also accepts the Pilot Key: an open route stays open (`{}`) or takes the
- * key; an Operator-only write takes Operator access or the key. 401 and 503 list the refusal.
+ * key; an Operator-only write takes Operator access together with the key. 401 and 503 list the
+ * refusal.
  */
 const withPilotKey = <T extends object>(paths: T): T =>
   Object.fromEntries(
@@ -790,7 +791,12 @@ const withPilotKey = <T extends object>(paths: T): T =>
                 "pilot_key_required: the Pilot Key is sent but none is configured",
               ),
             },
-            security: [...(operation.security ?? [{}]), { pilotKey: [] }],
+            security: operation.security
+              ? [
+                  ...operation.security,
+                  ...operation.security.map((scheme) => ({ ...scheme, pilotKey: [] })),
+                ]
+              : [{}, { pilotKey: [] }],
           },
         ]),
       ),

@@ -7,7 +7,9 @@ import {
   scanOptionsSchema,
   SignalError,
 } from "@/lib/signal/contracts";
-import type { Origin, ReviewService } from "@/lib/signal/contracts";
+import { pilotKeyRefusal } from "@/lib/auth/pilot-access";
+import type { PilotAccess } from "@/lib/auth/pilot-access";
+import type { ReviewService } from "@/lib/signal/contracts";
 import { getReviewService } from "@/lib/signal/runtime";
 import { z } from "zod";
 
@@ -15,8 +17,9 @@ import { advertised, invalidInputToolError, toToolError } from "./signal-tool-he
 import { asToolError, asToolResult } from "./tool-result";
 
 /**
- * Review (spec 002) tools: on the Operator MCP for the demo; on the public MCP only with the Pilot
- * Key, bound to the Pilot Workspace (spec 003). Never on the demo public MCP.
+ * Review (spec 002) tools: on the Operator MCP, bound to the Pilot Workspace when the Pilot Key
+ * header is sent (spec 003). The public MCP gets only the review_queue read, and only with the
+ * Pilot Key; review writes are never on the public MCP.
  */
 export const reviewMcpToolNames = [
   "review_queue",
@@ -69,8 +72,9 @@ const invalidInputError = (error: z.ZodError) => {
 
 const plainToolMeta = { _meta: {} };
 
-const reviewFor = (origin: Origin): ReviewService => {
-  const service = getReviewService(origin);
+const reviewFor = (access: PilotAccess): ReviewService => {
+  if (access.kind === "refused") throw pilotKeyRefusal(access.reason);
+  const service = getReviewService(access.kind === "pilot" ? "pilot" : "demo");
   if (service) return service;
   throw new SignalError({
     code: "service_unavailable",
@@ -119,15 +123,15 @@ const undo = async (
 });
 
 /**
- * Registers the review tools for one Origin's Workspace (demo by default). The Operator MCP route
- * enforces Operator access before any call; the public MCP registers them only for a valid Pilot
- * Key, which alone authorizes pilot review decisions.
+ * Registers the review tools for the caller's Workspace (`access` from the Pilot Key header; demo
+ * by default; a refused key fails every call). The Operator MCP route enforces Operator access
+ * before any call. `readOnly` registers only review_queue (the public MCP with the Pilot Key).
  */
 export const registerReviewMcpTools = (
   server: McpServer,
-  { origin = "demo" }: { origin?: Origin } = {},
+  { access, readOnly = false }: { access?: PilotAccess; readOnly?: boolean } = {},
 ) => {
-  const requireReview = () => reviewFor(origin);
+  const requireReview = () => reviewFor(access ?? { kind: "demo" });
 
   registerAppTool(
     server,
@@ -139,6 +143,7 @@ export const registerReviewMcpTools = (
     },
     (args) => runReviewTool(toolSchemas.queue, args, () => requireReview().queue()),
   );
+  if (readOnly) return;
 
   registerAppTool(
     server,

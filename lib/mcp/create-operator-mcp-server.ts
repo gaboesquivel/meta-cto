@@ -1,5 +1,6 @@
 import { registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/server";
+import type { PilotAccess } from "@/lib/auth/pilot-access";
 
 import {
   GENUI_PREVIEW_RESOURCE_URI,
@@ -10,7 +11,8 @@ import { registerOperatorMcpTools } from "./register-operator-tools";
 import { registerReviewMcpTools } from "./register-review-tools";
 import { registerStarterMcpTools } from "./register-tools";
 
-export const createOperatorMcpServer = () => {
+/** `access` from the Pilot Key header binds the review tools to the Pilot Workspace (demo by default). */
+export const createOperatorMcpServer = ({ access }: { access?: PilotAccess } = {}) => {
   const server = new McpServer({
     name: "meta-cto-operator",
     version: "1.0.0",
@@ -36,6 +38,6 @@ export const createOperatorMcpServer = () => {
 
   registerStarterMcpTools(server);
   registerOperatorMcpTools(server);
-  registerReviewMcpTools(server);
+  registerReviewMcpTools(server, { access });
   return server;
 };

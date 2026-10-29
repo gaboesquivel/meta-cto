@@ -1,7 +1,9 @@
 /**
  * Pilot Workspace over the public MCP (spec 003 task 02): the Pilot Key header on /api/mcp
- * selects the Pilot Workspace for the Signal tools (unchanged in shape) and adds the review tools
- * bound to the Pilot Workspace. Without the header the public MCP is the demo, unchanged.
+ * selects the Pilot Workspace for the Signal tools (unchanged in shape) and adds the read-only
+ * review_queue bound to it; review writes stay off the public MCP. The Operator MCP honors the same
+ * header to bind its (Operator-gated) review tools to the Pilot Workspace. Without the header both
+ * are the demo, unchanged.
  */
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
@@ -35,6 +37,8 @@ const { POST: postOperatorMcp } = await import("../../app/api/mcp/operator/route
 const PILOT_KEY = "pilot-key-for-tests-0123";
 const OPERATOR_SECRET = "test-operator-secret-16+";
 const REVIEW_TOOLS = ["decide_review", "review_queue", "scan_backlog", "undo_review_decision"];
+const REVIEW_WRITES = ["decide_review", "scan_backlog", "undo_review_decision"];
+const OPERATOR = { Authorization: `Bearer ${OPERATOR_SECRET}` };
 
 const services = {} as Record<Origin, ReturnType<typeof makeService>>;
 const reviews = {} as Record<Origin, ReturnType<typeof makeReviewService>>;
@@ -114,21 +118,49 @@ describe("public MCP with the Pilot Key", () => {
     assert.equal(services.demo.get.mock.calls.length, 0);
   });
 
-  it("lists the review tools, bound to the Pilot Workspace, and accepts pilot decisions", async () => {
+  it("lists only the review queue read, bound to the Pilot Workspace", async () => {
     const names = await listNames(key(PILOT_KEY));
-    for (const name of REVIEW_TOOLS) assert.ok(names.has(name), `${name} missing with Pilot Key`);
+    assert.ok(names.has("review_queue"), "review_queue missing with Pilot Key");
+    for (const name of REVIEW_WRITES)
+      assert.equal(names.has(name), false, `${name} on the public MCP with the Pilot Key`);
 
     const queue = await call("review_queue", {}, key(PILOT_KEY));
     assert.notEqual(queue.isError, true);
-    const decided = await call(
+    assert.equal(reviews.pilot.queue.mock.calls.length, 1);
+    assert.equal(reviews.demo.queue.mock.calls.length, 0);
+  });
+
+  it.each([
+    [
       "decide_review",
       { actor, decision: "distinct", featureRequestId: FR_ID, otherId: OTHER_FR_ID },
-      key(PILOT_KEY),
+    ],
+    ["undo_review_decision", { actor, decisionId: FR_ID }],
+    ["scan_backlog", { limit: 5 }],
+  ])("refuses %s from the agents' Pilot Key", async (name, args) => {
+    const response = await postPublicMcp(
+      new Request("http://meta-cto.localhost/api/mcp", {
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { arguments: args, name },
+        }),
+        headers: {
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json",
+          ...key(PILOT_KEY),
+        },
+        method: "POST",
+      }),
     );
-    assert.notEqual(decided.isError, true);
-    assert.equal(reviews.pilot.queue.mock.calls.length, 1);
-    assert.equal(reviews.pilot.decide.mock.calls.length, 1);
-    assert.equal(reviews.demo.decide.mock.calls.length, 0);
+    const json = (await response.json()) as { error?: unknown; result?: RpcResult };
+    assert.ok(json.error ?? json.result?.isError, `public MCP ran ${name}`);
+    for (const review of [reviews.pilot, reviews.demo]) {
+      assert.equal(review.decide.mock.calls.length, 0);
+      assert.equal(review.undo.mock.calls.length, 0);
+      assert.equal(review.scan.mock.calls.length, 0);
+    }
   });
 
   it("keeps the demo public MCP without review tools and on the demo Workspace", async () => {
@@ -166,14 +198,72 @@ describe("public MCP with the Pilot Key", () => {
     const names = await listNames(key(PILOT_KEY));
     for (const name of REVIEW_TOOLS) assert.equal(names.has(name), false);
   });
+});
 
-  it("leaves the Operator MCP review tools on the demo Workspace", async () => {
-    await rpc(
-      postOperatorMcp,
-      { method: "tools/call", params: { arguments: {}, name: "review_queue" } },
-      { Authorization: `Bearer ${OPERATOR_SECRET}` },
-    );
+const operatorCall = (name: string, args: unknown, headers: Record<string, string>) =>
+  rpc(postOperatorMcp, { method: "tools/call", params: { arguments: args, name } }, headers);
+
+describe("Operator MCP with the Pilot Key", () => {
+  const decideArgs = {
+    actor,
+    decision: "distinct",
+    featureRequestId: FR_ID,
+    otherId: OTHER_FR_ID,
+  };
+
+  it("binds the review tools to the Pilot Workspace", async () => {
+    const decided = await operatorCall("decide_review", decideArgs, {
+      ...OPERATOR,
+      ...key(PILOT_KEY),
+    });
+    assert.notEqual(decided.isError, true);
+    await operatorCall("scan_backlog", { limit: 5 }, { ...OPERATOR, ...key(PILOT_KEY) });
+    assert.equal(reviews.pilot.decide.mock.calls.length, 1);
+    assert.equal(reviews.pilot.scan.mock.calls.length, 1);
+    assert.equal(reviews.demo.decide.mock.calls.length, 0);
+    assert.equal(reviews.demo.scan.mock.calls.length, 0);
+  });
+
+  it("stays on the demo Workspace without the Pilot Key", async () => {
+    await operatorCall("review_queue", {}, OPERATOR);
+    await operatorCall("decide_review", decideArgs, OPERATOR);
     assert.equal(reviews.demo.queue.mock.calls.length, 1);
+    assert.equal(reviews.demo.decide.mock.calls.length, 1);
     assert.equal(reviews.pilot.queue.mock.calls.length, 0);
+    assert.equal(reviews.pilot.decide.mock.calls.length, 0);
+  });
+
+  it("refuses a wrong Pilot Key with pilot_key_required, never falling back to demo", async () => {
+    const error = errorOf(
+      await operatorCall("decide_review", decideArgs, {
+        ...OPERATOR,
+        ...key("not-the-pilot-key-at-all"),
+      }),
+    );
+    assert.equal(error.code, "pilot_key_required");
+    assert.equal(error.details?.reason, "invalid");
+    assert.equal(reviews.demo.decide.mock.calls.length, 0);
+    assert.equal(reviews.pilot.decide.mock.calls.length, 0);
+  });
+
+  it("still needs Operator access with the Pilot Key", async () => {
+    const response = await postOperatorMcp(
+      new Request("http://meta-cto.localhost/api/mcp/operator", {
+        body: JSON.stringify({
+          id: 1,
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: { arguments: decideArgs, name: "decide_review" },
+        }),
+        headers: {
+          Accept: "application/json, text/event-stream",
+          "Content-Type": "application/json",
+          ...key(PILOT_KEY),
+        },
+        method: "POST",
+      }),
+    );
+    assert.equal(response.status, 401);
+    assert.equal(reviews.pilot.decide.mock.calls.length, 0);
   });
 });

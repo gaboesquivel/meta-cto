@@ -51,10 +51,14 @@ describe("OpenAPI document for Signal routes", () => {
     >;
     for (const path of ["/api/checks", "/api/feature-requests/{id}", "/api/review/scan"]) {
       for (const operation of Object.values(paths[path] ?? {})) {
-        expect(operation.security).toContainEqual({ pilotKey: [] });
         expect(operation.responses["401"]?.description).toMatch(/pilot_key_required/u);
       }
     }
     expect(paths["/api/checks"]?.post?.security).toContainEqual({});
+    expect(paths["/api/checks"]?.post?.security).toContainEqual({ pilotKey: [] });
+    // A pilot review write needs Operator access together with the Pilot Key, never the key alone.
+    const scan = paths["/api/review/scan"]?.post?.security;
+    expect(scan).toContainEqual({ operatorBearer: [], pilotKey: [] });
+    expect(scan).not.toContainEqual({ pilotKey: [] });
   });
 });

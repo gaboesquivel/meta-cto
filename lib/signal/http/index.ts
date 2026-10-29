@@ -193,10 +193,10 @@ export const originOfAccess = (access: Exclude<PilotAccess, { kind: "refused" }>
   access.kind === "pilot" ? "pilot" : "demo";
 
 /**
- * Runs a review route. Without the Pilot Key: reads are open; writes spend the per-client write
- * budget and need Operator access, as before spec 003. With the Pilot Key the route acts on the
- * Pilot Workspace and the key alone authorizes its writes (the Product Managers work the pilot
- * queue over REST and MCP with it); a bad or unconfigured key is refused before any service call.
+ * Runs a review route. Reads are open; writes spend the per-client write budget and need Operator
+ * access, as before spec 003. The Pilot Key header selects the Pilot Workspace but never
+ * authorizes a write by itself: agents hold that key, and what agents file must stay separate
+ * from what people decide. A bad or unconfigured key is refused before any service call.
  */
 export const handleReview = async ({
   request,
@@ -212,7 +212,7 @@ export const handleReview = async ({
   const pilot = pilotAccessOf(request);
   if (pilot.kind === "refused")
     return withExtraHeaders(await toErrorResponse(pilotKeyRefusal(pilot.reason)), limit?.headers);
-  if (write && pilot.kind === "demo") {
+  if (write) {
     const access = request
       ? verifyOperatorRequest(request)
       : { ok: false as const, reason: "unauthorized" as const };

@@ -14,7 +14,7 @@ import { registerStarterMcpTools } from "./register-tools";
 /**
  * The public MCP. `access` comes from the Pilot Key header: the demo (default) gets the Signal
  * tools on the Crewday Demo Workspace; the Pilot Key gets them on the Pilot Workspace plus the
- * review tools bound to it; a refused key gets Signal tools that each return `pilot_key_required`.
+ * read-only review_queue bound to it (review writes stay on the Operator MCP); a refused key gets Signal tools that each return `pilot_key_required`.
  */
 export const createStarterMcpServer = ({
   access = { kind: "demo" },
@@ -44,6 +44,6 @@ export const createStarterMcpServer = ({
 
   registerStarterMcpTools(server);
   registerSignalMcpTools(server, access);
-  if (access.kind === "pilot") registerReviewMcpTools(server, { origin: "pilot" });
+  if (access.kind === "pilot") registerReviewMcpTools(server, { access, readOnly: true });
   return server;
 };
