@@ -110,5 +110,5 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 - [x] 04: Blind review in the Review Queue (#26) — [bc39a6c](https://github.com/gaboesquivel/meta-cto/commit/bc39a6c6172ed682902692952920879ccb25a265)
 - [x] 05: Score agent correctness and PM agreement (#27) — [9d8278f](https://github.com/gaboesquivel/meta-cto/commit/9d8278f2a98228145c821e536ad6b3519c2e1c7d)
 - [x] 06: Held-Out Set v2 runner with intervals (#28) — [a645ce4](https://github.com/gaboesquivel/meta-cto/commit/a645ce47e8def8075cbf94a5acb2346eda1bfa8c)
-- [ ] 07: Proof Report (#29)
+- [x] 07: Proof Report (#29) — [40ed8eb](https://github.com/gaboesquivel/meta-cto/commit/40ed8eb3d43a89cd04529c2bf477a4947768d2d3)
 - [ ] 08: Wire, verify on a preview and align docs (#30)
