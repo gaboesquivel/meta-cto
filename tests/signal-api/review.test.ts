@@ -322,4 +322,33 @@ describe("OpenAPI document for review routes", () => {
     for (const field of ["duplicates", "duplicateOf", "reviewHistory", "via"])
       expect(detail).toContain(field);
   });
+
+  it("documents each duplicate's origin evidence on the detail", () => {
+    const schemas = doc.components.schemas as Record<string, { allOf?: unknown[] }>;
+    const [, extension] = (schemas.SignalFeatureRequestDetail?.allOf ?? []) as {
+      properties: Record<
+        string,
+        { items: { properties: Record<string, unknown>; required: string[] } }
+      >;
+    }[];
+    const item = extension?.properties.duplicates?.items;
+    expect(Object.keys(item?.properties ?? {}).toSorted()).toEqual([
+      "account",
+      "createdAt",
+      "createdBy",
+      "description",
+      "id",
+      "requester",
+      "title",
+    ]);
+    expect(item?.required.toSorted()).toEqual([
+      "account",
+      "createdAt",
+      "createdBy",
+      "description",
+      "id",
+      "requester",
+      "title",
+    ]);
+  });
 });

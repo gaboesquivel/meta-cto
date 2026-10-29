@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type {
   CommentView,
+  DuplicateEvidence,
   ReviewDecision,
   ReviewMetrics,
   Spec001Metrics,
@@ -12,6 +13,7 @@ import {
   buildDecisionBody,
   canonicalIdFor,
   describeDecision,
+  duplicateOriginLabel,
   formatRate,
   groupEvidenceByAccount,
   metricCards,
@@ -289,6 +291,39 @@ describe("groupEvidenceByAccount", () => {
 
   it("returns no groups without Supports", () => {
     expect(groupEvidenceByAccount([])).toEqual([]);
+  });
+
+  const gusto: DuplicateEvidence = {
+    account: { name: "Saffron & Sage", plan: "Pro", segment: "restaurant", size: "3 locations" },
+    createdAt: "2026-10-20T00:00:00.000Z",
+    createdBy: { name: "Ana", type: "staff" },
+    description: "We use Gusto. Can Crewday send hours there automatically?",
+    id: B,
+    requester: "Omar",
+    title: "Gusto integration for hours",
+  };
+
+  it("adds each duplicate's originating Account once, with its original words", () => {
+    const groups = groupEvidenceByAccount(
+      [support("1", "Cedar Market"), support("2", "Saffron & Sage")],
+      [gusto, { ...gusto, account: null, id: A, requester: null, title: "Payroll export" }],
+    );
+    expect(groups.map((group) => group.account.name)).toEqual(["Cedar Market", "Saffron & Sage"]);
+    expect(groups[0]?.origins).toEqual([]);
+    expect(groups[1]?.origins).toEqual([gusto]);
+    expect(groups[1]?.supports.map((item) => item.id)).toEqual(["2"]);
+    expect(groups[1]?.account.plan).toBeNull();
+  });
+
+  it("groups an originating Account that has no Support", () => {
+    const groups = groupEvidenceByAccount([], [gusto]);
+    expect(groups).toEqual([{ account: gusto.account, origins: [gusto], supports: [], vias: [] }]);
+  });
+
+  it("labels a duplicate's origin with its title", () => {
+    expect(duplicateOriginLabel(gusto)).toBe(
+      "Filed as Gusto integration for hours · via duplicate",
+    );
   });
 });
 

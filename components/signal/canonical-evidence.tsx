@@ -2,13 +2,19 @@ import Link from "next/link";
 
 import type {
   CommentView,
+  DuplicateEvidence,
   EvidenceVia,
   FeatureRequestDetail,
   FeatureRequestRef,
 } from "@/lib/signal/contracts";
 import { cn } from "cn";
 
-import { DECISION_LABELS, describeDecision, groupEvidenceByAccount } from "./review-view";
+import {
+  DECISION_LABELS,
+  describeDecision,
+  duplicateOriginLabel,
+  groupEvidenceByAccount,
+} from "./review-view";
 import { describeAccount } from "./view";
 
 const detailHref = (id: string) => `/requests/${encodeURIComponent(id)}`;
@@ -40,25 +46,61 @@ export const DuplicateOfBanner = ({ canonical }: { canonical: FeatureRequestRef 
   </aside>
 );
 
-/** Confirmed duplicates of a canonical Feature Request. */
-export const DuplicatesList = ({ duplicates }: { duplicates: FeatureRequestRef[] }) => (
+/** "Filed as <title> · via duplicate" label for a duplicate's own originating evidence. */
+const OriginLabel = ({ duplicate }: { duplicate: DuplicateEvidence }) => (
+  <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[0.7rem] font-medium text-violet-900 dark:bg-violet-950 dark:text-violet-200">
+    <Link className="underline underline-offset-2" href={detailHref(duplicate.id)}>
+      {duplicateOriginLabel(duplicate)}
+    </Link>
+  </span>
+);
+
+/** A duplicate's original words with who filed it, for whom, and when. */
+const DuplicateOrigin = ({
+  duplicate,
+  showAccount,
+}: {
+  duplicate: DuplicateEvidence;
+  showAccount: boolean;
+}) => (
+  <div className="text-sm">
+    <blockquote className="border-l-2 pl-3 whitespace-pre-line italic">
+      “{duplicate.description}”
+    </blockquote>
+    <p className="text-muted-foreground mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span>
+        {showAccount && duplicate.account ? `${duplicate.account.name} · ` : ""}
+        {duplicate.requester ? `${duplicate.requester}, via ` : "Via "}
+        {duplicate.createdBy.name} · {formatDate(duplicate.createdAt)}
+      </span>
+      <OriginLabel duplicate={duplicate} />
+    </p>
+  </div>
+);
+
+/** Confirmed duplicates of a canonical Feature Request, each with its customer's original words. */
+export const DuplicatesList = ({ duplicates }: { duplicates: DuplicateEvidence[] }) => (
   <ul className="flex flex-col gap-2">
     {duplicates.map((duplicate) => (
-      <li className="rounded-xl border p-3 text-sm" key={duplicate.id}>
+      <li className="flex flex-col gap-2 rounded-xl border p-3 text-sm" key={duplicate.id}>
         <Link
           className="font-medium underline-offset-4 hover:underline"
           href={detailHref(duplicate.id)}
         >
           {duplicate.title}
         </Link>
+        <DuplicateOrigin duplicate={duplicate} showAccount />
       </li>
     ))}
   </ul>
 );
 
-/** Supports grouped by Account, each Account once, with the customer's own words and provenance. */
+/**
+ * Supports, and duplicates' originating evidence, grouped by Account: each Account once, with the
+ * customer's own words and provenance.
+ */
 export const SupportsByAccount = ({ request }: { request: FeatureRequestDetail }) => {
-  const groups = groupEvidenceByAccount(request.supports);
+  const groups = groupEvidenceByAccount(request.supports, request.duplicates);
   if (groups.length === 0) return <p className="text-muted-foreground text-sm">No Supports yet.</p>;
   return (
     <ul className="flex flex-col gap-3">
@@ -81,6 +123,11 @@ export const SupportsByAccount = ({ request }: { request: FeatureRequestDetail }
                   </span>
                   {support.via ? <ViaLabel via={support.via} /> : null}
                 </p>
+              </li>
+            ))}
+            {group.origins.map((duplicate) => (
+              <li key={`origin-${duplicate.id}`}>
+                <DuplicateOrigin duplicate={duplicate} showAccount={false} />
               </li>
             ))}
           </ul>

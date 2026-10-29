@@ -1,5 +1,7 @@
 import type {
+  AccountView,
   CommentView,
+  DuplicateEvidence,
   EvidenceVia,
   FeatureRequestDetail,
   FeatureRequestSummary,
@@ -9,6 +11,7 @@ import type {
 import type {
   AccountRow,
   CommentRow,
+  FeatureRequestListRow,
   FeatureRequestRow,
   RelatedLinkRow,
   ReviewDecisionRow,
@@ -18,13 +21,15 @@ import { toReviewDecision } from "../repository";
 import type { ServiceContext } from "./context";
 import { actorOf } from "./context";
 
+const toAccountView = (account: AccountRow | undefined): AccountView => ({
+  name: account?.name ?? "Unknown account",
+  plan: account?.plan ?? null,
+  segment: account?.segment ?? null,
+  size: account?.size ?? null,
+});
+
 export const toSupportView = (row: SupportRow, account: AccountRow | undefined): SupportView => ({
-  account: {
-    name: account?.name ?? "Unknown account",
-    plan: account?.plan ?? null,
-    segment: account?.segment ?? null,
-    size: account?.size ?? null,
-  },
+  account: toAccountView(account),
   actor: actorOf(row),
   createdAt: row.createdAt.toISOString(),
   id: row.id,
@@ -106,8 +111,15 @@ const viaOf = (row: { viaFeatureRequestId: string; viaTitle: string }): Evidence
   title: row.viaTitle,
 });
 
-/** This Feature Request's Supports and Comments plus its confirmed duplicates', with provenance. */
-const loadEvidence = async (context: Pick<ServiceContext, "repo">, row: FeatureRequestRow) => {
+/**
+ * This Feature Request's Supports and Comments plus its confirmed duplicates', with provenance,
+ * and the Accounts they and `originAccountIds` (duplicates' on-behalf-of Accounts) refer to.
+ */
+const loadEvidence = async (
+  context: Pick<ServiceContext, "repo">,
+  row: FeatureRequestRow,
+  originAccountIds: (string | null)[],
+) => {
   const own = {
     comments: await context.repo.listComments(row.id),
     supports: await context.repo.listSupports(row.id),
@@ -123,6 +135,7 @@ const loadEvidence = async (context: Pick<ServiceContext, "repo">, row: FeatureR
   ].toSorted((a, b) => byCreatedAt(a.row, b.row));
   const accounts = await accountMap(context, [
     row.onBehalfOfAccountId,
+    ...originAccountIds,
     ...supports.map((support) => support.row.accountId),
     ...comments.map((comment) => comment.row.accountId),
   ]);
@@ -142,29 +155,53 @@ const loadReview = async (context: Pick<ServiceContext, "repo">, row: FeatureReq
   return {
     decisions,
     duplicateOf: canonical ? { id: canonical.id, title: canonical.title } : null,
-    duplicates: duplicates.map((duplicate) => ({ id: duplicate.id, title: duplicate.title })),
+    duplicates,
   };
 };
+
+const toDuplicateEvidence = (
+  row: FeatureRequestListRow,
+  account: AccountRow | undefined,
+): DuplicateEvidence => ({
+  account: account ? toAccountView(account) : null,
+  createdAt: row.createdAt.toISOString(),
+  createdBy: actorOf({ actorName: row.createdByActorName, actorType: row.createdByActorType }),
+  description: row.description,
+  id: row.id,
+  requester: row.requesterName,
+  title: row.title,
+});
 
 export const buildDetail = async (
   context: Pick<ServiceContext, "repo">,
   row: FeatureRequestRow,
 ): Promise<FeatureRequestDetail> => {
-  const evidence = await loadEvidence(context, row);
   const review = await loadReview(context, row);
+  const originAccountIds = review.duplicates.map((duplicate) => duplicate.onBehalfOfAccountId);
+  const evidence = await loadEvidence(context, row, originAccountIds);
   const [summary] = await summarize(context, [row]);
   const accountOf = (id: string | null) => (id ? (evidence.accounts.get(id) ?? null) : null);
-  const supportAccounts = new Set(evidence.supports.map((support) => support.row.accountId));
+  // Each Account counts once across Supports (here and on duplicates) and duplicates' origins.
+  const countedAccounts = new Set([
+    ...evidence.supports.map((support) => support.row.accountId),
+    ...originAccountIds.filter((id): id is string => Boolean(id)),
+  ]);
   return {
     ...(summary as FeatureRequestSummary),
-    // Each Account counts once across this Feature Request and its duplicates.
-    accountCount: supportAccounts.size,
+    accountCount: countedAccounts.size,
     comments: evidence.comments.map(({ row: comment, via }) =>
       withVia(toCommentView(comment, accountOf(comment.accountId)), via),
     ),
     createdBy: actorOf({ actorName: row.createdByActorName, actorType: row.createdByActorType }),
     duplicateOf: review.duplicateOf,
-    duplicates: review.duplicates,
+    duplicates: review.duplicates.map((duplicate) =>
+      toDuplicateEvidence(
+        duplicate,
+        duplicate.onBehalfOfAccountId
+          ? evidence.accounts.get(duplicate.onBehalfOfAccountId)
+          : undefined,
+      ),
+    ),
     onBehalfOf: {
       account: accountOf(row.onBehalfOfAccountId)?.name ?? null,
       requester: row.requesterName,
