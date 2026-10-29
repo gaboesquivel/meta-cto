@@ -1,4 +1,4 @@
-/** OpenAPI fragments for the Signal check-before-create REST routes (spec 001). */
+/** OpenAPI fragments for the Signal REST routes: check before create (spec 001) and review (spec 002). */
 
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` });
 
@@ -31,9 +31,103 @@ const invalidInput = err("Invalid JSON or fields; body includes zod issues", ["i
 const rateLimited = { $ref: "#/components/responses/RateLimited" };
 const unavailable = err("Signal is not configured", ["service_unavailable"]);
 const notFound = err("Feature Request not found", ["not_found"]);
+const operatorRequired = err(
+  "Operator access missing or invalid; sign in at /operator/access or send Authorization: Bearer <OPERATOR_SECRET>",
+  ["operator_required"],
+);
+const operatorUnavailable = err(
+  "Signal is not configured, or OPERATOR_SECRET is unset so review writes fail closed",
+  ["service_unavailable", "operator_required"],
+);
+/** Operator access for review writes; any one of these is enough. */
+export const signalSecuritySchemes = {
+  operatorBearer: {
+    description: "Authorization: Bearer <OPERATOR_SECRET>",
+    scheme: "bearer",
+    type: "http",
+  },
+  operatorSecret: { in: "header", name: "X-Operator-Secret", type: "apiKey" },
+  operatorSession: {
+    description: "Session cookie set by signing in at /operator/access",
+    in: "cookie",
+    name: "flow_operator_session",
+    type: "apiKey",
+  },
+};
+
+const operatorSecurity = [{ operatorBearer: [] }, { operatorSecret: [] }, { operatorSession: [] }];
 
 const str = { type: "string" };
 const nullableStr = { type: ["string", "null"] };
+const uuid = { format: "uuid", type: "string" };
+const nullableUuid = { format: "uuid", type: ["string", "null"] };
+const dateTime = { format: "date-time", type: "string" };
+const integer = { type: "integer" };
+const nullableRate = { description: "null when the denominator is zero", type: ["number", "null"] };
+
+const countedRate = (description: string, counts: string[]) => ({
+  description,
+  properties: Object.fromEntries([
+    ["rate", nullableRate],
+    ...counts.map((name) => [name, integer]),
+  ]),
+  required: ["rate", ...counts],
+  type: "object",
+});
+
+const via = {
+  description: "Set when recorded on a confirmed duplicate of this Feature Request",
+  properties: { featureRequestId: uuid, title: str },
+  required: ["featureRequestId", "title"],
+  type: "object",
+};
+
+const featureRequestRef = {
+  properties: { id: uuid, title: str },
+  required: ["id", "title"],
+  type: "object",
+};
+
+const metricsSchema = {
+  properties: {
+    backlogBaseline: countedRate(
+      "Reviewed pre-Signal Feature Requests confirmed Duplicate / reviewed pre-Signal Feature Requests",
+      ["duplicates", "reviewed"],
+    ),
+    checks: integer,
+    checksWithSameNeed: integer,
+    createsAfterSameNeed: integer,
+    intakeDuplicateRate: countedRate(
+      "Main metric: reviewed new Feature Requests confirmed Duplicate / reviewed new Feature Requests",
+      ["duplicates", "reviewed"],
+    ),
+    reviewCoverage: countedRate("Reviewed new Feature Requests / new Feature Requests", [
+      "reviewed",
+      "total",
+    ]),
+    suggestionAcceptance: nullableRate,
+    suspectedDuplication: countedRate(
+      "AI-suspected, unconfirmed: open Feature Requests with an undecided suspected duplicate / open Feature Requests",
+      ["open", "total"],
+    ),
+    undoRate: countedRate("Duplicate decisions later undone / Duplicate decisions", [
+      "decisions",
+      "undone",
+    ]),
+  },
+  required: [
+    "checks",
+    "checksWithSameNeed",
+    "createsAfterSameNeed",
+    "suggestionAcceptance",
+    "intakeDuplicateRate",
+    "backlogBaseline",
+    "reviewCoverage",
+    "suspectedDuplication",
+    "undoRate",
+  ],
+  type: "object",
+};
 
 const actor = {
   properties: {
@@ -164,7 +258,201 @@ export const signalSchemas = {
     required: ["id", "title", "description", "supportCount", "accountCount"],
     type: "object",
   },
+  SignalFeatureRequestDetail: {
+    allOf: [
+      ref("SignalFeatureRequest"),
+      {
+        properties: {
+          comments: {
+            items: {
+              properties: {
+                account: nullableStr,
+                actor: ref("SignalActor"),
+                body: str,
+                createdAt: dateTime,
+                id: uuid,
+                via,
+              },
+              required: ["id", "body", "actor", "account", "createdAt"],
+              type: "object",
+            },
+            type: "array",
+          },
+          createdBy: ref("SignalActor"),
+          duplicateOf: {
+            description: "The canonical Feature Request when this one is a confirmed duplicate",
+            oneOf: [featureRequestRef, { type: "null" }],
+          },
+          duplicates: {
+            description:
+              "Confirmed duplicates; their Supports and Comments appear here with via, each Account counted once",
+            items: featureRequestRef,
+            type: "array",
+          },
+          onBehalfOf: {
+            properties: { account: nullableStr, requester: nullableStr },
+            type: "object",
+          },
+          relatedLinks: {
+            items: {
+              properties: {
+                featureRequestId: uuid,
+                reason: str,
+                sharedDimension: str,
+                title: str,
+              },
+              type: "object",
+            },
+            type: "array",
+          },
+          reviewHistory: {
+            description: "Review Decisions involving this Feature Request, undone ones included",
+            items: ref("SignalReviewDecision"),
+            type: "array",
+          },
+          skipReason: nullableStr,
+          supports: {
+            items: {
+              properties: {
+                account: {
+                  properties: {
+                    name: str,
+                    plan: nullableStr,
+                    segment: nullableStr,
+                    size: nullableStr,
+                  },
+                  required: ["name"],
+                  type: "object",
+                },
+                actor: ref("SignalActor"),
+                createdAt: dateTime,
+                id: uuid,
+                quote: nullableStr,
+                requester: nullableStr,
+                via,
+              },
+              required: ["id", "account", "actor", "createdAt", "quote", "requester"],
+              type: "object",
+            },
+            type: "array",
+          },
+        },
+        required: ["supports", "comments", "relatedLinks", "createdBy", "onBehalfOf", "skipReason"],
+        type: "object",
+      },
+    ],
+  },
+  SignalMetrics: metricsSchema,
   SignalOnBehalfOf: onBehalfOf,
+  SignalReviewDecideInput: {
+    description:
+      "Duplicate needs otherId and canonicalId (one of the pair); Related needs otherId and sharedDimension; Distinct needs otherId; none takes neither. Rule violations return invalid_decision.",
+    properties: {
+      actor: ref("SignalActor"),
+      canonicalId: uuid,
+      decision: { enum: ["duplicate", "related", "distinct", "none"], type: "string" },
+      featureRequestId: uuid,
+      otherId: uuid,
+      sharedDimension: { maxLength: 200, minLength: 1, type: "string" },
+      suggestionId: { ...uuid, description: "The suspected duplicate this decision answers" },
+    },
+    required: ["actor", "decision", "featureRequestId"],
+    type: "object",
+  },
+  SignalReviewDecision: {
+    properties: {
+      actor: ref("SignalActor"),
+      canonicalId: nullableUuid,
+      createdAt: dateTime,
+      decision: { enum: ["duplicate", "related", "distinct", "none"], type: "string" },
+      featureRequestId: uuid,
+      id: uuid,
+      otherId: nullableUuid,
+      sharedDimension: nullableStr,
+      suggestionId: nullableUuid,
+      undoneAt: { format: "date-time", type: ["string", "null"] },
+      undoneBy: { oneOf: [ref("SignalActor"), { type: "null" }] },
+    },
+    required: [
+      "id",
+      "featureRequestId",
+      "otherId",
+      "decision",
+      "canonicalId",
+      "sharedDimension",
+      "suggestionId",
+      "actor",
+      "createdAt",
+      "undoneAt",
+      "undoneBy",
+    ],
+    type: "object",
+  },
+  SignalReviewQueue: {
+    properties: {
+      counts: {
+        properties: { backlog: integer, new: integer },
+        required: ["backlog", "new"],
+        type: "object",
+      },
+      items: {
+        items: {
+          properties: {
+            featureRequest: ref("SignalFeatureRequest"),
+            isNew: {
+              description: "Created through a Check; otherwise pre-Signal backlog",
+              type: "boolean",
+            },
+            suspicions: {
+              items: {
+                properties: {
+                  decision: { oneOf: [ref("SignalReviewDecision"), { type: "null" }] },
+                  judgedAt: dateTime,
+                  model: nullableStr,
+                  other: ref("SignalFeatureRequest"),
+                  reason: str,
+                  source: { enum: ["check", "scan"], type: "string" },
+                  suggestionId: uuid,
+                },
+                required: [
+                  "suggestionId",
+                  "other",
+                  "reason",
+                  "source",
+                  "judgedAt",
+                  "model",
+                  "decision",
+                ],
+                type: "object",
+              },
+              type: "array",
+            },
+          },
+          required: ["featureRequest", "isNew", "suspicions"],
+          type: "object",
+        },
+        type: "array",
+      },
+    },
+    required: ["counts", "items"],
+    type: "object",
+  },
+  SignalScanInput: {
+    properties: {
+      limit: {
+        description: "Feature Requests to scan in this call; the rest stay for the next call",
+        maximum: 200,
+        minimum: 1,
+        type: "integer",
+      },
+    },
+    type: "object",
+  },
+  SignalScanResult: {
+    properties: { pairsFound: integer, remaining: integer, scanned: integer },
+    required: ["scanned", "pairsFound", "remaining"],
+    type: "object",
+  },
   SignalSupportInput: {
     properties: {
       actor: ref("SignalActor"),
@@ -173,6 +461,11 @@ export const signalSchemas = {
       quote: { maxLength: 500, type: "string" },
     },
     required: ["actor", "onBehalfOf"],
+    type: "object",
+  },
+  SignalUndoInput: {
+    properties: { actor: ref("SignalActor") },
+    required: ["actor"],
     type: "object",
   },
 };
@@ -254,7 +547,7 @@ export const signalPaths = {
       operationId: "getFeatureRequest",
       parameters: [idParameter],
       responses: {
-        "200": ok("Feature Request detail", ref("SignalFeatureRequest")),
+        "200": ok("Feature Request detail", ref("SignalFeatureRequestDetail")),
         "404": notFound,
         "503": unavailable,
       },
@@ -309,20 +602,96 @@ export const signalPaths = {
     get: {
       operationId: "getSignalMetrics",
       responses: {
-        "200": ok("Signal metrics", {
-          properties: {
-            checks: { type: "integer" },
-            checksWithSameNeed: { type: "integer" },
-            createsAfterSameNeed: { type: "integer" },
-            fragmentationRate: { type: "null" },
-            reviewCoverage: { const: 0 },
-            suggestionAcceptance: { type: ["number", "null"] },
-          },
-          type: "object",
-        }),
+        "200": ok("Signal metrics, each rate with its counts", ref("SignalMetrics")),
         "503": unavailable,
       },
-      summary: "Check-before-create metrics",
+      summary: "Prevention and review metrics",
+      tags,
+    },
+  },
+  "/api/review/decisions": {
+    post: {
+      description:
+        "Operator access only. Confirm Duplicate, Related, Distinct, or none (no duplicate).",
+      operationId: "decideReview",
+      requestBody: jsonBody("SignalReviewDecideInput"),
+      responses: {
+        "201": ok("Decision recorded", {
+          properties: { decision: ref("SignalReviewDecision") },
+          required: ["decision"],
+          type: "object",
+        }),
+        "400": invalidInput,
+        "401": operatorRequired,
+        "404": notFound,
+        "422": err(
+          "The decision breaks a rule (self-reference, chain, missing canonical or Shared Dimension)",
+          ["invalid_decision"],
+        ),
+        "429": rateLimited,
+        "503": operatorUnavailable,
+      },
+      security: operatorSecurity,
+      summary: "Record a Review Decision",
+      tags,
+    },
+  },
+  "/api/review/decisions/{id}/undo": {
+    post: {
+      description:
+        "Operator access only. Ends the decision's effect; the decision and its undo stay in history.",
+      operationId: "undoReviewDecision",
+      parameters: [{ ...idParameter, description: "Review Decision id (uuid)" }],
+      requestBody: jsonBody("SignalUndoInput"),
+      responses: {
+        "200": ok("Decision undone", {
+          properties: { decision: ref("SignalReviewDecision") },
+          required: ["decision"],
+          type: "object",
+        }),
+        "400": invalidInput,
+        "401": operatorRequired,
+        "404": err("Review Decision not found", ["not_found"]),
+        "409": err("The decision was already undone", ["already_undone"]),
+        "429": rateLimited,
+        "503": operatorUnavailable,
+      },
+      security: operatorSecurity,
+      summary: "Undo a Review Decision",
+      tags,
+    },
+  },
+  "/api/review/queue": {
+    get: {
+      description:
+        "Open read. New Feature Requests not yet reviewed and backlog Feature Requests with undecided suspected duplicates, each with the AI's Reason.",
+      operationId: "getReviewQueue",
+      responses: {
+        "200": ok("Review Queue", ref("SignalReviewQueue")),
+        "503": unavailable,
+      },
+      summary: "Read the Review Queue",
+      tags,
+    },
+  },
+  "/api/review/scan": {
+    post: {
+      description:
+        "Operator access only. Judges unscanned backlog Feature Requests for suspected duplicates (paid AI calls); call again while remaining > 0.",
+      operationId: "scanBacklog",
+      requestBody: {
+        content: { "application/json": { schema: ref("SignalScanInput") } },
+        required: false,
+      },
+      responses: {
+        "200": ok("Scan progress", ref("SignalScanResult")),
+        "400": invalidInput,
+        "401": operatorRequired,
+        "429": rateLimited,
+        "503": operatorUnavailable,
+      },
+      security: operatorSecurity,
+      summary: "Scan the backlog for suspected duplicates",
       tags,
     },
   },
