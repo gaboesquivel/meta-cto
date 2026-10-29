@@ -12,7 +12,6 @@ import {
   GET as listFeatureRequests,
   POST as postFeatureRequest,
 } from "../../app/api/feature-requests/route";
-import { GET as getMetrics } from "../../app/api/metrics/route";
 import {
   actor,
   CHECK_ID,
@@ -24,7 +23,6 @@ import {
   idParams,
   jsonRequest,
   makeService,
-  metrics,
   onBehalfOf,
   support,
 } from "./fixtures";
@@ -350,20 +348,5 @@ describe("POST /api/feature-requests/[id]/comments", () => {
       idParams(FR_ID),
     );
     expect(response.status).toBe(400);
-  });
-});
-
-describe("GET /api/metrics", () => {
-  it("returns 200 with metrics", async () => {
-    const response = await getMetrics();
-    expect(response.status).toBe(200);
-    expect(await response.json()).toEqual(metrics);
-  });
-
-  it("returns 503 when the service is not configured", async () => {
-    state.service = null;
-    const response = await getMetrics();
-    expect(response.status).toBe(503);
-    expect(await codeOf(response)).toBe("service_unavailable");
   });
 });

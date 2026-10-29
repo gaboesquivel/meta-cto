@@ -45,6 +45,12 @@ Signal tool errors are MCP tool errors (`isError: true`) whose content is `{ err
 - `operator_health`
 - `config_status`
 - `public_tool_catalog`
+- `review_queue` (read the Review Queue; AI suspicions are suggestions only)
+- `decide_review` (Product Manager decides duplicate with canonical, related with a Shared Dimension, distinct, or none)
+- `undo_review_decision` (undo keeps history)
+- `scan_backlog` (costly; run only on request)
+
+Review tool errors use the same `{ error: { code, message, resolution } }` shape (`invalid_decision`, `already_undone`, `not_found`, `service_unavailable`).
 
 Public discovery (OpenAPI, `.well-known`, server card) must list **public** tools only.
 

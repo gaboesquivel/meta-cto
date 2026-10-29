@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getOperatorAccessToken, isOperatorAccessConfigured } from "@/lib/auth/operator-access";
 
+import { reviewMcpToolNames } from "./register-review-tools";
 import { starterMcpToolCatalog } from "./tool-catalog";
 import { asToolResult } from "./tool-result";
 
@@ -13,6 +14,7 @@ export const operatorMcpToolNames = [
   "operator_health",
   "config_status",
   "public_tool_catalog",
+  ...reviewMcpToolNames,
 ] as const;
 
 export const registerOperatorMcpTools = (server: McpServer) => {

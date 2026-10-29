@@ -111,42 +111,58 @@ _Avoid_: Admin, owner, reviewer (reviewer is a role in review, not a person type
 ## Review context
 
 **Review Queue** _(aggregate)_:
-New Feature Requests waiting for a Review Decision, each shown with its nearest candidates.
+New Feature Requests not yet reviewed, plus existing Feature Requests with an undecided Suspected Duplicate, each with the AI's Reason.
 _Avoid_: Inbox, triage, backlog
 
+**Suspected Duplicate**:
+Two existing Feature Requests the AI judged Same Need. A prompt for review, never counted as duplication until a Review Decision confirms it.
+_Avoid_: Duplicate (reserved for a Review Decision), match
+
 **Review Decision** _(value object)_:
-A Product Manager's judgment on a new Feature Request: **Duplicate**, **Related** or **Distinct**.
+A Product Manager's judgment: **Duplicate** (with a canonical Feature Request), **Related** (with a Shared Dimension the Product Manager states), **Distinct**, or **No Duplicates** for a request with no suspicions, recorded with who, when and the AI suggestion it answered.
 _Avoid_: Verdict (that is the Check's)
 
 **Duplicate**:
-Review Decision that a Feature Request repeats an existing one; resolved by a Merge.
+Review Decision that a Feature Request repeats a canonical one; recorded by Mark Duplicate.
 _Avoid_: Same need (that is a Verdict)
 
-**Merge** _(domain event: Feature Requests Merged)_:
-Folding a Duplicate into its original while every Support keeps the Feature Request it was first given to, so a Split can undo it without loss.
-_Avoid_: Combine, consolidate, dedupe
+**Mark Duplicate** _(recorded as a Review Decided event)_:
+A reversible association from a Feature Request to a canonical one. No evidence moves; the canonical Feature Request shows its duplicates' Supports and Comments with provenance, counting each Account once.
+_Avoid_: Merge, combine, consolidate, dedupe
 
-**Split** _(domain event: Feature Request Split)_:
-Undoing a Merge, restoring each Support and Comment to its original Feature Request.
-_Avoid_: Unmerge, separate
+**Undo** _(recorded as a Review Undone event)_:
+Reversing a Review Decision; a Mark Duplicate association ends and the decision history is kept.
+_Avoid_: Split, unmerge
+
+**No Duplicates**:
+Review Decision that a new Feature Request with no Suspected Duplicates repeats no existing one. A decision, not the absence of one.
+_Avoid_: None, undecided
+
+**Reviewed**:
+A Feature Request whose review is complete as a whole: every Suspected Duplicate on it is decided, or the Product Manager confirmed it has none.
+_Avoid_: Triaged
 
 ## Measurement context
 
-**Fragmentation Rate**:
-The share of new Feature Requests later decided Duplicate. The main metric; lower is better.
-_Avoid_: Duplicate rate, dedup rate
+**Intake Duplicate Rate**:
+Among reviewed new Feature Requests (created through a Check), the share confirmed Duplicate. The main metric; lower is better. Reported with counts, Review Coverage and the backlog baseline (the same rate over reviewed pre-Signal Feature Requests).
+_Avoid_: Fragmentation rate, dedup rate
 
 **Review Coverage**:
-The share of new Feature Requests that have a Review Decision. Always reported with Fragmentation Rate.
+Reviewed new Feature Requests ÷ new Feature Requests. Always reported with Intake Duplicate Rate.
 _Avoid_: Review rate, completion
+
+**Suspected Duplication**:
+Open Feature Requests with an undecided Suspected Duplicate ÷ open Feature Requests. A review-workload signal, labeled AI-suspected; not confirmed duplication.
+_Avoid_: Fragmentation, duplicate rate
 
 **Suggestion Acceptance**:
 The share of Checks with a Same Need candidate that end in a Support or Comment instead of a create.
 _Avoid_: Conversion, deflection
 
-**Wrong-Merge Rate**:
-The share of Merges later undone by a Split.
-_Avoid_: Error rate
+**Undo Rate**:
+The share of Duplicate decisions later undone.
+_Avoid_: Wrong-merge rate, error rate
 
 **Eval Set**:
 Labeled Draft–Feature Request pairs with the correct Verdict, split into a **Dev Set** (for tuning) and a frozen **Held-Out Set** (only for judging, never tuned against).

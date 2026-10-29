@@ -1,4 +1,10 @@
-import { signalMcpTools, signalPaths, signalSchemas, signalTag } from "@/lib/openapi/signal-paths";
+import {
+  signalMcpTools,
+  signalPaths,
+  signalSchemas,
+  signalSecuritySchemes,
+  signalTag,
+} from "@/lib/openapi/signal-paths";
 
 const toolPaths = {
   compose_ui: {
@@ -144,6 +150,7 @@ const openApiComponents = {
     ...mcpToolComponents,
     ...signalSchemas,
   },
+  securitySchemes: signalSecuritySchemes,
 };
 
 const stdErrorResponses = {

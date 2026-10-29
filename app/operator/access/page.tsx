@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
+import { safeNext } from "@/lib/auth/safe-next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -35,7 +36,7 @@ export default function OperatorAccessPage() {
             setError(body.message ?? "Access denied");
             return;
           }
-          router.replace("/operator");
+          router.replace(safeNext(window.location.search, window.location.origin));
           router.refresh();
         }}
       >

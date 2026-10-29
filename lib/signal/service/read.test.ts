@@ -116,6 +116,7 @@ describe("signal service get", () => {
         featureRequestId: daniel.id,
         reason: "both about trades",
         sharedDimension: "shift trades",
+        source: "seed",
         title: "Approve shift changes",
       },
     ]);
@@ -134,17 +135,20 @@ describe("signal service get", () => {
   });
 });
 
-describe("signal service metrics", () => {
+describe("review service metrics", () => {
   it("reports nulls honestly before any check", async () => {
     const harness = await createHarness({});
 
-    assert.deepEqual(await harness.service.metrics(), {
+    assert.deepEqual(await harness.review.metrics(), {
+      backlogBaseline: { duplicates: 0, rate: null, reviewed: 0 },
       checks: 0,
       checksWithSameNeed: 0,
       createsAfterSameNeed: 0,
-      fragmentationRate: null,
-      reviewCoverage: 0,
+      intakeDuplicateRate: { duplicates: 0, rate: null, reviewed: 0 },
+      reviewCoverage: { rate: null, reviewed: 0, total: 0 },
       suggestionAcceptance: null,
+      suspectedDuplication: { open: 0, rate: null, total: 0 },
+      undoRate: { decisions: 0, rate: null, undone: 0 },
     });
   });
 
@@ -188,14 +192,12 @@ describe("signal service metrics", () => {
       skipReason: "Different scope",
     });
 
-    assert.deepEqual(await harness.service.metrics(), {
-      checks: 3,
-      checksWithSameNeed: 2,
-      createsAfterSameNeed: 1,
-      fragmentationRate: null,
-      reviewCoverage: 0,
-      suggestionAcceptance: 0.5,
-    });
+    const { checks, checksWithSameNeed, createsAfterSameNeed, suggestionAcceptance } =
+      await harness.review.metrics();
+    assert.deepEqual(
+      { checks, checksWithSameNeed, createsAfterSameNeed, suggestionAcceptance },
+      { checks: 3, checksWithSameNeed: 2, createsAfterSameNeed: 1, suggestionAcceptance: 0.5 },
+    );
   });
 
   it("counts a comment citing a same need check as acceptance", async () => {
@@ -236,7 +238,7 @@ describe("signal service metrics", () => {
       checkId: supported.checkId,
     });
 
-    const metrics = await harness.service.metrics();
+    const metrics = await harness.review.metrics();
     assert.equal(metrics.checksWithSameNeed, 3);
     assert.equal(metrics.suggestionAcceptance, 2 / 3);
   });

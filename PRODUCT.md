@@ -32,7 +32,7 @@ Lossless merges, a review queue and account context on requests are table stakes
 
 ## MVP slices
 
-1. **Capture → Connect (first implementation slice).** The pre-create verdict over API and MCP, support and comment with account context, create with a stated reason, a PM review queue, lossless merge and split, the seeded Crewday history and the frozen held-out eval set. Measured by fragmentation rate with review coverage.
+1. **Capture → Connect (first implementation slice).** The pre-create verdict over API and MCP, support and comment with account context, create with a stated reason, a PM review queue with reversible Mark Duplicate and Undo (spec 002), the seeded Crewday history and the frozen held-out eval set. Measured by Intake Duplicate Rate with Review Coverage ([decision 0002](docs/decisions/0002-fragmentation-and-duplicate-association.md)).
 2. **Discover and support.** Browse, search and request-detail endpoints, plus a minimal internal UI: submit with the live verdict while drafting, browse and search, support or comment, and a request page that shows its evidence (supporters, accounts, comments, related links with reasons).
 3. **Understand and evaluate.** AI extracts the underlying need behind a proposed solution, shows related requests as a group with the reasons they relate, and summarizes evidence per request or group, including demand by account and segment. It explains; it does not score priority. The PM decides.
 
@@ -48,7 +48,7 @@ Example (Crewday demo data): Sofia (employee) reports that shift swaps don't syn
 
 - **Submitters (staff):** customer-facing people (support, success, sales) filing requests on a customer's behalf, with account context.
 - **Submitters (agents):** AI agents (support bots, assistants via MCP) filing on a customer's behalf. First-class users: the MVP is API and MCP first.
-- **Product managers:** review new requests against their nearest matches and confirm, merge or split. They own every consequential decision.
+- **Product managers:** review new requests and AI-suspected duplicates, and decide Duplicate, Related or Distinct; duplicates are reversible associations with Undo. They own every consequential decision.
 - Later, not in the MVP: product leaders (prioritization, decision briefs) and customers submitting directly.
 
 ## Why now
@@ -59,14 +59,14 @@ AI makes judging "same need versus related need" cheap enough to run on every su
 
 1. **Staff submitter:** drafts a request → sees similar requests labeled same need / related / different, each with a reason → supports or comments on one with the customer's context, or creates a new request with a stated reason.
 2. **Agent submitter:** checks similarity over MCP with the draft and customer context → supports or creates → returns a citable request handle to the customer.
-3. **Product manager:** works the review queue (new requests next to their nearest matches) → marks each duplicate, related or distinct → merges and splits never lose who supported what for which account.
+3. **Product manager:** works the review queue (new requests next to their nearest matches) → confirms each Duplicate, Related or Distinct (the AI only suggests) → duplicates are reversible associations, so no customer's words or Account are lost.
 4. **Internal user discovering:** browses or searches requests → opens one → sees its underlying need, supporters by account, comments and related requests with reasons → supports or comments.
 5. **Product manager evaluating:** opens a group of related requests → reads the underlying needs and the evidence summary (demand by account and segment, supporting and contradicting feedback) → decides what to pursue, outside Signal for now.
 
 ## Main metric and kill criterion
 
-- **Main metric: fragmentation rate.** The share of new requests later marked as duplicates of an existing request. Lower is better. Always reported with **review coverage** (the share of new requests a reviewer has judged), so a low rate can't hide missing review. Baseline unknown: measured first by replaying the seeded Crewday history, then live from review-queue decisions.
-- **Supporting metrics:** suggestion acceptance (supports or comments instead of creates), wrong-merge rate (merges later split), and same-need precision and recall on the held-out eval set.
+- **Main metric: Intake Duplicate Rate.** Among new Feature Requests (created through a Check) that a Product Manager reviewed, the share confirmed Duplicate. Lower is better. Always reported with its counts, **Review Coverage** (reviewed new ÷ new) and a **backlog baseline** (the same rate over reviewed pre-Signal requests), so prevention shows as a comparison and missing review stays visible. Only Review Decisions confirm duplicates ([decision 0002](docs/decisions/0002-fragmentation-and-duplicate-association.md)).
+- **Supporting metrics:** suggestion acceptance (supports or comments instead of creates), Suspected Duplication (open requests with an undecided AI-suspected duplicate; workload, not confirmed duplication), undo rate (Duplicate decisions later undone), and same-need precision and recall on the held-out eval set.
 - **Later-slice signals (measured, not targets yet):** time from a new request to a reviewed state, and how often PMs edit or reject an extracted underlying need.
 - **Kill criterion:** same-need precision below **85%** on the frozen held-out Crewday eval set after a few prompt and retrieval iterations → drop suggest-before-submit and fall back to PM-only grouping.
 

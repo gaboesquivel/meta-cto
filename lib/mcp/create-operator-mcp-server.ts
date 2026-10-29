@@ -7,6 +7,7 @@ import {
   readGenuiPreviewHtml,
 } from "./genui-preview-resource";
 import { registerOperatorMcpTools } from "./register-operator-tools";
+import { registerReviewMcpTools } from "./register-review-tools";
 import { registerStarterMcpTools } from "./register-tools";
 
 export const createOperatorMcpServer = () => {
@@ -35,5 +36,6 @@ export const createOperatorMcpServer = () => {
 
   registerStarterMcpTools(server);
   registerOperatorMcpTools(server);
+  registerReviewMcpTools(server);
   return server;
 };

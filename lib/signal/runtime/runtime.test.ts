@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
-import { afterEach, describe, it } from "vitest";
+import { afterEach, describe, it, vi } from "vitest";
 
 import type { Embedder, Judge } from "@/lib/signal/contracts";
 import { createTestDb } from "@/lib/signal/test-db";
 
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
-import { createRuntimeService, getSignalService, judgeTimeoutFromEnv } from "./index";
+import {
+  createRuntimeReviewService,
+  createRuntimeService,
+  getSignalService,
+  judgeTimeoutFromEnv,
+} from "./index";
 
 const embedder: Embedder = {
   embed: (text) => {
@@ -50,8 +55,6 @@ describe("signal runtime", () => {
 
     assert.equal(result.degraded, false);
     assert.equal(result.nextAction, "create");
-    const metrics = await service.metrics();
-    assert.equal(metrics.checks, 1);
   });
 
   it("retries the workspace lookup after a transient database error", async () => {
@@ -70,9 +73,9 @@ describe("signal runtime", () => {
     });
     const service = createRuntimeService({ db: flaky, embedder, judge });
 
-    await assert.rejects(service.metrics(), /connection reset/u);
-    const metrics = await service.metrics();
-    assert.equal(metrics.checks, 0);
+    await assert.rejects(service.search({}), /connection reset/u);
+    const page = await service.search({});
+    assert.deepEqual(page.items, []);
   });
 });
 
@@ -88,5 +91,46 @@ describe("judgeTimeoutFromEnv", () => {
 
   it("defaults the service judge timeout to 20 seconds", () => {
     assert.equal(DEFAULT_JUDGE_TIMEOUT_MS, 20_000);
+  });
+});
+
+describe("review runtime", () => {
+  it("returns null without a database", async () => {
+    delete process.env.DATABASE_URL;
+    vi.resetModules();
+    const fresh = await import("./index");
+    assert.equal(fresh.getReviewService(), null);
+  });
+
+  it("composes a working review service on the Crewday workspace", async () => {
+    const db = await createTestDb();
+    const review = createRuntimeReviewService({ db, judge });
+    const queue = await review.queue();
+    assert.deepEqual(queue.counts, { backlog: 0, new: 0 });
+    const result = await review.scan({ limit: 5 });
+    assert.equal(result.scanned, 0);
+  });
+
+  it("reports metrics with only a database", async () => {
+    const db = await createTestDb();
+    const service = createRuntimeService({ db, embedder, judge });
+    await service.check({
+      actor: { name: "Ana", type: "staff" },
+      draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+    });
+
+    const review = createRuntimeReviewService({ db });
+    const metrics = await review.metrics();
+    assert.equal(metrics.checks, 1);
+    assert.deepEqual(metrics.intakeDuplicateRate, { duplicates: 0, rate: null, reviewed: 0 });
+  });
+
+  it("reports the scan unavailable without a judge", async () => {
+    const db = await createTestDb();
+    const review = createRuntimeReviewService({ db });
+    await assert.rejects(review.scan({ limit: 5 }), (error: Error & { code?: string }) => {
+      assert.equal(error.code, "service_unavailable");
+      return true;
+    });
   });
 });

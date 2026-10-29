@@ -1,10 +1,16 @@
 import { workspace } from "@/data/crewday/seed";
-import { createGatewayEmbedder, createLlmJudge, resolveJudgeModel } from "@/lib/signal/agent";
-import type { Embedder, Judge, SignalService } from "@/lib/signal/contracts";
+import {
+  createGatewayEmbedder,
+  createLlmJudge,
+  judgeModelId,
+  resolveJudgeModel,
+} from "@/lib/signal/agent";
+import type { Embedder, Judge, ReviewService, SignalService } from "@/lib/signal/contracts";
 import { getDb } from "@/lib/signal/db";
 import type { SignalDb } from "@/lib/signal/db";
 import { createRepository } from "@/lib/signal/repository";
-import { createSignalService } from "@/lib/signal/service";
+import { createBacklogScan } from "@/lib/signal/scan";
+import { createReviewService, createSignalService } from "@/lib/signal/service";
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
 /**
@@ -45,7 +51,6 @@ export const createRuntimeService = (deps: {
     comment: (id, input) => resolve().then((service) => service.comment(id, input)),
     create: (input) => resolve().then((service) => service.create(input)),
     get: (id) => resolve().then((service) => service.get(id)),
-    metrics: () => resolve().then((service) => service.metrics()),
     search: (input) => resolve().then((service) => service.search(input)),
     support: (id, input) => resolve().then((service) => service.support(id, input)),
   };
@@ -76,4 +81,66 @@ export const getSignalService = (): SignalService | null => {
     judgeTimeoutMs,
   });
   return cached;
+};
+
+/**
+ * Review service for the Crewday Demo Workspace. The backlog scan is available only with a
+ * judge; reviewing, undo and metrics need just the database.
+ */
+export const createRuntimeReviewService = (deps: {
+  db: SignalDb;
+  judge?: Judge;
+  judgeTimeoutMs?: number;
+  model?: string | null;
+}): ReviewService => {
+  const repo = createRepository(deps.db);
+  let ready: Promise<ReviewService> | null = null;
+  const load = async () => {
+    try {
+      const row = await repo.ensureWorkspace(workspace);
+      const scan = deps.judge
+        ? createBacklogScan({
+            judge: deps.judge,
+            judgeTimeoutMs: deps.judgeTimeoutMs,
+            model: deps.model,
+            repo,
+            workspaceId: row.id,
+          }).scan
+        : undefined;
+      return createReviewService({ repo, scan, workspaceId: row.id });
+    } catch (error) {
+      ready = null;
+      throw error;
+    }
+  };
+  const resolve = () => {
+    ready ??= load();
+    return ready;
+  };
+
+  return {
+    decide: (input, actor) => resolve().then((service) => service.decide(input, actor)),
+    metrics: () => resolve().then((service) => service.metrics()),
+    queue: () => resolve().then((service) => service.queue()),
+    scan: (options) => resolve().then((service) => service.scan(options)),
+    undo: (decisionId, actor) => resolve().then((service) => service.undo(decisionId, actor)),
+  };
+};
+
+let cachedReview: ReviewService | null = null;
+
+/** Review service for the Crewday Demo Workspace, or null without a database. */
+export const getReviewService = (): ReviewService | null => {
+  if (cachedReview) return cachedReview;
+  const db = getDb();
+  if (!db) return null;
+  const model = resolveJudgeModel();
+  const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
+  cachedReview = createRuntimeReviewService({
+    db,
+    judge: model ? createLlmJudge({ model, timeoutMs: judgeTimeoutMs }) : undefined,
+    judgeTimeoutMs,
+    model: model ? judgeModelId() : null,
+  });
+  return cachedReview;
 };
