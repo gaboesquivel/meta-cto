@@ -31,3 +31,6 @@ AGENTS.md
 
 # Claude Code personal settings
 .claude/settings.local.json
+
+# managed by Next.js (see next/dist/docs typescript guide)
+next-env.d.ts

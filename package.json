@@ -20,7 +20,7 @@
     "lint": "oxlint . && oxfmt --check .",
     "lint:fix": "oxlint --fix . && oxfmt --write --no-error-on-unmatched-pattern .",
     "format": "oxfmt --write --no-error-on-unmatched-pattern .",
-    "check-types": "tsc-ts --noEmit",
+    "check-types": "next typegen && tsc-ts --noEmit",
     "test": "pnpm run build:mcp-app && vitest run",
     "qa": "pnpm lint && pnpm check-types && pnpm test",
     "eval": "pnpm eval:genui:offline && vitest run evals/eve-smoke.test.ts",
