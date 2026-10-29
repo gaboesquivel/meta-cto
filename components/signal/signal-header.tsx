@@ -6,12 +6,15 @@ export const SignalHeader = () => (
     <Link className="font-semibold tracking-tight" href="/">
       Signal
     </Link>
-    <div className="flex gap-4">
+    <div className="flex gap-3 sm:gap-4">
       <Link className="text-muted-foreground hover:text-foreground" href="/requests">
         Feature Requests
       </Link>
       <Link className="text-muted-foreground hover:text-foreground" href="/requests/new">
         New
+      </Link>
+      <Link className="text-muted-foreground hover:text-foreground" href="/review">
+        Review
       </Link>
     </div>
   </nav>
