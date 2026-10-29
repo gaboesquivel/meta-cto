@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 import { Button } from "@/components/button";
 import type {
@@ -30,6 +30,27 @@ export interface ReviewActions {
 }
 
 const detailHref = (id: string) => `/requests/${encodeURIComponent(id)}`;
+
+/** False in the Pilot Workspace: request pages read the Crewday demo, so pilot titles are not links. */
+export const DetailLinksContext = createContext(true);
+
+const RequestTitle = ({
+  className,
+  request,
+}: {
+  className: string;
+  request: { id: string; title: string };
+}) =>
+  useContext(DetailLinksContext) ? (
+    <Link
+      className={cn(className, "underline-offset-4 hover:underline")}
+      href={detailHref(request.id)}
+    >
+      {request.title}
+    </Link>
+  ) : (
+    <span className={className}>{request.title}</span>
+  );
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 export const OriginBadge = ({ isNew }: { isNew: boolean }) => (
@@ -54,12 +75,7 @@ const RequestPanel = ({
 }) => (
   <div className="bg-card flex min-w-0 flex-col gap-2 rounded-xl border p-3">
     <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">{label}</div>
-    <Link
-      className="font-semibold text-balance underline-offset-4 hover:underline"
-      href={detailHref(request.id)}
-    >
-      {request.title}
-    </Link>
+    <RequestTitle className="font-semibold text-balance" request={request} />
     {request.underlyingNeed ? (
       <p className="text-sm">
         <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
@@ -433,12 +449,7 @@ export const ReviewItem = ({
         </span>
       </div>
       <h3 className="text-lg font-semibold text-balance">
-        <Link
-          className="underline-offset-4 hover:underline"
-          href={detailHref(item.featureRequest.id)}
-        >
-          {item.featureRequest.title}
-        </Link>
+        <RequestTitle className="" request={item.featureRequest} />
       </h3>
     </header>
     {item.suspicions.length === 0 ? (

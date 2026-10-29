@@ -15,7 +15,7 @@ import { callApi } from "./api";
 import { ErrorNotice } from "./error-notice";
 import { OperatorSignIn } from "./operator-sign-in";
 import { BlindReviewItem } from "./review-blind-item";
-import { DecisionLine, ReviewItem } from "./review-item";
+import { DecisionLine, DetailLinksContext, ReviewItem } from "./review-item";
 import type { ReviewActions } from "./review-item";
 import { ReviewMetricsPanel } from "./review-metrics";
 import { describeDecision, reviewWorkspaceOptions, withWorkspace } from "./review-view";
@@ -285,25 +285,27 @@ export const ReviewBoard = ({
             {operator ? "Scan the backlog to look for Suspected Duplicates." : ""}
           </p>
         ) : null}
-        <div className="flex flex-col gap-4">
-          {items.map((item) =>
-            item.blind ? (
-              <BlindReviewItem
-                actions={actions}
-                choices={queue.data?.blindChoices ?? []}
-                item={item}
-                key={item.featureRequest.id}
-              />
-            ) : (
-              <ReviewItem
-                actions={actions}
-                describe={describe}
-                item={item}
-                key={item.featureRequest.id}
-              />
-            ),
-          )}
-        </div>
+        <DetailLinksContext.Provider value={active === "demo"}>
+          <div className="flex flex-col gap-4">
+            {items.map((item) =>
+              item.blind ? (
+                <BlindReviewItem
+                  actions={actions}
+                  choices={queue.data?.blindChoices ?? []}
+                  item={item}
+                  key={item.featureRequest.id}
+                />
+              ) : (
+                <ReviewItem
+                  actions={actions}
+                  describe={describe}
+                  item={item}
+                  key={item.featureRequest.id}
+                />
+              ),
+            )}
+          </div>
+        </DetailLinksContext.Provider>
       </section>
 
       {recent.length > 0 ? (
