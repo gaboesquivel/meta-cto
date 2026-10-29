@@ -21,7 +21,7 @@ UI copy uses the [glossary](GLOSSARY.md) terms. Pages work at phone width. There
 
 ## Proof journey (spec 003)
 
-- `/proof`: Operator only. Readiness first (pilot files and Held-Out Set v2: frozen, changed, unconfirmed), then each preset bar with its value, counts, interval and a Pass, Fail or Inconclusive badge in text (never color alone), then what follows: kill criterion, narrowing the three-way verdict, or slice 3 may start. Supporting measures (Agent Correctness, Product Manager agreement blind and not, Suggestion Acceptance) are labeled as not bars; Suggestion Acceptance reads "reported, not evidence".
+- `/proof`: Operator only. Readiness first (pilot data and Held-Out Set v2: frozen, loaded, changed after freeze; read from the database and the committed locks, so "pilot data not loaded" or "no v2 reading" shows as Inconclusive, never an error page), then each preset bar with its value, counts, interval and a Pass, Fail or Inconclusive badge in text (never color alone), then what follows: kill criterion, narrowing the three-way verdict, or slice 3 may start. Supporting measures (Agent Correctness, Product Manager agreement blind and not, Suggestion Acceptance) are labeled as not bars; Suggestion Acceptance reads "reported, not evidence".
 - An interval that straddles a bar, or an unmet minimum, reads Inconclusive, never Pass.
 
 ## Constraints carried from the template

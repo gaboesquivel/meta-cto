@@ -34,3 +34,10 @@ AGENTS.md
 
 # managed by Next.js (see next/dist/docs typescript guide)
 next-env.d.ts
+
+# eval runs are recorded in the database (spec 004); the local run log stays uncommitted.
+# v2 reports are written to $SIGNAL_PRIVATE_DATA_DIR/evals, never here; these lines only guard
+# against copies left by older runs.
+evals/signal-verdict/runs.jsonl
+evals/signal-verdict/report.v2.md
+evals/signal-verdict/report.v2.repeat.md

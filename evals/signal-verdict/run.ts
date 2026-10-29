@@ -1,10 +1,14 @@
 import { loadRootEnv } from "@/lib/env";
+import { checkPrivateFiles, privateDataDir } from "@/lib/pilot-load/private-dir";
+import { getDb } from "@/lib/signal/db";
+import { createRepository } from "@/lib/signal/repository";
 import { getSignalService } from "@/lib/signal/runtime";
 
-import { V2_SET_NAME } from "./held-out-v2";
+import { V2_SET_FILE, V2_SET_NAME } from "./held-out-v2";
 import { createLocalEvalService } from "./local-service";
 import { runEval } from "./runner";
 import type { RunSetName } from "./runner";
+import { repositoryRunStore } from "./run-store";
 
 const SETS: RunSetName[] = ["held-out", "dev", V2_SET_NAME];
 
@@ -16,9 +20,28 @@ const parseSet = (argv: string[]): RunSetName => {
   throw new Error(`Unknown --set "${value}". Use --set ${SETS.join(", --set ")}.`);
 };
 
+/**
+ * v2 pairs come from, and v2 reports go to, `$SIGNAL_PRIVATE_DATA_DIR/evals` (spec 004); exits
+ * with the reason if refused.
+ */
+const v2SetDir = (): string => {
+  const dir = privateDataDir();
+  const refusal = dir.ok
+    ? checkPrivateFiles(dir, "evals", [V2_SET_FILE], "evals/signal-verdict")
+    : dir.message;
+  if (!dir.ok || refusal) {
+    console.error(`Refusing: ${refusal}`);
+    process.exit(1);
+  }
+  return dir.evalDir;
+};
+
 const main = async () => {
   loadRootEnv();
   const set = parseSet(process.argv.slice(2));
+  const setDir = set === V2_SET_NAME ? v2SetDir() : undefined;
+  // Runs are recorded in the database the Proof Report reads (spec 004); v2 refuses without it.
+  const db = getDb();
   const outcome = await runEval({
     // Eval Checks record Origin `eval`, so they never count in demo or pilot metrics.
     getService: () =>
@@ -26,10 +49,20 @@ const main = async () => {
         ? createLocalEvalService()
         : Promise.resolve(getSignalService("eval")),
     set,
+    setDir,
+    store: db ? repositoryRunStore(createRepository(db)) : undefined,
   });
   if (outcome.report) console.log(outcome.report);
-  if (outcome.reportFile) console.log(`Wrote evals/signal-verdict/${outcome.reportFile}`);
-  console.log(`${outcome.message} Logged to evals/signal-verdict/runs.jsonl.`);
+  if (outcome.reportPath) console.log(`Wrote ${outcome.reportPath}`);
+  const recorded = [
+    db ? "the database" : null,
+    set === V2_SET_NAME ? null : "evals/signal-verdict/runs.jsonl (local, not committed)",
+  ].filter(Boolean);
+  console.log(
+    recorded.length > 0
+      ? `${outcome.message} Recorded in ${recorded.join(" and ")}.`
+      : outcome.message,
+  );
   if (outcome.status === "refused" || (outcome.status === "failed" && !outcome.report)) {
     console.error(outcome.message);
     process.exit(1);

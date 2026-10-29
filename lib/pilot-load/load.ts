@@ -6,6 +6,11 @@ import { embeddingText } from "@/lib/signal/seed";
 import { checkPilotReady } from "./files";
 import type { PilotFiles, PilotLock, PilotStatus } from "./files";
 
+/** What happened to the stored ground truth (feedback set, Answer Key, manifest) on this load. */
+export type GroundTruthResult =
+  | { fingerprint: string; outcome: "loaded" | "reset" | "unchanged" }
+  | { outcome: "skipped"; reason: string };
+
 export { PILOT_SEED_PREFIX, pilotSeedKey } from "@/lib/signal/pilot";
 
 export type LoadPilotResult =
@@ -15,6 +20,7 @@ export type LoadPilotResult =
       drifted: string[];
       embedded: number;
       featureRequests: number;
+      groundTruth: GroundTruthResult;
       ok: true;
       status: PilotStatus;
       workspaceId: string;
@@ -37,11 +43,72 @@ const requireId = (ids: Map<string, string>, key: string) => {
   return id;
 };
 
+const storeGroundTruth = async (input: {
+  accountIds: Map<string, string>;
+  files: PilotFiles;
+  repo: SignalRepository;
+  status: PilotStatus;
+  workspaceId: string;
+}): Promise<GroundTruthResult> => {
+  const { files, status } = input;
+  if (!status.ready) {
+    const reason = status.frozen
+      ? "the Answer Key is not fully confirmed"
+      : "the pilot files are not frozen";
+    return { outcome: "skipped", reason: `Ground truth not stored: ${reason}.` };
+  }
+  const stored = await input.repo.storePilotGroundTruth({
+    answerKey: [
+      ...files.answerKey.featureRequests.map((e) => ({
+        confirmedAt: e.confirmedAt ?? null,
+        confirmedBy: e.confirmedBy ?? null,
+        key: e.featureRequest,
+        kind: "feature_request" as const,
+        needId: e.needId,
+      })),
+      ...files.answerKey.feedback.map((e) => ({
+        confirmedAt: e.confirmedAt ?? null,
+        confirmedBy: e.confirmedBy ?? null,
+        key: e.feedback,
+        kind: "feedback" as const,
+        needId: e.needId,
+      })),
+    ],
+    counts: {
+      accounts: status.counts.accounts,
+      featureRequests: status.counts.featureRequests,
+      feedback: status.counts.feedback,
+      sharesNeed: status.counts.sharesNeed,
+    },
+    expectedBacklogDuplicateRate: files.manifest.expectedBacklogDuplicateRate,
+    feedback: files.feedback.map((item) => ({
+      accountId: input.accountIds.get(item.account) ?? null,
+      accountKey: item.account,
+      customerName: item.customer.name,
+      customerRole: item.customer.role,
+      description: item.description,
+      key: item.key,
+      title: item.title,
+    })),
+    fingerprint: status.fingerprint,
+    manifest: files.manifest,
+    workspaceId: input.workspaceId,
+  });
+  return { fingerprint: stored.load.fingerprint, outcome: stored.outcome };
+};
+
 /**
  * Operator-run, idempotent pilot load: ensures the Pilot Workspace and inserts missing backlog
  * Accounts and Feature Requests (Origin `seed`) by prefixed seed key, then embeds rows without a
- * vector. Never updates existing rows and never touches another Workspace. Feedback and the
- * Answer Key stay in files. Refuses invalid files and files changed after freeze.
+ * vector. Never updates existing rows and never touches another Workspace. Refuses invalid files
+ * and files changed after freeze; a changed set's refusal is recorded (Pilot Workspace, the
+ * fingerprint it saw) so the Proof Report flags it, and every load that runs records an accepted
+ * attempt.
+ *
+ * Ground truth (spec 004): when the set is frozen, unchanged and fully confirmed, also stores the
+ * feedback set, Answer Key and manifest in the Pilot Workspace with the lock's fingerprint. The same
+ * fingerprint again is a no-op; a new one replaces them and is recorded as a reset. Otherwise the
+ * ground truth is skipped with the reason, and nothing about it is written.
  */
 export const loadPilot = async (input: {
   embedder: Embedder | null;
@@ -51,7 +118,16 @@ export const loadPilot = async (input: {
 }): Promise<LoadPilotResult> => {
   const { embedder, files, repo } = input;
   const status = checkPilotReady(files, input.lock);
-  if (status.changed) return { message: status.messages[0] ?? "", ok: false, status };
+  if (status.changed) {
+    // Recorded so the Proof Report sees the edit after freeze; nothing else is written.
+    const { id } = await repo.ensureWorkspace(PILOT_WORKSPACE);
+    await repo.recordPilotLoadAttempt({
+      fingerprint: status.fingerprint,
+      outcome: "refused",
+      workspaceId: id,
+    });
+    return { message: status.messages[0] ?? "", ok: false, status };
+  }
   if (status.problems.length > 0) {
     return {
       message: `Pilot files are invalid: ${status.problems.join("; ")}.`,
@@ -116,11 +192,19 @@ export const loadPilot = async (input: {
     embedded = missing.length;
   }
 
+  const groundTruth = await storeGroundTruth({ accountIds, files, repo, status, workspaceId });
+  await repo.recordPilotLoadAttempt({
+    fingerprint: status.fingerprint,
+    outcome: "accepted",
+    workspaceId,
+  });
+
   return {
     accounts: accountIds.size,
     drifted: drifted.toSorted(),
     embedded,
     featureRequests: loadedIds.size,
+    groundTruth,
     ok: true,
     status,
     workspaceId,

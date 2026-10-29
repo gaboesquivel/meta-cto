@@ -16,8 +16,9 @@ import { evalDir } from "./paths";
 import type { EvalMetrics, PredictedVerdict } from "./metrics";
 import { v2Readings } from "./readings";
 import type { BarReading, V2Readings } from "./readings";
-import { appendRunLog, currentPromptVersion, isRepeatRun, readRunLog } from "./run-log";
+import { appendRunLog, currentPromptVersion } from "./run-log";
 import type { RunLogEntry, RunStatus } from "./run-log";
+import type { EvalRunStore } from "./run-store";
 import { loadEvalSet } from "./sets";
 import type { EvalPair, EvalSetName } from "./sets";
 
@@ -182,13 +183,27 @@ const v2Report = (input: {
 };
 
 export interface RunEvalOptions {
-  /** Holds the v2 set and lock, and receives the run log and reports. */
+  /**
+   * Holds the v2 lock (committed) and receives the v1 and Dev Set reports and their local,
+   * gitignored `runs.jsonl`. v2 reports never go here (see `setDir`).
+   */
   dir?: string;
   /** Called only after the set passes its gate, so a refused v2 never builds a service. */
   getService: () => Promise<EvalService | null>;
   now?: () => Date;
   prompt?: { id: string; model: string };
   set: RunSetName;
+  /**
+   * Holds the v2 pairs (`held-out-v2.json`) and receives the v2 reports (`report.v2.md`,
+   * `report.v2.repeat.md`, which list pair ids, targets and labels): the private folder's
+   * `evals/` from the CLI, outside the repository (spec 004). Defaults to `dir`.
+   */
+  setDir?: string;
+  /**
+   * The database record of runs (spec 004). Required for Held-Out Set v2, whose runs are only
+   * recorded there; v1 and Dev Set runs are recorded there too when given.
+   */
+  store?: EvalRunStore;
 }
 
 export interface RunEvalOutcome {
@@ -196,6 +211,8 @@ export interface RunEvalOutcome {
   message: string;
   report: string | null;
   reportFile: string | null;
+  /** Where the report was written: `setDir` for v2 (private), `dir` otherwise. */
+  reportPath: string | null;
   status: RunStatus;
 }
 
@@ -204,17 +221,46 @@ const reportFileFor = (set: RunSetName, repeat: boolean): string => {
   return set === "held-out" ? "report.md" : "report.dev.md";
 };
 
+const V2_NEEDS_DATABASE =
+  "Refusing: Held-Out Set v2 runs are recorded in the database. Set DATABASE_URL to the database the Proof Report reads.";
+
+/** Whether an earlier run judged this set at this fingerprint and prompt version (a repeat). */
+const hasJudgedRun = async (
+  store: EvalRunStore | undefined,
+  key: { fingerprint: string | null; prompt: { id: string }; set: string },
+): Promise<boolean> =>
+  store
+    ? await store.hasJudgedRun({
+        fingerprint: key.fingerprint ?? "",
+        promptVersion: key.prompt.id,
+        set: key.set,
+      })
+    : false;
+
+/** A refusal with nowhere to record it: nothing is written. */
+const unrecordedRefusal = (base: RunLogEntry, message: string): RunEvalOutcome => ({
+  entry: { ...base, message },
+  message,
+  report: null,
+  reportFile: null,
+  reportPath: null,
+  status: "refused",
+});
+
 /**
- * Runs one Eval Set through the Check and appends the run to the log, including refusals
- * and failures. Held-Out Set v2 must be confirmed and frozen; a repeat on the same prompt
- * version is flagged and never overwrites the reading's report.
+ * Runs one Eval Set through the Check and records the run, including refusals and failures: in
+ * the database (`store`), and for v1 and the Dev Set also in the local run log. Held-Out Set v2
+ * must be confirmed and frozen and needs the database; a repeat on the same prompt version is
+ * flagged and never overwrites the reading's report.
  */
 export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> => {
   const dir = options.dir ?? evalDir();
+  const setDir = options.setDir ?? dir;
   const at = (options.now ?? (() => new Date()))();
   const prompt = options.prompt ?? currentPromptVersion();
   const isV2 = options.set === V2_SET_NAME;
-  const pairs: EvalPair[] = isV2 ? loadHeldOutV2(dir) : loadEvalSet(options.set as EvalSetName);
+  const v2Pairs = isV2 ? loadHeldOutV2(setDir) : null;
+  const pairs: EvalPair[] = v2Pairs ?? loadEvalSet(options.set as EvalSetName);
   const base: RunLogEntry = {
     at: at.toISOString(),
     counts: {
@@ -232,23 +278,26 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
     set: options.set,
     status: "refused",
   };
-  const stop = (status: RunStatus, message: string): RunEvalOutcome => {
+  const { store } = options;
+  /** v2 runs live only in the database; v1 and Dev Set runs also keep the local log. */
+  const record = async (entry: RunLogEntry) => {
+    if (!isV2) appendRunLog(entry, dir);
+    if (store) await store.record(entry);
+  };
+  const stop = async (status: RunStatus, message: string): Promise<RunEvalOutcome> => {
     const entry = { ...base, message, status };
-    appendRunLog(entry, dir);
-    return { entry, message, report: null, reportFile: null, status };
+    await record(entry);
+    return { entry, message, report: null, reportFile: null, reportPath: null, status };
   };
 
-  if (isV2) {
-    const ready = checkV2Ready(loadHeldOutV2(dir), readV2Lock(dir));
-    if (!ready.ok) return stop("refused", ready.message);
+  if (isV2 && !store) return unrecordedRefusal(base, V2_NEEDS_DATABASE);
+  if (v2Pairs) {
+    const ready = checkV2Ready(v2Pairs, readV2Lock(dir));
+    if (!ready.ok) return await stop("refused", ready.message);
   }
   const repeat =
     isV2 &&
-    isRepeatRun(readRunLog(dir), {
-      fingerprint: base.fingerprint ?? "",
-      promptVersion: prompt.id,
-      set: options.set,
-    });
+    (await hasJudgedRun(store, { fingerprint: base.fingerprint, prompt, set: options.set }));
 
   // A failure before any pair reaches the Check is logged as failed with nothing completed: it is
   // never a reading and never makes the next run a repeat (see `judgedPairs`).
@@ -256,7 +305,7 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
   try {
     const service = await options.getService();
     if (!service) {
-      return stop(
+      return await stop(
         "failed",
         "Failed before any pair was judged: Signal service unavailable. Configure DATABASE_URL and AI keys (.env.local) and seed the Crewday Demo Workspace.",
       );
@@ -269,7 +318,7 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
       runPair(service, ids.get(pair.target) ?? "", pair),
     );
   } catch (error) {
-    return stop("failed", `Failed before any pair was judged: ${errorText(error)}`);
+    return await stop("failed", `Failed before any pair was judged: ${errorText(error)}`);
   }
 
   const failures = results.flatMap((r) => (r.error ? [{ error: r.error, id: r.pair.id }] : []));
@@ -299,8 +348,10 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
     ? v2Report({ at, entry, metrics, readings, results })
     : v1Report(options.set as EvalSetName, at, results, metrics);
   const reportFile = reportFileFor(options.set, repeat);
-  writeFileSync(path.join(dir, reportFile), report, "utf-8");
-  appendRunLog(entry, dir);
+  // v2 reports list pair ids, targets and labels: they go to the private folder, never the repo.
+  const reportPath = path.join(isV2 ? setDir : dir, reportFile);
+  writeFileSync(reportPath, report, "utf-8");
+  await record(entry);
   const message = repeat ? "Repeat run, not a new reading." : `Run ${status}.`;
-  return { entry, message, report, reportFile, status };
+  return { entry, message, report, reportFile, reportPath, status };
 };

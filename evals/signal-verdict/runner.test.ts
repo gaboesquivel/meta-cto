@@ -2,16 +2,24 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, test } from "vitest";
+import { asc } from "drizzle-orm";
+import { beforeEach, describe, test } from "vitest";
 
 import { seedFeatureRequests } from "@/data/crewday/seed";
 import type { CheckResult, Verdict } from "@/lib/signal/contracts";
+import type { SignalDb } from "@/lib/signal/db";
+import { createRepository } from "@/lib/signal/repository";
+import type { SignalRepository } from "@/lib/signal/repository";
+import { evalRuns } from "@/lib/signal/schema";
+import { createTestDb } from "@/lib/signal/test-db";
 
 import { freezeV2, readV2Lock, V2_SET_FILE, writeV2Lock } from "./held-out-v2";
 import type { HeldOutV2Pair } from "./held-out-v2";
-import { currentV2Reading, readRunLog } from "./run-log";
+import { readRunLog, RUN_LOG_FILE } from "./run-log";
 import { runEval } from "./runner";
 import type { EvalService } from "./runner";
+import { repositoryRunStore } from "./run-store";
+import type { EvalRunStore } from "./run-store";
 import { loadEvalSet } from "./sets";
 
 const PROMPT = { id: "pv-000000000001", model: "test/judge" };
@@ -113,12 +121,32 @@ const v2Dir = (pairs: HeldOutV2Pair[], options: { frozen?: boolean } = {}) => {
   return dir;
 };
 
+let db: SignalDb;
+let repo: SignalRepository;
+let store: EvalRunStore;
+
+beforeEach(async () => {
+  db = await createTestDb();
+  repo = createRepository(db);
+  store = repositoryRunStore(repo);
+});
+
+/** Runs recorded in the database, oldest first. */
+const storedRuns = () => db.select().from(evalRuns).orderBy(asc(evalRuns.createdAt));
+
 const run = (
   dir: string,
   service: EvalService | null,
   set: "held-out-v2" | "held-out" = "held-out-v2",
 ) =>
-  runEval({ dir, getService: () => Promise.resolve(service), now: () => NOW, prompt: PROMPT, set });
+  runEval({
+    dir,
+    getService: () => Promise.resolve(service),
+    now: () => NOW,
+    prompt: PROMPT,
+    set,
+    store,
+  });
 
 /** 70 same-need positives all predicted same_need, plus related and different pairs. */
 const fullSet = () => {
@@ -149,7 +177,8 @@ describe("runEval on Held-Out Set v2", () => {
     const outcome = await run(dir, service);
     assert.equal(outcome.status, "refused");
     assert.equal(service.checks, 0);
-    assert.equal(readRunLog(dir)[0]?.status, "refused");
+    const [refused] = await storedRuns();
+    assert.equal(refused?.status, "refused");
   });
 
   test("refuses unconfirmed pairs", async () => {
@@ -177,9 +206,48 @@ describe("runEval on Held-Out Set v2", () => {
     assert.equal(outcome.status, "refused");
     assert.match(outcome.message, /changed after freeze: reading reset/u);
     assert.equal(service.checks, 0);
-    const [entry] = readRunLog(dir);
+    const [entry] = await storedRuns();
     assert.equal(entry?.status, "refused");
+    assert.equal(entry?.judgedPairs, false);
     assert.match(entry?.message ?? "", /reading reset/u);
+  });
+
+  test("reads v2 pairs from a separate private folder and writes its reports there, never in dir", async () => {
+    const { pairs, verdicts } = fullSet();
+    const dir = v2Dir(pairs);
+    const setDir = mkdtempSync(path.join(tmpdir(), "v2-private-"));
+    writeFileSync(path.join(setDir, V2_SET_FILE), JSON.stringify(pairs, null, 2));
+    writeFileSync(path.join(dir, V2_SET_FILE), "[]");
+    const outcome = await runEval({
+      dir,
+      getService: () => Promise.resolve(mockService(verdicts)),
+      now: () => NOW,
+      prompt: PROMPT,
+      set: "held-out-v2",
+      setDir,
+      store,
+    });
+    assert.equal(outcome.status, "completed");
+    assert.equal(outcome.entry.counts.pairs, pairs.length);
+    const stored = await storedRuns();
+    assert.equal(stored.length, 1);
+    assert.ok(!existsSync(path.join(dir, RUN_LOG_FILE)), "v2 runs never go to a local run log");
+    assert.ok(existsSync(path.join(setDir, "report.v2.md")));
+    assert.ok(!existsSync(path.join(dir, "report.v2.md")), "v2 reports never land in the repo");
+    assert.equal(outcome.reportPath, path.join(setDir, "report.v2.md"));
+
+    const again = await runEval({
+      dir,
+      getService: () => Promise.resolve(mockService(verdicts)),
+      now: () => NOW,
+      prompt: PROMPT,
+      set: "held-out-v2",
+      setDir,
+      store,
+    });
+    assert.equal(again.entry.repeat, true);
+    assert.ok(existsSync(path.join(setDir, "report.v2.repeat.md")));
+    assert.ok(!existsSync(path.join(dir, "report.v2.repeat.md")));
   });
 
   test("reads precision with intervals, logs the run and writes the v2 report", async () => {
@@ -198,13 +266,18 @@ describe("runEval on Held-Out Set v2", () => {
     assert.equal(readings.relatedNeed.truePositives, 8);
     assert.equal(readings.relatedNeed.predicted, 8);
 
-    const [entry] = readRunLog(dir);
+    const [entry] = await storedRuns();
     assert.equal(entry?.promptVersion, PROMPT.id);
     assert.equal(entry?.model, PROMPT.model);
-    assert.equal(entry?.at, NOW.toISOString());
+    assert.equal(entry?.origin, "eval");
+    assert.equal(entry?.judgedPairs, true);
+    assert.equal(entry?.createdAt.toISOString(), NOW.toISOString());
     assert.match(entry?.fingerprint ?? "", /^sha256:/u);
-    assert.equal(entry?.counts.pairs, 85);
-    assert.equal(entry?.results.length, 85);
+    assert.equal(entry?.pairs, 85);
+    assert.equal(entry?.sameNeedPositives, 70);
+    assert.ok(Array.isArray(entry?.results));
+    assert.equal(entry.results.length, 85);
+    assert.deepEqual(entry?.readings, readings);
 
     const report = readFileSync(path.join(dir, "report.v2.md"), "utf-8");
     assert.match(report, /Prompt version: pv-000000000001/u);
@@ -224,7 +297,11 @@ describe("runEval on Held-Out Set v2", () => {
     const again = await run(dir, mockService(verdicts));
     assert.equal(again.status, "completed");
     assert.equal(again.entry.repeat, true);
-    assert.equal(readRunLog(dir).length, 2);
+    const stored = await storedRuns();
+    assert.deepEqual(
+      stored.map((r) => r.repeat),
+      [false, true],
+    );
     assert.equal(readFileSync(path.join(dir, "report.v2.md"), "utf-8"), firstReport);
     assert.match(
       readFileSync(path.join(dir, "report.v2.repeat.md"), "utf-8"),
@@ -236,6 +313,7 @@ describe("runEval on Held-Out Set v2", () => {
       now: () => NOW,
       prompt: { ...PROMPT, id: "pv-000000000002" },
       set: "held-out-v2",
+      store,
     });
     assert.equal(newPrompt.entry.repeat, false);
   });
@@ -262,15 +340,20 @@ describe("runEval on Held-Out Set v2", () => {
     assert.equal(outcome.entry.failures.length, 2);
     assert.match(outcome.entry.failures[0]?.error ?? "", /database unavailable/u);
     assert.equal(outcome.entry.readings?.sameNeed.verdict, "inconclusive");
-    assert.equal(readRunLog(dir)[0]?.status, "failed");
+    const [stored] = await storedRuns();
+    assert.equal(stored?.status, "failed");
+    assert.equal(stored?.failures, 2);
+    assert.equal(stored?.judgedPairs, true);
   });
 
   test("logs a failed run when the service is unavailable", async () => {
     const dir = v2Dir([v2Pair(1, "same_need")]);
     const outcome = await run(dir, null);
     assert.equal(outcome.status, "failed");
-    assert.equal(readRunLog(dir)[0]?.status, "failed");
-    assert.equal(readRunLog(dir)[0]?.counts.completed, 0);
+    const [stored] = await storedRuns();
+    assert.equal(stored?.status, "failed");
+    assert.equal(stored?.completed, 0);
+    assert.equal(stored?.judgedPairs, false);
   });
 
   test("a run that failed before the judge leaves the next real run as the reading", async () => {
@@ -291,7 +374,32 @@ describe("runEval on Held-Out Set v2", () => {
     assert.equal(real.reportFile, "report.v2.md");
     const lock = readV2Lock(dir);
     assert.ok(lock);
-    assert.deepEqual(currentV2Reading(readRunLog(dir), lock), real.entry);
+    const stored = await storedRuns();
+    assert.equal(stored.length, 3);
+    const reading = await repo.latestEvalReading({
+      fingerprint: lock.fingerprint,
+      promptVersion: PROMPT.id,
+      setName: "held-out-v2",
+    });
+    assert.equal(reading?.status, "completed");
+    assert.deepEqual(reading?.readings, real.entry.readings);
+  });
+
+  test("refuses a v2 run without a database to record it in", async () => {
+    const { pairs, verdicts } = fullSet();
+    const dir = v2Dir(pairs);
+    const service = mockService(verdicts);
+    const outcome = await runEval({
+      dir,
+      getService: () => Promise.resolve(service),
+      now: () => NOW,
+      prompt: PROMPT,
+      set: "held-out-v2",
+    });
+    assert.equal(outcome.status, "refused");
+    assert.match(outcome.message, /DATABASE_URL/u);
+    assert.equal(service.checks, 0);
+    assert.ok(!existsSync(path.join(dir, RUN_LOG_FILE)));
   });
 });
 
@@ -322,6 +430,7 @@ describe("runEval on v1", () => {
     const outcome = await run(dir, service, "held-out");
     assert.equal(outcome.status, "completed");
     assert.equal(outcome.entry.repeat, false);
+    assert.equal(outcome.reportPath, path.join(dir, "report.md"));
     const report = readFileSync(path.join(dir, "report.md"), "utf-8");
     assert.match(report, /^# Signal verdict eval: held-out\n/u);
     assert.match(report, /- Pairs: 25 \(correct 25, absent \d+, unknown 0\)/u);
@@ -329,5 +438,7 @@ describe("runEval on v1", () => {
     assert.match(report, /About 25 pairs is a first reading, not a verdict\./u);
     assert.ok(!existsSync(path.join(dir, "report.v2.md")));
     assert.equal(readRunLog(dir)[0]?.set, "held-out");
+    const [stored] = await storedRuns();
+    assert.equal(stored?.setName, "held-out");
   });
 });

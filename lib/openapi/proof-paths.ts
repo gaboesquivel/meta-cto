@@ -75,9 +75,25 @@ const scoredGroup = {
   type: "object",
 };
 
+/** Readiness from the committed lock and the stored data: flags and counts, never items. */
 const fileState = {
   additionalProperties: true,
-  properties: { changed: bool, frozen: bool, message: str, readable: bool },
+  properties: {
+    changed: {
+      description:
+        "Changed after freeze: reading reset. The latest load or run after the freeze (refused or failed included) saw another fingerprint than the lock",
+      ...bool,
+    },
+    frozen: { description: "A freeze lock is committed", ...bool },
+    loaded: { description: "Pilot only: the ground truth is stored in the database", ...bool },
+    message: str,
+    readable: bool,
+    refrozen: {
+      description:
+        "Re-frozen, no reading yet: the lock has a new fingerprint and no load or run exists for it",
+      ...bool,
+    },
+  },
   required: ["readable"],
   type: "object",
 };
@@ -102,19 +118,35 @@ const proofReport = object(
       readingResets: { items: str, type: "array" },
     }),
     slice3: { enum: ["may_start", "not_yet"], type: "string" },
-    supporting: object({
-      agentCorrectness: nullable({
-        ...scoredGroup,
-        description: "Agent Correctness against the Answer Key, with harm and miss",
-      }),
-      notes: { items: str, type: "array" },
-      pmAgreement: nullable(object({ blind: scoredGroup, nonBlind: scoredGroup })),
-      suggestionAcceptance: nullable({
-        ...scoredGroup,
-        description: "Reported, not evidence (evidence: false)",
-        required: ["rate", "evidence", "note"],
-      }),
-    }),
+    supporting: {
+      description:
+        "Supporting scores (no bar). Operator access only during the pilot: they change as agents act, so a Pilot Key caller gets { withheld: true, note } instead",
+      oneOf: [
+        object(
+          {
+            agentCorrectness: nullable({
+              ...scoredGroup,
+              description: "Agent Correctness against the Answer Key, with harm and miss",
+            }),
+            notes: { items: str, type: "array" },
+            pmAgreement: nullable(object({ blind: scoredGroup, nonBlind: scoredGroup })),
+            suggestionAcceptance: nullable({
+              ...scoredGroup,
+              description: "Reported, not evidence (evidence: false)",
+              required: ["rate", "evidence", "note"],
+            }),
+          },
+          { description: "Operator access" },
+        ),
+        object(
+          {
+            note: { description: "Operator only during the pilot", type: "string" },
+            withheld: { const: true, type: "boolean" },
+          },
+          { description: "Pilot Key: supporting scores withheld" },
+        ),
+      ],
+    },
     verdict,
   },
   {
@@ -129,7 +161,7 @@ export const proofPaths = {
   "/api/proof": {
     get: {
       description:
-        "Read-only. Needs the Pilot Key or Operator access; anything else is refused. Each preset bar (pilot Intake Duplicate Rate ≤ ½ the backlog baseline, Review Coverage ≥ 80% over about 200 filings, Same-Need Precision ≥ 85% and Related-Need Precision ≥ 75% on Held-Out Set v2) with value, counts, 95% interval and pass, fail or inconclusive; the consequences; supporting metrics; readiness of the frozen sets.",
+        "Read-only. Needs the Pilot Key or Operator access; anything else is refused. Each preset bar (pilot Intake Duplicate Rate ≤ ½ the backlog baseline, Review Coverage ≥ 80% over about 200 filings, Same-Need Precision ≥ 85% and Related-Need Precision ≥ 75% on Held-Out Set v2) with value, counts, 95% interval and pass, fail or inconclusive; the consequences; readiness of the frozen sets. Supporting scores (Agent Correctness, PM agreement, Suggestion Acceptance) are Operator only during the pilot; with the Pilot Key they are withheld ({ withheld: true, note }).",
       operationId: "getProofReport",
       responses: {
         "200": {
@@ -161,6 +193,6 @@ export const proofMcpTools = {
     operationId: "mcpProofReport",
     requestBody: { properties: {}, type: "object" },
     summary:
-      "Read the Proof Report (public MCP with the Pilot Key, or the Operator MCP); same body as GET /api/proof. A refused key is pilot_key_required: branch on error.details.reason (missing | invalid | disabled)",
+      "Read the Proof Report (public MCP with the Pilot Key, or the Operator MCP); same body as GET /api/proof (supporting scores on the Operator MCP only; withheld with the Pilot Key). A refused key is pilot_key_required: branch on error.details.reason (missing | invalid | disabled)",
   },
 };

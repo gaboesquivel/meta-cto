@@ -21,7 +21,8 @@ import type { BarVerdict, Interval, PrecisionReading } from "./bars";
 /**
  * The Proof Report (spec 003, decision 0003): every preset bar with its value, counts, 95%
  * interval where it applies, and pass, fail or inconclusive, plus what follows from them. Pure:
- * `sources.ts` reads the pilot metrics, Answer Key scores, frozen files and eval run log.
+ * `sources.ts` reads the pilot metrics, the stored pilot ground truth and Answer Key scores, the
+ * stored v2 readings, and the committed freeze locks (spec 004).
  *
  * Verdict rules: a bar passes only when its whole 95% interval clears the bar and its minimums are
  * met; it fails only when the interval is wholly on the wrong side; anything else is inconclusive,
@@ -36,27 +37,39 @@ export {
   REVIEW_COVERAGE_BAR,
 } from "./bars";
 
+/**
+ * The pilot data's readiness: frozen by the committed lock, loaded into the database, and whether
+ * the stored fingerprint still matches the lock. Unreadable when the lock or database read failed.
+ */
 export type PilotFilesState =
   | { message: string; readable: false }
   | {
       backlogRequests: number;
+      /** A load after the freeze saw files that differ from the lock: reading reset. */
       changed: boolean;
       /** Stated before the run (the lock's when frozen, else the manifest's). */
       expectedBacklogDuplicateRate: number | null;
       feedback: number;
       frozen: boolean;
       frozenAt: string | null;
-      /** Feedback items in the pilot lock (the filings minimum); null or absent when not frozen. */
+      /** Feedback items stored (else in the lock): the filings minimum; null or absent when unknown. */
       frozenFeedback?: number | null;
+      /** The pilot ground truth is stored in the database. */
+      loaded: boolean;
+      loadedAt: string | null;
       messages: string[];
       readable: true;
       ready: boolean;
+      /** The lock changed after the stored load and nothing is loaded for it yet. */
+      refrozen: boolean;
       unconfirmed: number;
     };
 
+/** Held-Out Set v2's readiness: frozen by the committed lock; counts are the lock's. */
 export type HeldOutV2State =
   | { message: string; readable: false }
   | {
+      /** The latest run after the freeze (refused or failed included) saw another fingerprint. */
       changed: boolean;
       frozen: boolean;
       frozenAt: string | null;
@@ -64,8 +77,9 @@ export type HeldOutV2State =
       message: string | null;
       pairs: number;
       readable: true;
+      /** The lock changed after the latest run and no run exists for it yet. */
+      refrozen: boolean;
       sameNeedPositives: number;
-      unconfirmed: number;
     };
 
 interface PrecisionCounts {
@@ -73,7 +87,7 @@ interface PrecisionCounts {
   truePositives: number;
 }
 
-/** One logged Held-Out Set v2 run, as the report needs it. */
+/** One stored Held-Out Set v2 run, as the report needs it. */
 export interface V2Run {
   at: string;
   failures: number;
@@ -143,6 +157,27 @@ export interface ProofBar {
 
 type WithInterval<T> = T & { interval: Interval | null };
 
+/** Supporting scores, which change as agents act: Operator access only during the pilot. */
+export interface ProofSupporting {
+  agentCorrectness: WithInterval<AgentCorrectness> | null;
+  notes: string[];
+  pmAgreement: { blind: WithInterval<PmAgreement>; nonBlind: WithInterval<PmAgreement> } | null;
+  suggestionAcceptance: {
+    checks: number;
+    checksWithSameNeed: number;
+    createsAfterSameNeed: number;
+    evidence: false;
+    note: string;
+    rate: number | null;
+  } | null;
+}
+
+/** What Pilot Key callers get in place of the supporting scores. */
+export interface WithheldSupporting {
+  note: string;
+  withheld: true;
+}
+
 export interface ProofReport {
   bars: ProofBar[];
   /** Plain statements of what the bars mean for the product. */
@@ -160,19 +195,7 @@ export interface ProofReport {
     readingResets: string[];
   };
   slice3: "may_start" | "not_yet";
-  supporting: {
-    agentCorrectness: WithInterval<AgentCorrectness> | null;
-    notes: string[];
-    pmAgreement: { blind: WithInterval<PmAgreement>; nonBlind: WithInterval<PmAgreement> } | null;
-    suggestionAcceptance: {
-      checks: number;
-      checksWithSameNeed: number;
-      createsAfterSameNeed: number;
-      evidence: false;
-      note: string;
-      rate: number | null;
-    } | null;
-  };
+  supporting: ProofSupporting;
   /** Pass when every bar passes, fail when any fails, else inconclusive. */
   verdict: BarVerdict;
 }
@@ -180,8 +203,12 @@ export interface ProofReport {
 const pct = (value: number) => `${Number((value * 100).toFixed(1))}%`;
 const range = (interval: Interval) => `${pct(interval.lower)}–${pct(interval.upper)}`;
 
-const PILOT_CHANGED = "Pilot files changed after freeze: reading reset.";
+const PILOT_CHANGED = "Pilot data changed after freeze: reading reset.";
 const V2_CHANGED = "Held-Out Set v2 changed after freeze: reading reset.";
+const PILOT_REFROZEN =
+  "Pilot data re-frozen, no reading yet: load the pilot files for the new lock into this database.";
+const V2_REFROZEN =
+  "Held-Out Set v2 re-frozen, no reading yet: run it once for the new lock against this database.";
 
 const CONSEQUENCES = {
   intakeDuplicateRate:
@@ -221,13 +248,17 @@ const metricsReasons = (input: ProofInputs): string[] => {
 };
 
 const pilotFilesReasons = (files: PilotFilesState): string[] => {
-  if (!files.readable) return [`The pilot files could not be read: ${files.message}`];
+  if (!files.readable) return [`Pilot data could not be read: ${files.message}`];
   if (files.changed) return [PILOT_CHANGED];
+  if (files.refrozen) return [PILOT_REFROZEN];
+  const reasons: string[] = [];
   if (!files.frozen)
-    return [
+    reasons.push(
       "The pilot files are not frozen: the backlog and its expected rate must be fixed before the run.",
-    ];
-  return [];
+    );
+  if (!files.loaded)
+    reasons.push("Pilot data not loaded: load the frozen pilot files into this database.");
+  return reasons;
 };
 
 const intakeBar = (input: ProofInputs): ProofBar => {
@@ -338,13 +369,14 @@ const coverageBar = (input: ProofInputs): ProofBar => {
 const v2SetReasons = (set: HeldOutV2State): string[] => {
   if (!set.readable) return [`Held-Out Set v2 could not be read: ${set.message}`];
   if (set.changed) return [V2_CHANGED];
+  if (set.refrozen) return [V2_REFROZEN];
   if (!set.frozen) return ["Held-Out Set v2 is not frozen: freeze it before its first run."];
   return [];
 };
 
 /** Why a v2 run cannot decide a bar: missing, stale prompt version, failed pairs, too few positives. */
 const runReasons = (input: ProofInputs, run: V2Run | null): string[] => {
-  if (!run) return ["There is no Held-Out Set v2 reading yet: run the eval once."];
+  if (!run) return ["No v2 reading: run Held-Out Set v2 once against this database."];
   const reasons: string[] = [];
   if (input.v2Reading === null) {
     reasons.push(
@@ -450,15 +482,19 @@ const withAgreementInterval = (group: PmAgreement): WithInterval<PmAgreement> =>
   interval: wilsonInterval(group.agree, group.agree + group.disagree),
 });
 
-const supportingOf = (input: ProofInputs): ProofReport["supporting"] => {
+const supportingOf = (input: ProofInputs): ProofSupporting => {
   const notes: string[] = [];
   const scores = input.answerKeyScores;
   const files = input.pilotFiles;
   if (!scores)
-    notes.push("Answer Key scores are unavailable (no database or unreadable pilot files).");
+    notes.push("Answer Key scores are unavailable (no database, or pilot data not loaded).");
   if (files.readable && files.changed) {
     notes.push(
-      "Answer Key changed after freeze: reading reset; these scores read the changed key.",
+      "Pilot files changed after freeze: reading reset; these scores read the Answer Key as last loaded.",
+    );
+  } else if (files.readable && files.refrozen) {
+    notes.push(
+      "Pilot data re-frozen, no reading yet: these scores read the Answer Key loaded before the new lock.",
     );
   } else if (files.readable && files.unconfirmed > 0) {
     notes.push(
@@ -527,3 +563,24 @@ export const buildProofReport = (input: ProofInputs): ProofReport => {
     verdict,
   };
 };
+
+export const SUPPORTING_WITHHELD_NOTE =
+  "Operator only during the pilot: these scores change as agents act, so they are withheld from Pilot Key callers.";
+
+/** The Proof Report as a Pilot Key caller reads it: bars and readiness, supporting withheld. */
+export type PilotKeyProofReport = Omit<ProofReport, "supporting"> & {
+  supporting: WithheldSupporting;
+};
+
+/**
+ * The report for the caller's access (review F2): Operator access gets it whole; a Pilot Key
+ * caller (an agent) gets the bars and readiness but not the supporting scores, since re-reading
+ * them after each action would reveal whether that action matched the Answer Key.
+ */
+export const proofReportFor = (
+  report: ProofReport,
+  via: "operator" | "pilot",
+): PilotKeyProofReport | ProofReport =>
+  via === "operator"
+    ? report
+    : { ...report, supporting: { note: SUPPORTING_WITHHELD_NOTE, withheld: true } };

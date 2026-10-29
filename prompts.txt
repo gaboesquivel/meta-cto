@@ -318,3 +318,53 @@ Skills used: build. Docs changed: ARCHITECTURE.md, DESIGN.md, GLOSSARY.md, docs/
 2026-10-29T03:54:41Z — ship: review fix round 1
 Summary: Independent review (4 per-axis workers + verifier) posted on PR #31 with 7 blocking findings (B1-B7). Fix round 1: 3 parallel workers (A: /review pilot workspace, review_metrics MCP tool, origin dedupe; B: eval reading rules, bars consolidated; C: blind skipReason, PM agreement, scoring queries) plus orchestrator doc fixes, pilot title links, and staged-lint hook fix for lint-ignored files. qa 847 tests, build green.
 Skills used: ship, review, build. Docs changed: README.md, ARCHITECTURE.md, GLOSSARY.md, evals/signal-verdict/README.md.
+
+2026-10-29T04:08:53Z — ship result
+Summary: PR #31 merged as 8d91f0a (merge, reviewed head 9ee23e4 after fix round 1 + re-review: no blocking findings). Spec 003 implemented; issues #22-#30 closed; spec issue synced to main; branch deleted. Verify: checks passed, production deployment success, GET /, /review, /api/metrics, /api/review/queue 200 — live. Open: human pilot data/labels; owner decision on keeping filled Answer Key out of the public repo; small follow-ups (run.ts --help, runs.jsonl counts default, 80% literal).
+Skills used: ship, build, review. Docs changed: none beyond the merged PR.
+
+2026-10-29T04:10:52Z — "Keep out of public repo"
+Question (assistant → user): Where should the filled Answer Key and v2 labels live? Answer: keep them out of the public repo.
+Summary: Checking how the Proof Report reads pilot files and eval readings in production before proposing the storage approach.
+Skills used: none yet. Docs changed: none.
+Question (assistant → user): Where should private pilot data and v2 readings live? Answer: a dev folder with a gitignore line. Follow-up question: how production gets results (database vs local-only)? Answer: not answered; user replied separately.
+
+2026-10-29T04:12:59Z — "change my mind ... follow the recommended option"
+Answer (user): private store = database (filled files in a private folder outside the repo; load + eval runner write to Neon; repo keeps templates + fingerprint locks). Writing spec 004.
+Skills used: to-spec. Docs changed: (next entry).
+
+2026-10-29T04:13:44Z — to-spec 004
+Summary: Wrote spec 004 (draft) and decision 0004 (Proposed) on branch 004-private-pilot-data: private folder outside repo (SIGNAL_PRIVATE_DATA_DIR), repo keeps templates + locks, load and eval runner store data/readings in Neon, Proof Report reads DB only. Not pushed, no issue.
+Skills used: to-spec. Docs changed/created: docs/specs/004-private-pilot-data.md, docs/decisions/0004-private-pilot-data-in-the-database.md.
+
+2026-10-29T04:15:16Z — "Accept and ship" (spec 004)
+Summary: Accepted spec 004 + decision 0004 (spec 003 amended); issue #32; tasks #33-#36 (linear). Starting build.
+Skills used: to-spec, to-tasks, ship, build. Docs changed: docs/specs/003-prove-the-verdict.md, docs/specs/004-private-pilot-data.md, docs/decisions/0004-private-pilot-data-in-the-database.md.
+
+2026-10-29T04:20:16Z — build 004: integrated task 01 (#33) at e365f96.
+
+2026-10-29T04:28:45Z — build 004: integrated task 02 (#34) at f546b95.
+
+2026-10-29T04:33:43Z — "Is there any pending work not handled in Align session we can parallelize" / "Yes, start docs"
+Question (user → assistant): What pending work from the Align session can run in parallel? Answer: 004 is a linear chain; task 03 (#35) is uncommitted in ../meta-cto-004-t03 and its agent may have stopped; only the docs half of task 04 (#36) can run alongside it. The 003 follow-ups (run.ts --help, runs.jsonl counts default, the hard-coded 80%) edit the same eval files as task 03, so they wait. Filling real pilot data is the user's job.
+Question (assistant → user): Start the docs half of task 04 in parallel? Answer: yes.
+Summary: Started a subagent in an isolated worktree to align ARCHITECTURE.md and the data/pilot and evals/signal-verdict READMEs with spec 004.
+Skills used: none. Docs changed: prompts.txt (subagent working on ARCHITECTURE.md and READMEs).
+
+2026-10-29T04:36:09Z — 004 task 04 docs half: done
+Summary: Subagent committed bd02875 on worktree-agent-a4b2ec507b0847fd8, on top of a36642e. Changes: ARCHITECTURE.md, DESIGN.md, data/pilot/README.md, evals/signal-verdict/README.md (private folder, locks, four tables, database-only Proof Report). Reviewed the diff and checked the Vercel refusal in scripts/signal-pilot.ts. Not merged or pushed. Recheck against task 03 when it lands (latestEvalReading prompt-version filter, the exports list, dropped "unconfirmed" state).
+Skills used: none. Docs changed: ARCHITECTURE.md, DESIGN.md, data/pilot/README.md, evals/signal-verdict/README.md (on the worktree branch), prompts.txt.
+
+2026-10-29T04:37:00Z — "lets continue with the next steps" / "see Parallel work from Align session"
+Summary: Next step is 004 task 03 (#35) in ../meta-cto-004-t03. Found it is still being built by another agent (files written 22:35–22:36 local, incl. tests/signal-contract/ground-truth-exposure.test.ts), so stopped to avoid two writers. Before noticing, applied three lint fixes there (sources.ts pilotState complexity split into pilotCounts; named capture group in bundle-safety.test.ts; intake → intakeBar in report.test.ts). Docs agent for task 04 left no changes. Draft PR #37 is open on 004-private-pilot-data.
+Skills used: build. Docs changed: none.
+
+2026-10-29T04:39:38Z — build 004: integrated task 03 (#35) at 5904939.
+
+2026-10-29T04:41:07Z — build 004: task 03 integrated; found worktree .claude/worktrees/agent-a4b2ec507b0847fd8 (branch worktree-agent-a4b2ec507b0847fd8, commit bd02875 docs for #36) from another session; own suite green excluding it (898). Asked user how to handle task 04.
+
+2026-10-29T05:12:07Z — build 004: merged task 04 docs from parallel session (bd02875, user approved); verified refusals and build traces; spec 004 implemented.
+
+2026-10-29T09:20:00Z — ship 004: review posted on PR #37 (blocking F1 private-dir bypass, F2 proof oracle, F3 change visibility, F4 v2 report in repo); CI green on 94fbd57; fix round 1 with 2 parallel workers.
+
+2026-10-29T12:03:59Z — ship 004: merged fix round 1 (F1-F4); lint/types/922 tests/build green.

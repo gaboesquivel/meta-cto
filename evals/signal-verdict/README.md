@@ -3,11 +3,15 @@
 Eval Set for the Check's Verdicts (spec 001, Testing Decisions → Quality eval; spec 003, Held-Out Set v2).
 
 - `held-out.json`: **Held-Out Set (v1), frozen as of 2026-10-28. Never use it in prompts, few-shot examples or tuning; only for judging.** Changing it resets the kill-criterion reading. It stays the first reading and runs exactly as before.
-- `held-out-v2.json`: **Held-Out Set v2** (decision 0003). Ships empty. People write and confirm its pairs without sight of the judge prompt; never use it for tuning.
-- `held-out-v2.lock.json`: the freeze record (fingerprint, time, counts). Absent until the set is frozen; commit it once written.
+- `held-out-v2.json`: **empty template** for Held-Out Set v2 (decision 0003). It stays empty here (a test fails otherwise). The filled pairs live in the private folder, `$SIGNAL_PRIVATE_DATA_DIR/evals/held-out-v2.json`, outside the repository (spec 004, decision 0004), and are never committed. People write and confirm them without sight of the judge prompt; never use them for tuning.
+- `held-out-v2.lock.json`: the freeze record (fingerprint, time, counts), written here by `freeze`. Absent until the set is frozen; commit it once written. The lock is the only v2 artifact in the repository.
 - `dev.json`: Dev Set, for tuning prompts and retrieval. Its drafts never appear in either Held-Out Set.
-- `runs.jsonl`: append-only run log, one JSON line per run (including refusals and failures). Commit it with the reports.
+- Run records: every run (including refusals and failures) is recorded in the database (`eval_runs`, Origin `eval`) the Proof Report reads (spec 004, decision 0004); set `DATABASE_URL`. Held-Out Set v2 runs refuse without it and are recorded only there. v1 and Dev Set runs also append to a local `runs.jsonl`, which is gitignored and never committed.
 - Each pair: a Draft, a `target` seed key from `data/crewday/seed.ts`, the `expected` Verdict for that target, and a `note` on why.
+
+## Held-Out Set v2: private folder
+
+`SIGNAL_PRIVATE_DATA_DIR` names a folder outside the repository (layout and rules in `data/pilot/README.md`). Copy the template to `$SIGNAL_PRIVATE_DATA_DIR/evals/held-out-v2.json` and write the pairs there. `freeze.ts` and `run.ts --set held-out-v2` refuse, with the reason, when the variable is unset, the folder or file is missing, or the folder, its `evals/` subfolder or the file resolves (after symlinks, case-folded on case-insensitive filesystems) inside the git working tree. v2 reports are written to the same private `evals/` folder. v1 (`held-out.json`) and `dev.json` stay public and are read from this folder as before.
 
 ## Held-Out Set v2 format
 
@@ -37,7 +41,7 @@ Same pair shape as v1, plus a person's confirmation on every pair:
 pnpm exec tsx evals/signal-verdict/freeze.ts
 ```
 
-It refuses an empty set, duplicate ids, unknown targets, Dev Set drafts, unconfirmed pairs, and a set that is already frozen. It writes `held-out-v2.lock.json` with a SHA-256 fingerprint of the pairs (sorted by id, keys sorted, so formatting does not matter). Any later change to a pair, label or confirmation no longer matches the fingerprint: the runner refuses with "changed after freeze: reading reset". To start over, delete the lock deliberately and freeze the new set; earlier readings do not carry over.
+It reads the pairs from the private folder and refuses an empty set, duplicate ids, unknown targets, Dev Set drafts, unconfirmed pairs, and a set that is already frozen. It writes `evals/signal-verdict/held-out-v2.lock.json` (in the repository; the pairs stay private) with a SHA-256 fingerprint of the pairs (sorted by id, keys sorted, so formatting does not matter). Any later change to a pair, label or confirmation no longer matches the fingerprint: the runner refuses with "changed after freeze: reading reset". To start over, delete the lock deliberately and freeze the new set; earlier readings do not carry over.
 
 ## Run (costs tokens, manual only, not in CI)
 
@@ -50,15 +54,19 @@ pnpm exec tsx evals/signal-verdict/run.ts --set held-out-v2  # needs a confirmed
 Add `--local` to run against an in-memory database seeded with the Crewday Demo Workspace instead of the shared one. Otherwise it needs the seeded Crewday Demo Workspace and the database and AI keys (`getSignalService("eval")` must return a service). Eval Checks record Origin `eval`, so they never count in demo or pilot metrics. A target not returned among the candidates counts as `absent`.
 
 - v1 and dev print a table and write `report.md` (held-out) or `report.dev.md` (dev), as before.
-- v2 refuses (and logs the refusal) unless every pair is confirmed, the set is frozen, and it matches the frozen fingerprint. It writes `report.v2.md` with same-need and related-need precision, each with a 95% Wilson interval, its counts and a verdict against the bar, plus the same-need positives check.
-- **One reading per prompt version.** Each run logs its prompt version: `pv-` plus a hash of the judge system prompt, user prompt template, output schema and model id (read from `lib/signal/agent`). A second v2 run on the same set and prompt version (after a completed run, or a failed run that judged pairs) is flagged "repeat run, not a new reading" and writes `report.v2.repeat.md`, leaving `report.v2.md` alone.
-- A Check that throws or comes back degraded is a failure: it scores as `unknown`, is listed in the report and log, marks the run `failed`, and makes its verdicts inconclusive.
-- A run that fails before any pair reaches the Check (service unavailable, a target that does not resolve) is logged `failed` with nothing completed. It is never a reading and never makes the next run a repeat.
+- v2 refuses without `DATABASE_URL` (nowhere to record it, so nothing is written). With a database it refuses, and records the refusal, unless every pair is confirmed, the set is frozen, and it matches the frozen fingerprint. It writes `report.v2.md` to the private folder (`$SIGNAL_PRIVATE_DATA_DIR/evals`, never the repository: it lists v2 pair ids, targets and labels) with same-need and related-need precision, each with a 95% Wilson interval, its counts and a verdict against the bar, plus the same-need positives check.
+- **One reading per prompt version.** Each run records its prompt version: `pv-` plus a hash of the judge system prompt, user prompt template, output schema and model id (read from `lib/signal/agent`). A second v2 run on the same set, fingerprint and prompt version (after a completed run, or a failed run that judged pairs, as recorded in `eval_runs`) is flagged "repeat run, not a new reading" and writes `report.v2.repeat.md` (also in the private folder), leaving `report.v2.md` alone. The command prints the path it wrote.
+- A Check that throws or comes back degraded is a failure: it scores as `unknown`, is listed in the report and the run record, marks the run `failed`, and makes its verdicts inconclusive.
+- A run that fails before any pair reaches the Check (service unavailable, a target that does not resolve) is recorded `failed` with nothing completed. It is never a reading and never makes the next run a repeat.
 
 ## Bars and verdicts (`readings.ts`)
 
 Same-need precision ≥ 85% (kill line) and related-need precision ≥ 75% (three-way verdict) on v2. A verdict is `pass` when the whole 95% interval is at or above the bar, `fail` when it is wholly below, and `inconclusive` when it straddles the bar, there are no predictions, there are fewer than 60 same-need positives, or a pair failed.
 
-Exports for the Proof Report: `wilsonInterval`, `precisionReading`, `verdictFor`, `v2Readings`, the bars (`SAME_NEED_BAR`, `RELATED_NEED_BAR`, `MIN_SAME_NEED_POSITIVES`) from `readings.ts`; `readRunLog`, `currentV2Reading` from `run-log.ts`; `readV2Lock`, `checkV2Ready` from `held-out-v2.ts`.
+## What the Proof Report reads
+
+Only the database and the committed lock (spec 004, decision 0004): the v2 reading is the latest stored run on the set and the lock's fingerprint that judged pairs and is not a repeat (`latestEvalReading` in `lib/signal/repository-pilot-data.ts`), shown with its prompt version. A stored fingerprint that differs from the lock reads "changed after freeze: reading reset"; no stored reading reads Inconclusive with "no v2 reading". The pairs, `runs.jsonl` and `report.v2*.md` are never read at runtime or deployed, and no REST or MCP operation returns v2 pairs.
+
+Exports: `wilsonInterval`, `precisionReading`, `verdictFor`, `v2Readings`, the bars (`SAME_NEED_BAR`, `RELATED_NEED_BAR`, `MIN_SAME_NEED_POSITIVES`) from `readings.ts`; `readV2Lock`, `checkV2Ready` from `held-out-v2.ts`; `readRunLog` from `run-log.ts` (the local log only).
 
 Note: every pair runs a real Check, and each Check is recorded as an event in the database, so a run adds one Check per pair to the workspace (Origin `eval`).
