@@ -344,3 +344,19 @@ Skills used: to-spec, to-tasks, ship, build. Docs changed: docs/specs/003-prove-
 2026-10-29T04:20:16Z — build 004: integrated task 01 (#33) at e365f96.
 
 2026-10-29T04:28:45Z — build 004: integrated task 02 (#34) at f546b95.
+
+2026-10-29T04:33:43Z — "Is there any pending work not handled in Align session we can parallelize" / "Yes, start docs"
+Question (user → assistant): What pending work from the Align session can run in parallel? Answer: 004 is a linear chain; task 03 (#35) is uncommitted in ../meta-cto-004-t03 and its agent may have stopped; only the docs half of task 04 (#36) can run alongside it. The 003 follow-ups (run.ts --help, runs.jsonl counts default, the hard-coded 80%) edit the same eval files as task 03, so they wait. Filling real pilot data is the user's job.
+Question (assistant → user): Start the docs half of task 04 in parallel? Answer: yes.
+Summary: Started a subagent in an isolated worktree to align ARCHITECTURE.md and the data/pilot and evals/signal-verdict READMEs with spec 004.
+Skills used: none. Docs changed: prompts.txt (subagent working on ARCHITECTURE.md and READMEs).
+
+2026-10-29T04:36:09Z — 004 task 04 docs half: done
+Summary: Subagent committed bd02875 on worktree-agent-a4b2ec507b0847fd8, on top of a36642e. Changes: ARCHITECTURE.md, DESIGN.md, data/pilot/README.md, evals/signal-verdict/README.md (private folder, locks, four tables, database-only Proof Report). Reviewed the diff and checked the Vercel refusal in scripts/signal-pilot.ts. Not merged or pushed. Recheck against task 03 when it lands (latestEvalReading prompt-version filter, the exports list, dropped "unconfirmed" state).
+Skills used: none. Docs changed: ARCHITECTURE.md, DESIGN.md, data/pilot/README.md, evals/signal-verdict/README.md (on the worktree branch), prompts.txt.
+
+2026-10-29T04:37:00Z — "lets continue with the next steps" / "see Parallel work from Align session"
+Summary: Next step is 004 task 03 (#35) in ../meta-cto-004-t03. Found it is still being built by another agent (files written 22:35–22:36 local, incl. tests/signal-contract/ground-truth-exposure.test.ts), so stopped to avoid two writers. Before noticing, applied three lint fixes there (sources.ts pilotState complexity split into pilotCounts; named capture group in bundle-safety.test.ts; intake → intakeBar in report.test.ts). Docs agent for task 04 left no changes. Draft PR #37 is open on 004-private-pilot-data.
+Skills used: build. Docs changed: none.
+
+2026-10-29T04:39:38Z — build 004: integrated task 03 (#35) at 5904939.
