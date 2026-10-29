@@ -2,9 +2,10 @@ import type { z } from "zod";
 
 import { jsonError, withExtraHeaders } from "@/lib/api/json-error";
 import { buildRateLimitHeaders } from "@/lib/api/rate-limit-headers";
+import { verifyOperatorRequest } from "@/lib/auth/operator-access";
 import { SignalError } from "@/lib/signal/contracts";
-import type { SignalService } from "@/lib/signal/contracts";
-import { getSignalService } from "@/lib/signal/runtime";
+import type { ReviewService, SignalErrorCode, SignalService } from "@/lib/signal/contracts";
+import { getReviewService, getSignalService } from "@/lib/signal/runtime";
 
 /** Writes allowed per client IP per window (best effort: in-memory per instance). */
 export const SIGNAL_WRITE_LIMIT = 30;
@@ -72,13 +73,19 @@ const invalidInput = (issues: unknown) =>
     status: 400,
   });
 
-const notFound = () =>
-  new SignalError({
-    code: "not_found",
-    message: "Feature Request not found.",
-    resolution: "Use GET /api/feature-requests to find a valid id.",
-    status: 404,
-  });
+const featureRequestNotFound = {
+  message: "Feature Request not found.",
+  resolution: "Use GET /api/feature-requests to find a valid id.",
+};
+
+export const decisionNotFound = {
+  message: "Review Decision not found.",
+  resolution:
+    "Use GET /api/review/queue or the Feature Request's reviewHistory to find a valid id.",
+};
+
+const notFound = (what: { message: string; resolution: string }) =>
+  new SignalError({ code: "not_found", ...what, status: 404 });
 
 export const parseWith = <T extends z.ZodType>(schema: T, value: unknown): z.infer<T> => {
   const result = schema.safeParse(value);
@@ -103,10 +110,20 @@ export const parseSearchParams = <T extends z.ZodType>(request: Request, schema:
   parseWith(schema, Object.fromEntries(new URL(request.url).searchParams));
 
 /** Resolves the dynamic `[id]` segment; non-uuid ids are a 404 so they never reach the database. */
-export const readId = async (params: Promise<{ id: string }>) => {
+export const readId = async (
+  params: Promise<{ id: string }>,
+  what: { message: string; resolution: string } = featureRequestNotFound,
+) => {
   const { id } = await params;
-  if (!UUID_PATTERN.test(id)) throw notFound();
+  if (!UUID_PATTERN.test(id)) throw notFound(what);
   return id;
+};
+
+/** HTTP status per error code where REST fixes it, whatever status the service attached. */
+export const SIGNAL_ERROR_STATUS: Partial<Record<SignalErrorCode, number>> = {
+  already_undone: 409,
+  invalid_decision: 422,
+  operator_required: 401,
 };
 
 /** Object details are spread into the body; arrays (zod issues) go under `issues`; others are dropped. */
@@ -124,7 +141,7 @@ export const toErrorResponse = async (error: unknown) => {
         code: error.code,
         message: error.message,
         resolution: error.resolution,
-        status: error.status,
+        status: SIGNAL_ERROR_STATUS[error.code] ?? error.status,
       },
       extra,
     );
@@ -145,6 +162,57 @@ const serviceUnavailable = () =>
     resolution: "Set DATABASE_URL and AI_GATEWAY_API_KEY",
     status: 503,
   });
+
+export const OPERATOR_REQUIRED_RESOLUTION =
+  "Sign in as Operator (/operator/access) or send Authorization: Bearer <OPERATOR_SECRET>.";
+
+/** Refusal for a write without Operator access; fails closed (503) when the secret is unset. */
+const operatorRequired = (reason: "disabled" | "unauthorized") =>
+  reason === "disabled"
+    ? jsonError({
+        code: "operator_required",
+        message: "Operator access is not configured on this deployment, so review writes are off.",
+        resolution: "Set OPERATOR_SECRET (min 16 characters) in the deployment environment.",
+        status: 503,
+      })
+    : jsonError({
+        code: "operator_required",
+        message: "This action needs Operator access.",
+        resolution: OPERATOR_REQUIRED_RESOLUTION,
+        status: 401,
+      });
+
+/**
+ * Runs a review route. Reads are open; writes spend the per-client write budget and need
+ * Operator access, checked before the service is resolved or called.
+ */
+export const handleReview = async ({
+  request,
+  run,
+  write = false,
+}: {
+  request?: Request;
+  run: (service: ReviewService) => Promise<Response>;
+  write?: boolean;
+}): Promise<Response> => {
+  const limit = write && request ? consumeWrite(request) : null;
+  if (limit?.limited) return limit.limited;
+  if (write) {
+    const access = request
+      ? verifyOperatorRequest(request)
+      : { ok: false as const, reason: "unauthorized" as const };
+    if (!access.ok) return withExtraHeaders(operatorRequired(access.reason), limit?.headers);
+  }
+  const service = getReviewService();
+  if (!service) return withExtraHeaders(serviceUnavailable(), limit?.headers);
+  let response: Response;
+  try {
+    response = await run(service);
+  } catch (error) {
+    response = await toErrorResponse(error);
+  }
+  return withExtraHeaders(response, limit?.headers);
+};
 
 /**
  * Runs a Signal route: rate-limits writes per client IP, resolves the service,
