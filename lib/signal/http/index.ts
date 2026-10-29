@@ -3,8 +3,10 @@ import type { z } from "zod";
 import { jsonError, withExtraHeaders } from "@/lib/api/json-error";
 import { buildRateLimitHeaders } from "@/lib/api/rate-limit-headers";
 import { verifyOperatorRequest } from "@/lib/auth/operator-access";
+import { pilotKeyRefusal, resolvePilotAccess } from "@/lib/auth/pilot-access";
+import type { PilotAccess } from "@/lib/auth/pilot-access";
 import { SignalError } from "@/lib/signal/contracts";
-import type { ReviewService, SignalErrorCode, SignalService } from "@/lib/signal/contracts";
+import type { Origin, ReviewService, SignalErrorCode, SignalService } from "@/lib/signal/contracts";
 import { getReviewService, getSignalService } from "@/lib/signal/runtime";
 
 /** Writes allowed per client IP per window (best effort: in-memory per instance). */
@@ -182,9 +184,19 @@ const operatorRequired = (reason: "disabled" | "unauthorized") =>
         status: 401,
       });
 
+/** The caller's access from the Pilot Key header; a request-less call is the demo caller. */
+export const pilotAccessOf = (request: Request | undefined): PilotAccess =>
+  request ? resolvePilotAccess(request) : { kind: "demo" };
+
+/** The Origin (and so the Workspace) a granted caller acts on. */
+export const originOfAccess = (access: Exclude<PilotAccess, { kind: "refused" }>): Origin =>
+  access.kind === "pilot" ? "pilot" : "demo";
+
 /**
- * Runs a review route. Reads are open; writes spend the per-client write budget and need
- * Operator access, checked before the service is resolved or called.
+ * Runs a review route. Without the Pilot Key: reads are open; writes spend the per-client write
+ * budget and need Operator access, as before spec 003. With the Pilot Key the route acts on the
+ * Pilot Workspace and the key alone authorizes its writes (the Product Managers work the pilot
+ * queue over REST and MCP with it); a bad or unconfigured key is refused before any service call.
  */
 export const handleReview = async ({
   request,
@@ -197,13 +209,16 @@ export const handleReview = async ({
 }): Promise<Response> => {
   const limit = write && request ? consumeWrite(request) : null;
   if (limit?.limited) return limit.limited;
-  if (write) {
+  const pilot = pilotAccessOf(request);
+  if (pilot.kind === "refused")
+    return withExtraHeaders(await toErrorResponse(pilotKeyRefusal(pilot.reason)), limit?.headers);
+  if (write && pilot.kind === "demo") {
     const access = request
       ? verifyOperatorRequest(request)
       : { ok: false as const, reason: "unauthorized" as const };
     if (!access.ok) return withExtraHeaders(operatorRequired(access.reason), limit?.headers);
   }
-  const service = getReviewService();
+  const service = getReviewService(originOfAccess(pilot));
   if (!service) return withExtraHeaders(serviceUnavailable(), limit?.headers);
   let response: Response;
   try {
@@ -215,8 +230,9 @@ export const handleReview = async ({
 };
 
 /**
- * Runs a Signal route: rate-limits writes per client IP, resolves the service,
- * and maps SignalError and unexpected errors to `jsonError` responses.
+ * Runs a Signal route: rate-limits writes per client IP, resolves the caller's Workspace from the
+ * Pilot Key header (none is the demo), resolves the service, and maps SignalError and unexpected
+ * errors to `jsonError` responses.
  */
 export const handleSignal = async ({
   request,
@@ -229,7 +245,10 @@ export const handleSignal = async ({
 }): Promise<Response> => {
   const limit = write && request ? consumeWrite(request) : null;
   if (limit?.limited) return limit.limited;
-  const service = getSignalService();
+  const pilot = pilotAccessOf(request);
+  if (pilot.kind === "refused")
+    return withExtraHeaders(await toErrorResponse(pilotKeyRefusal(pilot.reason)), limit?.headers);
+  const service = getSignalService(originOfAccess(pilot));
   if (!service) return serviceUnavailable();
   let response: Response;
   try {

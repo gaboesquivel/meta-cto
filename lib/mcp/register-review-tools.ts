@@ -7,14 +7,17 @@ import {
   scanOptionsSchema,
   SignalError,
 } from "@/lib/signal/contracts";
-import type { ReviewService } from "@/lib/signal/contracts";
+import type { Origin, ReviewService } from "@/lib/signal/contracts";
 import { getReviewService } from "@/lib/signal/runtime";
 import { z } from "zod";
 
 import { advertised, invalidInputToolError, toToolError } from "./signal-tool-helpers";
 import { asToolError, asToolResult } from "./tool-result";
 
-/** Review (spec 002) tools: registered on the Operator MCP only, never on the public MCP. */
+/**
+ * Review (spec 002) tools: on the Operator MCP for the demo; on the public MCP only with the Pilot
+ * Key, bound to the Pilot Workspace (spec 003). Never on the demo public MCP.
+ */
 export const reviewMcpToolNames = [
   "review_queue",
   "decide_review",
@@ -66,8 +69,8 @@ const invalidInputError = (error: z.ZodError) => {
 
 const plainToolMeta = { _meta: {} };
 
-const requireReview = (): ReviewService => {
-  const service = getReviewService();
+const reviewFor = (origin: Origin): ReviewService => {
+  const service = getReviewService(origin);
   if (service) return service;
   throw new SignalError({
     code: "service_unavailable",
@@ -92,7 +95,10 @@ const runReviewTool = async <S extends z.ZodType>(
   }
 };
 
-const decide = async ({ actor, ...input }: z.output<typeof toolSchemas.decide>) => {
+const decide = async (
+  requireReview: () => ReviewService,
+  { actor, ...input }: z.output<typeof toolSchemas.decide>,
+) => {
   const violation = decisionRuleViolation(input);
   if (violation)
     throw new SignalError({
@@ -105,12 +111,24 @@ const decide = async ({ actor, ...input }: z.output<typeof toolSchemas.decide>) 
   return { decision: await requireReview().decide(input, actor) };
 };
 
-const undo = async ({ actor, decisionId }: z.output<typeof toolSchemas.undo>) => ({
+const undo = async (
+  requireReview: () => ReviewService,
+  { actor, decisionId }: z.output<typeof toolSchemas.undo>,
+) => ({
   decision: await requireReview().undo(decisionId, actor),
 });
 
-/** Registers the review tools. The Operator MCP route enforces Operator access before any call. */
-export const registerReviewMcpTools = (server: McpServer) => {
+/**
+ * Registers the review tools for one Origin's Workspace (demo by default). The Operator MCP route
+ * enforces Operator access before any call; the public MCP registers them only for a valid Pilot
+ * Key, which alone authorizes pilot review decisions.
+ */
+export const registerReviewMcpTools = (
+  server: McpServer,
+  { origin = "demo" }: { origin?: Origin } = {},
+) => {
+  const requireReview = () => reviewFor(origin);
+
   registerAppTool(
     server,
     "review_queue",
@@ -130,7 +148,7 @@ export const registerReviewMcpTools = (server: McpServer) => {
       description: reviewToolDescriptions.decide_review,
       inputSchema: advertised(toolSchemas.decide),
     },
-    (args) => runReviewTool(toolSchemas.decide, args, decide),
+    (args) => runReviewTool(toolSchemas.decide, args, (input) => decide(requireReview, input)),
   );
 
   registerAppTool(
@@ -141,7 +159,7 @@ export const registerReviewMcpTools = (server: McpServer) => {
       description: reviewToolDescriptions.undo_review_decision,
       inputSchema: advertised(toolSchemas.undo),
     },
-    (args) => runReviewTool(toolSchemas.undo, args, undo),
+    (args) => runReviewTool(toolSchemas.undo, args, (input) => undo(requireReview, input)),
   );
 
   registerAppTool(

@@ -91,7 +91,7 @@ const bearer = (request: Request) => {
 const queueOp: Operation = {
   mcp: { args: {}, tool: "review_queue" },
   name: "queue",
-  rest: () => getQueue(),
+  rest: () => getQueue(new Request("http://localhost/api/review/queue")),
 };
 
 const decideOp = (body: Record<string, unknown>): Operation => ({

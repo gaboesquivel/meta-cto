@@ -1,5 +1,7 @@
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/server";
+import { pilotKeyRefusal } from "@/lib/auth/pilot-access";
+import type { PilotAccess } from "@/lib/auth/pilot-access";
 import {
   checkInputSchema,
   commentInputSchema,
@@ -32,8 +34,10 @@ const toolSchemas = {
 
 const plainToolMeta = { _meta: {} };
 
-const requireService = (): SignalService => {
-  const service = getSignalService();
+/** The caller's service: the Pilot Workspace with the Pilot Key, the demo without; refused otherwise. */
+const serviceFor = (access: PilotAccess): SignalService => {
+  if (access.kind === "refused") throw pilotKeyRefusal(access.reason);
+  const service = getSignalService(access.kind === "pilot" ? "pilot" : "demo");
   if (service) return service;
   throw new SignalError({
     code: "service_unavailable",
@@ -113,10 +117,10 @@ const runSignalTool = async <S extends z.ZodType>({
 
 const always = () => true;
 
-const supportFeatureRequest = async ({
-  featureRequestId,
-  ...input
-}: z.output<typeof toolSchemas.support>) => {
+const supportFeatureRequest = async (
+  requireService: () => SignalService,
+  { featureRequestId, ...input }: z.output<typeof toolSchemas.support>,
+) => {
   const { created, featureRequest, support } = await requireService().support(
     featureRequestId,
     input,
@@ -132,7 +136,10 @@ const supportFeatureRequest = async ({
   return { created, featureRequest, support };
 };
 
-const createFeatureRequest = async ({ checkId, ...rest }: z.output<typeof toolSchemas.create>) => {
+const createFeatureRequest = async (
+  requireService: () => SignalService,
+  { checkId, ...rest }: z.output<typeof toolSchemas.create>,
+) => {
   if (!checkId)
     throw new SignalError({
       code: "check_required",
@@ -145,15 +152,21 @@ const createFeatureRequest = async ({ checkId, ...rest }: z.output<typeof toolSc
   return { featureRequest };
 };
 
-const commentOnFeatureRequest = async ({
-  featureRequestId,
-  ...input
-}: z.output<typeof toolSchemas.comment>) => {
+const commentOnFeatureRequest = async (
+  requireService: () => SignalService,
+  { featureRequestId, ...input }: z.output<typeof toolSchemas.comment>,
+) => {
   const comment = await requireService().comment(featureRequestId, input);
   return { comment };
 };
 
-export const registerSignalMcpTools = (server: McpServer) => {
+/**
+ * Registers the Signal tools, unchanged in shape. `access` (from the Pilot Key header) picks the
+ * Workspace: demo by default, the Pilot Workspace with the key; a refused key fails every call.
+ */
+export const registerSignalMcpTools = (server: McpServer, access?: PilotAccess) => {
+  const requireService = () => serviceFor(access ?? { kind: "demo" });
+
   registerAppTool(
     server,
     "check_feature_request",
@@ -184,7 +197,7 @@ export const registerSignalMcpTools = (server: McpServer) => {
       runSignalTool({
         args,
         ctx,
-        run: createFeatureRequest,
+        run: (input) => createFeatureRequest(requireService, input),
         schema: toolSchemas.create,
         write: always,
       }),
@@ -202,7 +215,7 @@ export const registerSignalMcpTools = (server: McpServer) => {
       runSignalTool({
         args,
         ctx,
-        run: supportFeatureRequest,
+        run: (input) => supportFeatureRequest(requireService, input),
         schema: toolSchemas.support,
         write: always,
       }),
@@ -220,7 +233,7 @@ export const registerSignalMcpTools = (server: McpServer) => {
       runSignalTool({
         args,
         ctx,
-        run: commentOnFeatureRequest,
+        run: (input) => commentOnFeatureRequest(requireService, input),
         schema: toolSchemas.comment,
         write: always,
       }),

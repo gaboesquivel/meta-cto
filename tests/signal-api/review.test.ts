@@ -103,14 +103,14 @@ const writes: [string, (auth?: Auth, ip?: string) => Promise<Response>][] = [
 
 describe("GET /api/review/queue", () => {
   it("returns 200 with the Review Queue without credentials", async () => {
-    const response = await getQueue();
+    const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(reviewQueue);
   });
 
   it("returns 503 service_unavailable when the review service is not configured", async () => {
     state.review = null;
-    const response = await getQueue();
+    const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
     expect(response.status).toBe(503);
     expect(await codeOf(response)).toBe("service_unavailable");
   });

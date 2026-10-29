@@ -1,11 +1,15 @@
+import { resolvePilotAccess } from "@/lib/auth/pilot-access";
 import { createStarterMcpServer } from "@/lib/mcp/create-mcp-server";
 import { handleMcpRequest } from "@/lib/mcp/handle-mcp-request";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const handleMcp = (request: Request) =>
-  handleMcpRequest({ createServer: createStarterMcpServer, request });
+/** The Pilot Key header (x-signal-pilot-key) selects the Pilot Workspace; none is the demo. */
+const handleMcp = (request: Request) => {
+  const access = resolvePilotAccess(request);
+  return handleMcpRequest({ createServer: () => createStarterMcpServer({ access }), request });
+};
 
 export const POST = handleMcp;
 export const GET = handleMcp;
