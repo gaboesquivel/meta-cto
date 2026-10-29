@@ -234,6 +234,8 @@ export const reviewDecisions = pgTable(
   {
     actorName: text("actor_name").notNull(),
     actorType: text("actor_type").notNull(),
+    /** Blind Review (spec 003): decided without the AI's suggestion or Reason in view. */
+    blind: boolean("blind").notNull().default(false),
     canonicalId: uuid("canonical_id").references(() => featureRequests.id),
     createdAt: createdAt(),
     decision: text("decision").notNull(),

@@ -1,8 +1,14 @@
 import type { Actor, Origin, ScanOptions, ScanResult } from "../contracts";
 import { SignalError } from "../contracts";
-import type { SignalRepository } from "../repository";
+import type { FeatureRequestRow, SignalRepository } from "../repository";
+import { isChosenForBlindReview } from "./review-blind";
 
 export interface ReviewServiceDeps {
+  /**
+   * Share (0 to 1) of new Feature Requests chosen for Blind Review; 0, the default, means none
+   * (the Crewday demo). The runtime sets it for the Pilot Workspace.
+   */
+  blindShare?: number;
   now?: () => Date;
   /** The caller's Origin: recorded on review events and the default Origin for metrics. */
   origin?: Origin;
@@ -13,6 +19,7 @@ export interface ReviewServiceDeps {
 }
 
 export interface ReviewContext {
+  blindShare: number;
   now: () => Date;
   origin: Origin;
   repo: SignalRepository;
@@ -33,3 +40,9 @@ export const decisionNotFound = (id: string) =>
   });
 
 export const actorColumns = (actor: Actor) => ({ actorName: actor.name, actorType: actor.type });
+
+/** A new (created through a Check) Feature Request chosen for Blind Review in this Workspace. */
+export const isBlind = (
+  context: ReviewContext,
+  row: Pick<FeatureRequestRow, "createdViaCheck" | "id">,
+) => row.createdViaCheck && isChosenForBlindReview(context.workspaceId, row.id, context.blindShare);

@@ -13,6 +13,7 @@ import { createRepository } from "@/lib/signal/repository";
 import { createBacklogScan } from "@/lib/signal/scan";
 import { createReviewService, createSignalService } from "@/lib/signal/service";
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
+import { DEFAULT_PILOT_BLIND_SHARE, blindShareFrom } from "@/lib/signal/service/review-blind";
 
 /**
  * The Workspace an Origin acts on: `pilot` is the Pilot Workspace, every other Origin the Crewday
@@ -108,6 +109,8 @@ export const getSignalService = (origin: Origin = "demo"): SignalService | null 
  * available only with a judge; reviewing, undo and metrics need just the database.
  */
 export const createRuntimeReviewService = (deps: {
+  /** Share of new Feature Requests chosen for Blind Review; none when omitted. */
+  blindShare?: number;
   db: SignalDb;
   judge?: Judge;
   judgeTimeoutMs?: number;
@@ -128,7 +131,13 @@ export const createRuntimeReviewService = (deps: {
             workspaceId: row.id,
           }).scan
         : undefined;
-      return createReviewService({ origin: deps.origin, repo, scan, workspaceId: row.id });
+      return createReviewService({
+        blindShare: deps.blindShare,
+        origin: deps.origin,
+        repo,
+        scan,
+        workspaceId: row.id,
+      });
     } catch (error) {
       ready = null;
       throw error;
@@ -148,6 +157,16 @@ export const createRuntimeReviewService = (deps: {
   };
 };
 
+/**
+ * Share of new Feature Requests chosen for Blind Review (spec 003): the Pilot Workspace's from
+ * `SIGNAL_PILOT_BLIND_SHARE` (about 30% by default), the Crewday demo's from
+ * `SIGNAL_DEMO_BLIND_SHARE` (none by default, so the demo behaves as before).
+ */
+export const blindShareFor = (origin: Origin = "demo"): number =>
+  origin === PILOT_ORIGIN
+    ? blindShareFrom(process.env.SIGNAL_PILOT_BLIND_SHARE, DEFAULT_PILOT_BLIND_SHARE)
+    : blindShareFrom(process.env.SIGNAL_DEMO_BLIND_SHARE, 0);
+
 const cachedReview = new Map<Origin, ReviewService>();
 
 /**
@@ -162,6 +181,7 @@ export const getReviewService = (origin: Origin = "demo"): ReviewService | null 
   const model = resolveJudgeModel();
   const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
   const service = createRuntimeReviewService({
+    blindShare: blindShareFor(origin),
     db,
     judge: model ? createLlmJudge({ model, timeoutMs: judgeTimeoutMs }) : undefined,
     judgeTimeoutMs,

@@ -260,6 +260,8 @@ export interface SuspectedDuplicate {
 
 export interface ReviewDecision {
   actor: Actor;
+  /** Blind Review (spec 003): decided without the AI's suggestion or Reason in view. */
+  blind: boolean;
   /** Duplicate only: the canonical Feature Request, one of `featureRequestId` and `otherId`. */
   canonicalId: string | null;
   createdAt: string;
@@ -334,6 +336,12 @@ export interface ReviewSuspicionView {
 }
 
 export interface ReviewQueueItem {
+  /**
+   * Chosen for Blind Review (spec 003): `suspicions` is empty and `underlyingNeed` null so the
+   * AI's suggestion, Reason and restated need are withheld; pick the other side from
+   * `ReviewQueue.blindChoices`. The decision records `blind: true`.
+   */
+  blind: boolean;
   featureRequest: FeatureRequestSummary;
   /** Created through a Check (spec 001); otherwise a pre-Signal backlog Feature Request. */
   isNew: boolean;
@@ -341,6 +349,11 @@ export interface ReviewQueueItem {
 }
 
 export interface ReviewQueue {
+  /**
+   * Present only when an item is blind: every open Feature Request in the Workspace, by title,
+   * with no AI ranking, so a blind reviewer can choose the other side (and canonical) of a decision.
+   */
+  blindChoices?: FeatureRequestRef[];
   counts: { backlog: number; new: number };
   items: ReviewQueueItem[];
 }

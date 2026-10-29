@@ -412,6 +412,10 @@ export const signalSchemas = {
   SignalReviewDecision: {
     properties: {
       actor: ref("SignalActor"),
+      blind: {
+        description: "Blind Review: decided without the AI's suggestion or Reason in view",
+        type: "boolean",
+      },
       canonicalId: nullableUuid,
       createdAt: dateTime,
       decision: { enum: ["duplicate", "related", "distinct", "none"], type: "string" },
@@ -432,6 +436,7 @@ export const signalSchemas = {
       "sharedDimension",
       "suggestionId",
       "actor",
+      "blind",
       "createdAt",
       "undoneAt",
       "undoneBy",
@@ -440,6 +445,16 @@ export const signalSchemas = {
   },
   SignalReviewQueue: {
     properties: {
+      blindChoices: {
+        description:
+          "Present only when an item is blind: every open Feature Request by title, with no AI ranking, to choose the other side and canonical of a blind decision",
+        items: {
+          properties: { id: uuid, title: str },
+          required: ["id", "title"],
+          type: "object",
+        },
+        type: "array",
+      },
       counts: {
         properties: { backlog: integer, new: integer },
         required: ["backlog", "new"],
@@ -448,6 +463,11 @@ export const signalSchemas = {
       items: {
         items: {
           properties: {
+            blind: {
+              description:
+                "Blind Review: suspicions are empty and underlyingNeed null, so the AI's suggestion and Reason are withheld",
+              type: "boolean",
+            },
             featureRequest: ref("SignalFeatureRequest"),
             isNew: {
               description: "Created through a Check; otherwise pre-Signal backlog",
@@ -478,7 +498,7 @@ export const signalSchemas = {
               type: "array",
             },
           },
-          required: ["featureRequest", "isNew", "suspicions"],
+          required: ["blind", "featureRequest", "isNew", "suspicions"],
           type: "object",
         },
         type: "array",
@@ -723,7 +743,7 @@ const demoPaths = {
   "/api/review/queue": {
     get: {
       description:
-        "Open read. New Feature Requests not yet reviewed and backlog Feature Requests with undecided suspected duplicates, each with the AI's Reason.",
+        "Open read. New Feature Requests not yet reviewed and backlog Feature Requests with undecided suspected duplicates, each with the AI's Reason, except items under Blind Review, which withhold it.",
       operationId: "getReviewQueue",
       responses: {
         "200": ok("Review Queue", ref("SignalReviewQueue")),

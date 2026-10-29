@@ -104,6 +104,7 @@ export interface NewSuspectedDuplicate {
 export interface NewReviewDecision {
   actorName: string;
   actorType: ActorType;
+  blind?: boolean;
   canonicalId?: string | null;
   decision: ReviewDecisionKind;
   featureRequestId: string;
@@ -127,6 +128,7 @@ export const toSuspectedDuplicate = (row: SuspectedDuplicateRow): SuspectedDupli
 
 export const toReviewDecision = (row: ReviewDecisionRow): ReviewDecision => ({
   actor: { name: row.actorName, type: row.actorType as ActorType },
+  blind: row.blind,
   canonicalId: row.canonicalId,
   createdAt: row.createdAt.toISOString(),
   decision: row.decision as ReviewDecisionKind,
@@ -168,13 +170,21 @@ const hasSuspicion = (id: AnyPgColumn) => sql`exists (
   select 1 from ${suspectedDuplicates}
   where ${suspectedDuplicates.featureRequestAId} = ${id} or ${suspectedDuplicates.featureRequestBId} = ${id})`;
 
+/** An active Blind Review decision recorded on this Feature Request itself. */
+const hasOwnActiveBlindDecision = (id: AnyPgColumn) => sql`exists (
+  select 1 from ${reviewDecisions}
+  where ${reviewDecisions.undoneAt} is null and ${reviewDecisions.blind}
+    and ${reviewDecisions.featureRequestId} = ${id})`;
+
 /**
  * Reviewed: a decision covers it as a whole and no Suspected Duplicate on it is undecided. Covered
  * means an active decision on the request itself, or an active decision on each of its suspected
  * pairs. Being named as `otherId` on someone else's pair does not cover a request with no
- * suspicions: the Product Manager never looked at it for its own duplicates.
+ * suspicions: the Product Manager never looked at it for its own duplicates. A Blind Review
+ * decision (spec 003) covers its request alone: the blind reviewer never saw its suspicions, so
+ * they stay for the other side to decide.
  */
-const isReviewed: SQL = sql`(not ${hasUndecidedSuspicion(featureRequests.id)} and (${hasOwnActiveDecision(featureRequests.id)} or ${hasSuspicion(featureRequests.id)}))`;
+const isReviewed: SQL = sql`(${hasOwnActiveBlindDecision(featureRequests.id)} or (not ${hasUndecidedSuspicion(featureRequests.id)} and (${hasOwnActiveDecision(featureRequests.id)} or ${hasSuspicion(featureRequests.id)})))`;
 
 /** On either side of an active Duplicate decision, canonical or not. */
 const onActiveDuplicate = (id: AnyPgColumn) => sql`exists (

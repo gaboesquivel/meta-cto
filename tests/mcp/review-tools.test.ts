@@ -27,6 +27,7 @@ const REVIEW_TOOLS = ["decide_review", "review_queue", "scan_backlog", "undo_rev
 
 const decision: ReviewDecision = {
   actor,
+  blind: false,
   canonicalId: OTHER_ID,
   createdAt: "2026-10-28T12:00:00.000Z",
   decision: "duplicate",
@@ -158,6 +159,9 @@ test("descriptions keep the Product Manager in charge", async () => {
   assert.match(describe("decide_review"), /canonical/u);
   assert.match(describe("decide_review"), /Shared Dimension/u);
   assert.match(describe("review_queue"), /suggest/u);
+  assert.match(describe("review_queue"), /Blind Review/u);
+  assert.match(describe("review_queue"), /blindChoices/u);
+  assert.match(describe("decide_review"), /blind/u);
   assert.match(describe("undo_review_decision"), /history/u);
   assert.match(describe("scan_backlog"), /only (?:when|on) request/u);
 });
@@ -210,6 +214,45 @@ test("review_queue returns the queue", async () => {
   const result = await callOperator("review_queue", {});
   assert.notEqual(result.isError, true);
   assert.deepEqual(result.structuredContent, queue);
+});
+
+test("review_queue returns a blind item without the AI suggestion, and blindChoices", async () => {
+  const blindQueue: ReviewQueue = {
+    blindChoices: [{ id: OTHER_ID, title: "Shift swaps" }],
+    counts: { backlog: 0, new: 1 },
+    items: [
+      {
+        blind: true,
+        featureRequest: {
+          accountCount: 1,
+          createdAt: "2026-10-28T12:00:00.000Z",
+          description: "Trades don't sync",
+          id: FR_ID,
+          supportCount: 1,
+          title: "Trades not syncing",
+          underlyingNeed: null,
+        },
+        isNew: true,
+        suspicions: [],
+      },
+    ],
+  };
+  vi.mocked(review.queue).mockResolvedValueOnce(blindQueue);
+  const result = await callOperator("review_queue", {});
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(result.structuredContent, blindQueue);
+});
+
+test("decide_review returns whether the decision was blind", async () => {
+  vi.mocked(review.decide).mockResolvedValueOnce({ ...decision, blind: true });
+  const result = await callOperator("decide_review", {
+    actor,
+    decision: "none",
+    featureRequestId: FR_ID,
+  });
+  assert.notEqual(result.isError, true);
+  const recorded = result.structuredContent?.decision as ReviewDecision | undefined;
+  assert.equal(recorded?.blind, true);
 });
 
 test("decide_review records a decision with the actor", async () => {
