@@ -1,5 +1,7 @@
 /**
- * Contract test: every Signal operation must produce the same outcome code over REST and MCP.
+ * Contract test: Signal check, create, support and get must produce the same outcome code over
+ * REST and MCP (comment and search share the same error mapping and write budget; add rows here
+ * when they gain transport-specific behavior).
  * One shared fake service backs both transports; each scenario runs through the REST route
  * handler and the MCP tool (via POST /api/mcp tools/call) and compares the normalized codes.
  * A new scenario is one table row; drift on any row fails with both codes in the message.
@@ -135,6 +137,19 @@ const rejectCreate =
     );
   };
 
+/** A create the service refuses with `code`; REST must surface `status` (the SignalError status). */
+const rejectedCreate = (
+  name: string,
+  code: "check_expired" | "check_mismatch" | "skip_reason_required",
+  status: number,
+): Scenario => ({
+  expected: code,
+  name,
+  op: createOp({ checkId: CHECK_ID }),
+  restStatus: status,
+  setup: rejectCreate(code, status),
+});
+
 const scenarios: Scenario[] = [
   { expected: "ok", name: "check succeeds", op: checkOp, restStatus: 200 },
   {
@@ -143,27 +158,13 @@ const scenarios: Scenario[] = [
     op: createOp({}),
     restStatus: 409,
   },
-  {
-    expected: "check_mismatch",
-    name: "create with a mismatched check",
-    op: createOp({ checkId: CHECK_ID }),
-    restStatus: 409,
-    setup: rejectCreate("check_mismatch", 409),
-  },
-  {
-    expected: "check_expired",
-    name: "create with an expired check",
-    op: createOp({ checkId: CHECK_ID }),
-    restStatus: 410,
-    setup: rejectCreate("check_expired", 410),
-  },
-  {
-    expected: "skip_reason_required",
-    name: "create past a same_need candidate without skipReason",
-    op: createOp({ checkId: CHECK_ID }),
-    restStatus: 422,
-    setup: rejectCreate("skip_reason_required", 422),
-  },
+  rejectedCreate("create with a mismatched check", "check_mismatch", 409),
+  rejectedCreate("create with an expired check", "check_expired", 410),
+  rejectedCreate(
+    "create past a same_need candidate without skipReason",
+    "skip_reason_required",
+    422,
+  ),
   {
     expected: "already_supported",
     name: "repeat support",
@@ -185,6 +186,7 @@ const scenarios: Scenario[] = [
     name: "service not configured",
     op: checkOp,
     restStatus: 503,
+    // Nulls the shared runtime for this row only; beforeEach rebuilds it for the next one.
     setup: () => {
       runtime.service = null;
     },

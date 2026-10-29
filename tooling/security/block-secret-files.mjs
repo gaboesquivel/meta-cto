@@ -49,7 +49,7 @@ export function isBlocked(filename) {
 function stagedFiles() {
   const output = execFileSync(
     "git",
-    ["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
+    ["diff", "--cached", "--name-only", "-z", "--diff-filter=ACMRT"],
     { encoding: "utf-8" },
   );
   return output.split("\0").filter((line) => line.length > 0);

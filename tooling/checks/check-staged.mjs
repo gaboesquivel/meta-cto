@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 
 import { repoRoot } from "../lib/repo-paths.mjs";
 
-const staged = spawnSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"], {
+const staged = spawnSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMRT", "-z"], {
   cwd: repoRoot,
   encoding: "buffer",
 });
