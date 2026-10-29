@@ -168,7 +168,30 @@ All three read the pilot files from `$SIGNAL_PRIVATE_DATA_DIR/pilot` and the loc
   every entry is confirmed. Commit the lock before the run; `git status` should show nothing else.
 - `pnpm signal:pilot:load` — loads accounts and backlog into the Pilot Workspace on
   `DATABASE_URL`. Idempotent: inserts missing rows by seed key, never overwrites an existing row,
-  never touches the Crewday Demo Workspace, and refuses files changed after freeze.
+  never touches the Crewday Demo Workspace, and refuses files changed after freeze. Then it stores
+  the ground truth (below). Refuses on Vercel.
+
+## Loading the ground truth
+
+Production never reads these files; it reads what `load` stores in the database (decision 0004).
+When the files are frozen, unchanged since the lock and every entry is confirmed, `load` stores
+the feedback set (`pilot_feedback`), the Answer Key need clusters for backlog and feedback with
+their confirmations (`pilot_answer_key`) and the manifest and counts (`pilot_loads`) in the Pilot
+Workspace, with the lock's fingerprint. It prints the outcome:
+
+- **Stored**: the first load.
+- **Unchanged**: the same fingerprint as the current load; nothing is written.
+- **Replaced (reset)**: a new fingerprint replaces the stored feedback set and Answer Key, and the
+  load records the previous fingerprint. The Proof Report reads "changed after freeze: reading
+  reset".
+- **Not stored**: the files are not frozen, or an entry is unconfirmed. The backlog still loads;
+  the reason is printed and nothing about the ground truth is written.
+
+The Proof Report reads the stored load and compares its fingerprint with the committed lock;
+before a load it reads Inconclusive with "pilot data not loaded". No REST or MCP operation
+returns Answer Key entries or feedback items. A database reset loses the stored ground truth:
+run `load` again from the private folder, unchanged, and the lock proves it is the same.
 
 Code: `lib/pilot-load` (`readPilotFiles`, `fingerprint`, `checkPilotReady`, `answerKeyFor`,
-`freezePilot`, `loadPilot`; `privateDataDir`, `resolvePrivateDataDir` in `private-dir.ts`).
+`freezePilot`, `loadPilot`; `privateDataDir`, `resolvePrivateDataDir` in `private-dir.ts`);
+storage in `lib/signal/repository-pilot-data.ts` (`storePilotGroundTruth`, `pilotGroundTruth`).
