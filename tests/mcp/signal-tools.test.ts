@@ -18,8 +18,12 @@ vi.mock("@/lib/signal/runtime", () => ({
 const { POST: postApiMcp } = await import("../../app/api/mcp/route");
 const { starterMcpToolCatalog } = await import("../../lib/mcp/tool-catalog");
 const { signalMcpToolNames } = await import("../../lib/mcp/register-signal-tools");
+const { POST: postSupportRest } =
+  await import("../../app/api/feature-requests/[id]/supports/route");
+const { resetSignalWriteLimit, SIGNAL_WRITE_LIMIT } = await import("../../lib/signal/http");
 
-const FR_ID = "fr-sofia";
+const FR_ID = "3f1c2b4a-5d6e-4f70-8a9b-0c1d2e3f4a5b";
+const MISSING_ID = "9d8c7b6a-5f4e-4d3c-8b2a-1f0e9d8c7b6a";
 const CHECK_ID = "8a6e0f4e-1d2b-4c3a-9f8e-7d6c5b4a3e21";
 
 const actor = { name: "support-bot", type: "agent" as const };
@@ -111,11 +115,12 @@ interface ToolCallJson {
 
 interface ToolError {
   code: string;
+  details?: unknown;
   message: string;
   resolution: string;
 }
 
-const callTool = async (name: string, args: unknown) => {
+const callTool = async (name: string, args: unknown, ip = "203.0.113.1") => {
   const response = await postApiMcp(
     new Request("http://meta-cto.localhost/api/mcp", {
       body: JSON.stringify({
@@ -127,6 +132,7 @@ const callTool = async (name: string, args: unknown) => {
       headers: {
         Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
+        "x-forwarded-for": ip,
       },
       method: "POST",
     }),
@@ -163,6 +169,7 @@ const listTools = async () => {
 
 beforeEach(() => {
   runtime.service = fakeService();
+  resetSignalWriteLimit();
 });
 
 test("signal tools are in the catalog and tools/list", async () => {
@@ -274,7 +281,7 @@ test("SignalError is returned as an actionable tool error", async () => {
       status: 404,
     }),
   );
-  const error = errorOf(await callTool("get_feature_request", { featureRequestId: "missing" }));
+  const error = errorOf(await callTool("get_feature_request", { featureRequestId: MISSING_ID }));
   assert.equal(error.code, "not_found");
   assert.equal(error.message, "Feature request not found");
   assert.match(error.resolution, /search_feature_requests/u);
@@ -293,4 +300,146 @@ test("missing service is returned as service_unavailable", async () => {
   const error = errorOf(await callTool("check_feature_request", { actor, draft }));
   assert.equal(error.code, "service_unavailable");
   assert.ok(error.resolution.length > 0);
+});
+
+test("signal writes over MCP share the per-IP write budget and return rate_limited", async () => {
+  const ip = "198.51.100.7";
+  for (let index = 0; index < SIGNAL_WRITE_LIMIT; index += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential calls consume the budget in order
+    const result = await callTool("check_feature_request", { actor, draft }, ip);
+    assert.notEqual(result.isError, true);
+  }
+  const error = errorOf(
+    await callTool(
+      "support_feature_request",
+      {
+        actor,
+        featureRequestId: FR_ID,
+        onBehalfOf,
+      },
+      ip,
+    ),
+  );
+  assert.equal(error.code, "rate_limited");
+  assert.ok(error.message.length > 0);
+  assert.match(error.resolution, /retry/iu);
+  assert.match(error.resolution, /\d+ second/u);
+  assert.equal(vi.mocked(runtime.service?.support ?? vi.fn()).mock.calls.length, 0);
+  // REST shares the same per-IP budget.
+  const rest = await postSupportRest(
+    new Request(`http://meta-cto.localhost/api/feature-requests/${FR_ID}/supports`, {
+      body: JSON.stringify({ actor, onBehalfOf }),
+      headers: { "Content-Type": "application/json", "x-forwarded-for": ip },
+      method: "POST",
+    }),
+    { params: Promise.resolve({ id: FR_ID }) },
+  );
+  assert.equal(rest.status, 429);
+  // Reads stay available, and another client keeps its own budget.
+  const read = await callTool("get_feature_request", { featureRequestId: FR_ID }, ip);
+  assert.notEqual(read.isError, true);
+  const otherClient = await callTool("check_feature_request", { actor, draft }, "198.51.100.8");
+  assert.notEqual(otherClient.isError, true);
+});
+
+test("search_feature_requests with a query consumes the write budget; without q it does not", async () => {
+  const ip = "198.51.100.9";
+  for (let index = 0; index < SIGNAL_WRITE_LIMIT + 2; index += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential calls consume the budget in order
+    const result = await callTool("search_feature_requests", { limit: 5 }, ip);
+    assert.notEqual(result.isError, true);
+  }
+  for (let index = 0; index < SIGNAL_WRITE_LIMIT; index += 1) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential calls consume the budget in order
+    const result = await callTool("search_feature_requests", { q: "shift trade" }, ip);
+    assert.notEqual(result.isError, true);
+  }
+  const error = errorOf(await callTool("search_feature_requests", { q: "shift trade" }, ip));
+  assert.equal(error.code, "rate_limited");
+});
+
+test("a repeat support is refused with already_supported and the existing support", async () => {
+  vi.mocked(runtime.service?.support ?? vi.fn()).mockResolvedValueOnce({
+    created: false,
+    featureRequest: detail,
+    support: supportView,
+  });
+  const error = errorOf(
+    await callTool("support_feature_request", { actor, featureRequestId: FR_ID, onBehalfOf }),
+  );
+  assert.equal(error.code, "already_supported");
+  assert.match(error.resolution, /already supports this Feature Request/u);
+  assert.match(error.resolution, /Comment/u);
+  const details = error.details as { featureRequest?: { id?: string }; support?: { id?: string } };
+  assert.equal(details.support?.id, "support-1");
+  assert.equal(details.featureRequest?.id, FR_ID);
+});
+
+test("support_feature_request description mentions already_supported", async () => {
+  const tools = await listTools();
+  const support = tools.find((tool) => tool.name === "support_feature_request");
+  assert.match(support?.description ?? "", /already_supported/u);
+});
+
+test("unexpected errors return a generic internal_error without leaking internals", async () => {
+  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.mocked(runtime.service?.get ?? vi.fn()).mockRejectedValueOnce(
+    new Error("connect ECONNREFUSED postgres://user:secret@db/neon"),
+  );
+  const result = await callTool("get_feature_request", { featureRequestId: FR_ID });
+  const error = errorOf(result);
+  assert.equal(error.code, "internal_error");
+  assert.equal(error.message, "Unexpected error");
+  assert.doesNotMatch(JSON.stringify(result), /secret|ECONNREFUSED/u);
+  assert.equal(spy.mock.calls.length, 1);
+  spy.mockRestore();
+});
+
+test("service_unavailable drops raw string details but keeps structured ones", async () => {
+  vi.mocked(runtime.service?.check ?? vi.fn()).mockRejectedValueOnce(
+    new SignalError({
+      code: "service_unavailable",
+      details: "AI Gateway 401: invalid key sk-live-123",
+      message: "The embedding provider is unavailable.",
+      resolution: "Retry later.",
+      status: 503,
+    }),
+  );
+  const raw = await callTool("check_feature_request", { actor, draft });
+  assert.equal(errorOf(raw).code, "service_unavailable");
+  assert.equal(errorOf(raw).details, undefined);
+  assert.doesNotMatch(JSON.stringify(raw), /sk-live-123/u);
+
+  vi.mocked(runtime.service?.check ?? vi.fn()).mockRejectedValueOnce(
+    new SignalError({
+      code: "service_unavailable",
+      details: { retryAfterSeconds: 5 },
+      message: "The embedding provider is unavailable.",
+      resolution: "Retry later.",
+      status: 503,
+    }),
+  );
+  assert.deepEqual(errorOf(await callTool("check_feature_request", { actor, draft })).details, {
+    retryAfterSeconds: 5,
+  });
+});
+
+test("a malformed featureRequestId returns not_found like REST", async () => {
+  for (const name of [
+    "get_feature_request",
+    "support_feature_request",
+    "comment_on_feature_request",
+  ]) {
+    // oxlint-disable-next-line no-await-in-loop -- one tool at a time keeps failures readable
+    const result = await callTool(name, {
+      actor,
+      body: "x",
+      featureRequestId: "fr-sofia",
+      onBehalfOf,
+    });
+    const error = errorOf(result);
+    assert.equal(error.code, "not_found", name);
+    assert.ok(error.resolution.length > 0);
+  }
+  assert.equal(vi.mocked(runtime.service?.get ?? vi.fn()).mock.calls.length, 0);
 });
