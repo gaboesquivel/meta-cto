@@ -185,6 +185,31 @@ describe("GET /api/feature-requests", () => {
     );
     expect(responses.every((response) => response.status === 200)).toBe(true);
   });
+
+  it("rate-limits semantic search (q) as a write because it costs an embedding", async () => {
+    const ip = "198.51.100.2";
+    const allowed = await Promise.all(
+      Array.from({ length: SIGNAL_WRITE_LIMIT }, () =>
+        listFeatureRequests(jsonRequest("/api/feature-requests?q=shifts", { ip, method: "GET" })),
+      ),
+    );
+    expect(allowed.every((response) => response.status === 200)).toBe(true);
+    const limited = await listFeatureRequests(
+      jsonRequest("/api/feature-requests?q=shifts", { ip, method: "GET" }),
+    );
+    expect(limited.status).toBe(429);
+    expect(await codeOf(limited)).toBe("rate_limited");
+  });
+
+  it("does not rate-limit a blank q", async () => {
+    const ip = "198.51.100.3";
+    const responses = await Promise.all(
+      Array.from({ length: SIGNAL_WRITE_LIMIT + 1 }, () =>
+        listFeatureRequests(jsonRequest("/api/feature-requests?q=%20", { ip, method: "GET" })),
+      ),
+    );
+    expect(responses.every((response) => response.status === 200)).toBe(true);
+  });
 });
 
 describe("GET /api/feature-requests/[id]", () => {

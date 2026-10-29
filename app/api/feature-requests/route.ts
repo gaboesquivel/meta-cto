@@ -3,14 +3,19 @@ import { handleSignal, parseJsonBody, parseSearchParams } from "@/lib/signal/htt
 
 export const dynamic = "force-dynamic";
 
-/** Search or list Feature Requests; `q` is semantic. */
+/**
+ * Search or list Feature Requests; `q` is semantic. A non-empty `q` costs a paid embedding,
+ * so it spends the per-client write budget; plain listing does not.
+ */
 export const GET = (request: Request) =>
   handleSignal({
+    request,
     run: async (service) => {
       const input = parseSearchParams(request, searchInputSchema);
       const page = await service.search(input);
       return Response.json(page);
     },
+    write: Boolean(new URL(request.url).searchParams.get("q")?.trim()),
   });
 
 /** Create a Feature Request; requires a recent Check for the same Draft. */

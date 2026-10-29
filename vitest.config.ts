@@ -12,5 +12,7 @@ export default defineConfig({
     exclude: ["node_modules/**", ".agents/**", ".next/**", "**/.eve/**", "mcp-app/**"],
     include: ["**/*.test.ts"],
     pool: "forks",
+    // PGlite suites can exceed the 5 s default under parallel load.
+    testTimeout: 20_000,
   },
 });

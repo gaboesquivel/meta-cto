@@ -5,6 +5,7 @@ import { getDb } from "@/lib/signal/db";
 import type { SignalDb } from "@/lib/signal/db";
 import { createRepository } from "@/lib/signal/repository";
 import { createSignalService } from "@/lib/signal/service";
+import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
 /**
  * Builds the service for the Crewday Demo Workspace. The workspace row is resolved lazily on
@@ -18,16 +19,24 @@ export const createRuntimeService = (deps: {
 }): SignalService => {
   const repo = createRepository(deps.db);
   let ready: Promise<SignalService> | null = null;
-  const resolve = () => {
-    ready ??= repo.ensureWorkspace(workspace).then((row) =>
-      createSignalService({
+  const load = async () => {
+    try {
+      const row = await repo.ensureWorkspace(workspace);
+      return createSignalService({
         embedder: deps.embedder,
         judge: deps.judge,
         judgeTimeoutMs: deps.judgeTimeoutMs,
         repo,
         workspaceId: row.id,
-      }),
-    );
+      });
+    } catch (error) {
+      // A transient failure must not poison this instance: the next call retries.
+      ready = null;
+      throw error;
+    }
+  };
+  const resolve = () => {
+    ready ??= load();
     return ready;
   };
 
@@ -58,11 +67,13 @@ export const getSignalService = (): SignalService | null => {
   const embedder = createGatewayEmbedder();
   const model = resolveJudgeModel();
   if (!(embedder && model)) return null;
+  const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
   cached = createRuntimeService({
     db,
     embedder,
-    judge: createLlmJudge({ model }),
-    judgeTimeoutMs: judgeTimeoutFromEnv(),
+    // The judge aborts its own model call at the same budget the service waits for.
+    judge: createLlmJudge({ model, timeoutMs: judgeTimeoutMs }),
+    judgeTimeoutMs,
   });
   return cached;
 };

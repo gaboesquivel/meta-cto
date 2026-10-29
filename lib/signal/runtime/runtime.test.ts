@@ -53,6 +53,27 @@ describe("signal runtime", () => {
     const metrics = await service.metrics();
     assert.equal(metrics.checks, 1);
   });
+
+  it("retries the workspace lookup after a transient database error", async () => {
+    const db = await createTestDb();
+    let failures = 1;
+    const flaky = new Proxy(db, {
+      get(target, property, receiver) {
+        if (property === "insert" && failures > 0) {
+          failures -= 1;
+          return () => {
+            throw new Error("connection reset");
+          };
+        }
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const service = createRuntimeService({ db: flaky, embedder, judge });
+
+    await assert.rejects(service.metrics(), /connection reset/u);
+    const metrics = await service.metrics();
+    assert.equal(metrics.checks, 0);
+  });
 });
 
 describe("judgeTimeoutFromEnv", () => {
