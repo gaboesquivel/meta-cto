@@ -37,6 +37,7 @@ MCP **server names** are template-specific (`flow-next` / `flow-mono` and `*-ope
 - `comment_on_feature_request`
 - `search_feature_requests`
 - `get_feature_request`
+- `proof_report` (read-only Proof Report; needs the Pilot Key header, else `pilot_key_required`)
 
 Signal tool errors are MCP tool errors (`isError: true`) whose content is `{ error: { code, message, resolution } }`.
 
@@ -49,6 +50,7 @@ Signal tool errors are MCP tool errors (`isError: true`) whose content is `{ err
 - `decide_review` (Product Manager decides duplicate with canonical, related with a Shared Dimension, distinct, or none)
 - `undo_review_decision` (undo keeps history)
 - `scan_backlog` (costly; run only on request)
+- `proof_report` (read-only Proof Report; Operator access is enough)
 
 Review tool errors use the same `{ error: { code, message, resolution } }` shape (`invalid_decision`, `already_undone`, `not_found`, `service_unavailable`).
 
