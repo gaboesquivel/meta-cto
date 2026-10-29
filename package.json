@@ -18,6 +18,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/db-seed.ts",
+    "signal:scan": "tsx scripts/signal-scan.ts",
     "lint": "oxlint . && oxfmt --check .",
     "lint:fix": "oxlint --fix . && oxfmt --write --no-error-on-unmatched-pattern .",
     "format": "oxfmt --write --no-error-on-unmatched-pattern .",
