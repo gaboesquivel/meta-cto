@@ -48,7 +48,7 @@ Example (Crewday demo data): Sofia (employee) reports that shift swaps don't syn
 
 - **Submitters (staff):** customer-facing people (support, success, sales) filing requests on a customer's behalf, with account context.
 - **Submitters (agents):** AI agents (support bots, assistants via MCP) filing on a customer's behalf. First-class users: the MVP is API and MCP first.
-- **Product managers:** review new requests against their nearest matches and confirm, merge or split. They own every consequential decision.
+- **Product managers:** review new requests and AI-suspected duplicates, and decide Duplicate, Related or Distinct; duplicates are reversible associations with Undo. They own every consequential decision.
 - Later, not in the MVP: product leaders (prioritization, decision briefs) and customers submitting directly.
 
 ## Why now

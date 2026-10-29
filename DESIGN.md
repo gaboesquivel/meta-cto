@@ -15,7 +15,7 @@ UI copy uses the [glossary](GLOSSARY.md) terms. Pages work at phone width. There
 
 ## Review journey (spec 002)
 
-- `/review`: headline metrics first (Intake Duplicate Rate next to the backlog baseline, Review Coverage, Suspected Duplication labeled AI-suspected, each with counts), then the Review Queue: each Feature Request beside its Suspected Duplicates with the AI Reason, and Mark Duplicate, Related (with a Shared Dimension), Distinct or No duplicates. Actions need Operator sign-in; without it the page stays readable. Undo is always offered.
+- `/review`: headline metrics first (Intake Duplicate Rate next to the backlog baseline, Review Coverage, Suspected Duplication labeled AI-suspected, each with counts), then the Review Queue: each Feature Request beside its Suspected Duplicates with the AI Reason, and Mark Duplicate, Related (with a Shared Dimension), Distinct or No duplicates. Actions, including Undo, need Operator sign-in; without it the page stays readable. Every decision stays in the history with its Undo.
 - Canonical Feature Requests show their duplicates' Supports and Comments labeled "via <title>" in the customer's words, each Account counted once, plus the review history; a duplicate's page links to its canonical one.
 - The AI suggests; the Product Manager decides. Copy never calls a suspicion a duplicate.
 

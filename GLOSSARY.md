@@ -119,20 +119,24 @@ Two existing Feature Requests the AI judged Same Need. A prompt for review, neve
 _Avoid_: Duplicate (reserved for a Review Decision), match
 
 **Review Decision** _(value object)_:
-A Product Manager's judgment: **Duplicate** (with a canonical Feature Request), **Related** (with a Shared Dimension the Product Manager states) or **Distinct**, recorded with who, when and the AI suggestion it answered.
+A Product Manager's judgment: **Duplicate** (with a canonical Feature Request), **Related** (with a Shared Dimension the Product Manager states), **Distinct**, or **No Duplicates** for a request with no suspicions, recorded with who, when and the AI suggestion it answered.
 _Avoid_: Verdict (that is the Check's)
 
 **Duplicate**:
 Review Decision that a Feature Request repeats a canonical one; recorded by Mark Duplicate.
 _Avoid_: Same need (that is a Verdict)
 
-**Mark Duplicate** _(domain event: Feature Request Marked Duplicate)_:
+**Mark Duplicate** _(recorded as a Review Decided event)_:
 A reversible association from a Feature Request to a canonical one. No evidence moves; the canonical Feature Request shows its duplicates' Supports and Comments with provenance, counting each Account once.
 _Avoid_: Merge, combine, consolidate, dedupe
 
-**Undo** _(domain event: Review Decision Undone)_:
+**Undo** _(recorded as a Review Undone event)_:
 Reversing a Review Decision; a Mark Duplicate association ends and the decision history is kept.
 _Avoid_: Split, unmerge
+
+**No Duplicates**:
+Review Decision that a new Feature Request with no Suspected Duplicates repeats no existing one. A decision, not the absence of one.
+_Avoid_: None, undecided
 
 **Reviewed**:
 A Feature Request whose review is complete as a whole: every Suspected Duplicate on it is decided, or the Product Manager confirmed it has none.

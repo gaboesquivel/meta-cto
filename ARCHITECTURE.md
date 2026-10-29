@@ -2,7 +2,7 @@
 
 ## Foundation
 
-Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at commit `a041f135f02b3ed277607eaf21982807e1c6af4a` (Next.js 16 App Router, AI SDK, MCP). Product: [PRODUCT.md](PRODUCT.md). Current slice: [spec 001](docs/specs/001-check-before-create.md).
+Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at commit `a041f135f02b3ed277607eaf21982807e1c6af4a` (Next.js 16 App Router, AI SDK, MCP). Product: [PRODUCT.md](PRODUCT.md). Slices: [spec 001](docs/specs/001-check-before-create.md) (check before create) and [spec 002](docs/specs/002-review-queue.md) (review queue).
 
 ## Runtime surfaces
 
