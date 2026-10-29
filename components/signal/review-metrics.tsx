@@ -1,6 +1,6 @@
 import { cn } from "cn";
 
-import type { Metrics } from "@/lib/signal/contracts";
+import type { ReviewMetrics } from "@/lib/signal/contracts";
 
 import { metricCards } from "./review-view";
 import type { MetricCard } from "./review-view";
@@ -61,7 +61,7 @@ export const ReviewMetricsPanel = ({
   metrics,
 }: {
   loading: boolean;
-  metrics: Metrics | null;
+  metrics: ReviewMetrics | null;
 }) => (
   <section aria-labelledby="metrics-heading" aria-busy={loading} className="flex flex-col gap-3">
     <h2 className="sr-only" id="metrics-heading">

@@ -10,6 +10,7 @@ import { SignalError, actorSchema } from "../contracts";
 import type { SuspectedDuplicateRow } from "../repository";
 import { orderedPair, toReviewDecision } from "../repository";
 import { isUuid, parseInput } from "./context";
+import { runMetrics } from "./metrics";
 import { runDecide } from "./review-decide";
 import type { ReviewContext, ReviewServiceDeps } from "./review-context";
 import { actorColumns, decisionNotFound } from "./review-context";
@@ -134,6 +135,7 @@ export const createReviewService = (deps: ReviewServiceDeps): ReviewService => {
   };
   return {
     decide: async (input, actor) => await runDecide(context, input, actor),
+    metrics: async () => await runMetrics(context),
     queue: async () => await runQueue(context),
     scan: async (options) => {
       if (!deps.scan) {

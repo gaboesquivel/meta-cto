@@ -77,6 +77,7 @@ describe("signal service create", () => {
         featureRequestId: sofia.id,
         reason: "both touch trades",
         sharedDimension: "shift trades",
+        source: "check",
         title: "Shift swaps don't sync",
       },
     ]);

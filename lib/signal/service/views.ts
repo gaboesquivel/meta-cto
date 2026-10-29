@@ -5,6 +5,7 @@ import type {
   EvidenceVia,
   FeatureRequestDetail,
   FeatureRequestSummary,
+  RelatedLinkSource,
   RelatedLinkView,
   SupportView,
 } from "../contracts";
@@ -68,8 +69,8 @@ const decisionOther = (decision: ReviewDecisionRow, id: string) =>
   decision.featureRequestId === id ? decision.otherId : decision.featureRequestId;
 
 /**
- * Stored Related Links plus one per active Related decision, so Undo removes the review's link
- * while a link recorded by a Check stays.
+ * Stored Related Links plus one per active Related decision. Where a pair has both, the Product
+ * Manager's Shared Dimension wins (source "review"); Undo brings the stored link back.
  */
 const relatedLinkViews = async (
   context: Pick<ServiceContext, "repo">,
@@ -77,20 +78,24 @@ const relatedLinkViews = async (
   decisions: ReviewDecisionRow[],
 ): Promise<RelatedLinkView[]> => {
   const links = await context.repo.listRelatedLinks(id);
-  const stored = links.map((link) => ({
-    featureRequestId: otherSide(link, id),
-    reason: link.reason,
-    sharedDimension: link.sharedDimension,
-  }));
-  const linked = new Set(stored.map((link) => link.featureRequestId));
   const reviewed = decisions
     .filter((decision) => decision.decision === "related" && !decision.undoneAt)
     .map((decision) => ({
       featureRequestId: decisionOther(decision, id) ?? "",
       reason: `Decided Related in review by ${decision.actorName}.`,
       sharedDimension: decision.sharedDimension ?? "",
+      source: "review" as const,
     }))
-    .filter((link) => link.featureRequestId && !linked.has(link.featureRequestId));
+    .filter((link) => link.featureRequestId);
+  const decided = new Set(reviewed.map((link) => link.featureRequestId));
+  const stored = links
+    .map((link) => ({
+      featureRequestId: otherSide(link, id),
+      reason: link.reason,
+      sharedDimension: link.sharedDimension,
+      source: link.source as RelatedLinkSource,
+    }))
+    .filter((link) => !decided.has(link.featureRequestId));
   const all = [...stored, ...reviewed];
   const others = await context.repo.getFeatureRequests(all.map((link) => link.featureRequestId));
   const titles = new Map(others.map((row) => [row.id, row.title]));

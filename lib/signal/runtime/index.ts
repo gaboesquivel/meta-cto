@@ -51,7 +51,6 @@ export const createRuntimeService = (deps: {
     comment: (id, input) => resolve().then((service) => service.comment(id, input)),
     create: (input) => resolve().then((service) => service.create(input)),
     get: (id) => resolve().then((service) => service.get(id)),
-    metrics: () => resolve().then((service) => service.metrics()),
     search: (input) => resolve().then((service) => service.search(input)),
     support: (id, input) => resolve().then((service) => service.support(id, input)),
   };
@@ -121,6 +120,7 @@ export const createRuntimeReviewService = (deps: {
 
   return {
     decide: (input, actor) => resolve().then((service) => service.decide(input, actor)),
+    metrics: () => resolve().then((service) => service.metrics()),
     queue: () => resolve().then((service) => service.queue()),
     scan: (options) => resolve().then((service) => service.scan(options)),
     undo: (decisionId, actor) => resolve().then((service) => service.undo(decisionId, actor)),

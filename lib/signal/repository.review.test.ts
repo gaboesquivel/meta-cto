@@ -345,12 +345,33 @@ describe("review repository", () => {
     assert.deepEqual(await queued(), []);
     assert.equal(sizeOf(await repo.listUndecidedSuspectedDuplicates(workspaceId)), 0);
     counts = await repo.reviewMetricCounts(workspaceId);
+    // Both reviewed sides of an active Duplicate decision count as duplicates of the same need.
     assert.deepEqual(counts, {
-      backlog: { duplicates: 1, reviewed: 2, total: 2 },
+      backlog: { duplicates: 2, reviewed: 2, total: 2 },
       duplicateDecisions: { total: 2, undone: 0 },
       new: { duplicates: 1, reviewed: 2, total: 2 },
       open: { suspected: 0, total: 2 },
     });
+  });
+
+  it("associates a duplicate only while it has no canonical yet", async () => {
+    const a = await addRequest("A");
+    const b = await addRequest("B");
+    const c = await addRequest("C");
+
+    assert.equal(await repo.setDuplicateOf(b.id, a.id), true);
+    assert.equal(await repo.setDuplicateOf(b.id, c.id), false);
+    const row = await repo.getFeatureRequest(b.id);
+    assert.equal(row?.duplicateOfId, a.id);
+  });
+
+  it("deletes a withdrawn decision", async () => {
+    const a = await addRequest("A");
+    const decision = await decide({ decision: "none", featureRequestId: a.id });
+
+    await repo.deleteReviewDecision(decision.id);
+
+    assert.equal(await repo.getReviewDecision(decision.id), null);
   });
 
   it("lists, counts and marks unscanned open requests", async () => {
@@ -359,7 +380,7 @@ describe("review repository", () => {
     const b = await addRequest("B", { embedding: unit(1) });
     await repo.setDuplicateOf(b.id, a.id);
 
-    assert.equal(await repo.countUnscannedFeatureRequests(workspaceId), 2);
+    assert.equal(await repo.countUnscannedFeatureRequests(workspaceId), 1);
     const unscanned = await repo.listUnscannedFeatureRequests({ limit: 10, workspaceId });
     assert.deepEqual(
       unscanned.map((row) => row.id),

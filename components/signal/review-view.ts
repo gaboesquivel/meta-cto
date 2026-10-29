@@ -3,12 +3,12 @@ import type {
   DecideInput,
   DuplicateEvidence,
   EvidenceVia,
-  Metrics,
   ReviewDecision,
   ReviewDecisionKind,
+  ReviewMetrics,
   SupportView,
 } from "@/lib/signal/contracts";
-import { decisionRuleViolation, isReviewMetrics } from "@/lib/signal/contracts";
+import { decisionRuleViolation } from "@/lib/signal/contracts";
 
 /** Pure view helpers for the Review Queue and canonical evidence (spec 002). */
 
@@ -44,10 +44,9 @@ const DESCRIPTIONS: Record<MetricCard["key"], string> = {
     "Open Feature Requests with an undecided Suspected Duplicate. Review workload, not confirmed duplication.",
 };
 
-/** The three headline metrics, each with its counts; "—" when there is no data. */
-export const metricCards = (metrics: Metrics | null): MetricCard[] => {
-  const review = metrics && isReviewMetrics(metrics) ? metrics : null;
-  if (!review) {
+/** The three headline metrics, each with its counts; "—" while metrics have not loaded. */
+export const metricCards = (metrics: ReviewMetrics | null): MetricCard[] => {
+  if (!metrics) {
     return [
       {
         aiSuspected: false,
@@ -78,7 +77,7 @@ export const metricCards = (metrics: Metrics | null): MetricCard[] => {
       },
     ];
   }
-  const { backlogBaseline, intakeDuplicateRate, reviewCoverage, suspectedDuplication } = review;
+  const { backlogBaseline, intakeDuplicateRate, reviewCoverage, suspectedDuplication } = metrics;
   return [
     {
       aiSuspected: false,

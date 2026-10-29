@@ -43,6 +43,19 @@ const queue: ReviewQueue = { counts: { backlog: 0, new: 0 }, items: [] };
 
 const fakeReview = (): ReviewService => ({
   decide: vi.fn(() => Promise.resolve(decision)),
+  metrics: vi.fn(() =>
+    Promise.resolve({
+      backlogBaseline: { duplicates: 0, rate: null, reviewed: 0 },
+      checks: 0,
+      checksWithSameNeed: 0,
+      createsAfterSameNeed: 0,
+      intakeDuplicateRate: { duplicates: 0, rate: null, reviewed: 0 },
+      reviewCoverage: { rate: null, reviewed: 0, total: 0 },
+      suggestionAcceptance: null,
+      suspectedDuplication: { open: 0, rate: null, total: 0 },
+      undoRate: { decisions: 0, rate: null, undone: 0 },
+    }),
+  ),
   queue: vi.fn(() => Promise.resolve(queue)),
   scan: vi.fn(() => Promise.resolve({ pairsFound: 2, remaining: 5, scanned: 10 })),
   undo: vi.fn(() =>
