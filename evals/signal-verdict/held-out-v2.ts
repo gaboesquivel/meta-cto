@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
+import { evalDir } from "./paths";
 import { evalPairSchema } from "./sets";
 
 /**
@@ -166,15 +167,15 @@ export const freezeV2 = (input: {
   };
 };
 
-export const loadHeldOutV2 = (dir = import.meta.dirname): HeldOutV2Pair[] =>
+export const loadHeldOutV2 = (dir = evalDir()): HeldOutV2Pair[] =>
   parseHeldOutV2(JSON.parse(readFileSync(path.join(dir, V2_SET_FILE), "utf-8")));
 
-export const readV2Lock = (dir = import.meta.dirname): HeldOutV2Lock | null => {
+export const readV2Lock = (dir = evalDir()): HeldOutV2Lock | null => {
   const file = path.join(dir, V2_LOCK_FILE);
   if (!existsSync(file)) return null;
   return heldOutV2LockSchema.parse(JSON.parse(readFileSync(file, "utf-8")));
 };
 
-export const writeV2Lock = (lock: HeldOutV2Lock, dir = import.meta.dirname): void => {
+export const writeV2Lock = (lock: HeldOutV2Lock, dir = evalDir()): void => {
   writeFileSync(path.join(dir, V2_LOCK_FILE), `${JSON.stringify(lock, null, 2)}\n`, "utf-8");
 };

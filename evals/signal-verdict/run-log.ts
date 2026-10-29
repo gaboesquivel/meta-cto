@@ -7,6 +7,7 @@ import { judgeModelId, judgeOutputSchema } from "@/lib/signal/agent";
 import { buildJudgePrompt, JUDGE_SYSTEM } from "@/lib/signal/agent/prompt";
 
 import type { ExpectedVerdict, PredictedVerdict } from "./metrics";
+import { evalDir } from "./paths";
 import type { V2Readings } from "./readings";
 
 /** Append-only log of every eval run, one JSON object per line. Commit it with the reports. */
@@ -80,7 +81,7 @@ const entryKeySchema = z
   })
   .loose();
 
-export const readRunLog = (dir = import.meta.dirname): RunLogEntry[] => {
+export const readRunLog = (dir = evalDir()): RunLogEntry[] => {
   const file = path.join(dir, RUN_LOG_FILE);
   if (!existsSync(file)) return [];
   return readFileSync(file, "utf-8")
@@ -89,7 +90,7 @@ export const readRunLog = (dir = import.meta.dirname): RunLogEntry[] => {
     .map((line) => entryKeySchema.parse(JSON.parse(line)) as unknown as RunLogEntry);
 };
 
-export const appendRunLog = (entry: RunLogEntry, dir = import.meta.dirname): void => {
+export const appendRunLog = (entry: RunLogEntry, dir = evalDir()): void => {
   appendFileSync(path.join(dir, RUN_LOG_FILE), `${JSON.stringify(entry)}\n`, "utf-8");
 };
 

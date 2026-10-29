@@ -12,6 +12,7 @@ import {
   V2_SET_NAME,
 } from "./held-out-v2";
 import { computeMetrics, formatRate, isCorrect, KILL_LINE } from "./metrics";
+import { evalDir } from "./paths";
 import type { EvalMetrics, PredictedVerdict } from "./metrics";
 import { v2Readings } from "./readings";
 import type { BarReading, V2Readings } from "./readings";
@@ -209,7 +210,7 @@ const reportFileFor = (set: RunSetName, repeat: boolean): string => {
  * version is flagged and never overwrites the reading's report.
  */
 export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> => {
-  const dir = options.dir ?? import.meta.dirname;
+  const dir = options.dir ?? evalDir();
   const at = (options.now ?? (() => new Date()))();
   const prompt = options.prompt ?? currentPromptVersion();
   const isV2 = options.set === V2_SET_NAME;

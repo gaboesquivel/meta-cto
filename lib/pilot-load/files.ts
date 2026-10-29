@@ -11,7 +11,12 @@ import type { AnswerKeyLabels } from "@/lib/signal/service/answer-key";
  * fixed by a fingerprint lock before the run; any later change resets the reading.
  */
 
-export const PILOT_DIR = path.resolve(import.meta.dirname, "../../data/pilot");
+/**
+ * The pilot files' directory, resolved from the project root (`process.cwd()`) at call time, never
+ * at import: Next's server bundle has no `import.meta.dirname`. Scripts and tests run from the
+ * repo root; pass `dir` to read elsewhere.
+ */
+export const pilotDir = (): string => path.join(process.cwd(), "data", "pilot");
 
 export const PILOT_FILES = {
   answerKey: "answer-key.json",
@@ -124,20 +129,20 @@ export interface PilotFiles {
 const readJson = (dir: string, file: string): unknown =>
   JSON.parse(readFileSync(path.join(dir, file), "utf-8"));
 
-export const readPilotFiles = (dir = PILOT_DIR): PilotFiles => ({
+export const readPilotFiles = (dir = pilotDir()): PilotFiles => ({
   answerKey: answerKeySchema.parse(readJson(dir, PILOT_FILES.answerKey)),
   backlog: pilotBacklogSchema.parse(readJson(dir, PILOT_FILES.backlog)),
   feedback: z.array(pilotFeedbackSchema).parse(readJson(dir, PILOT_FILES.feedback)),
   manifest: pilotManifestSchema.parse(readJson(dir, PILOT_FILES.manifest)),
 });
 
-export const readPilotLock = (dir = PILOT_DIR): PilotLock | null => {
+export const readPilotLock = (dir = pilotDir()): PilotLock | null => {
   const file = path.join(dir, PILOT_FILES.lock);
   if (!existsSync(file)) return null;
   return pilotLockSchema.parse(readJson(dir, PILOT_FILES.lock));
 };
 
-export const writePilotLock = (lock: PilotLock, dir = PILOT_DIR): void => {
+export const writePilotLock = (lock: PilotLock, dir = pilotDir()): void => {
   writeFileSync(path.join(dir, PILOT_FILES.lock), `${JSON.stringify(lock, null, 2)}\n`, "utf-8");
 };
 
