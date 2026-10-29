@@ -1,5 +1,5 @@
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
-import type { McpServer, StandardSchemaWithJSON } from "@modelcontextprotocol/server";
+import type { McpServer } from "@modelcontextprotocol/server";
 import {
   checkInputSchema,
   commentInputSchema,
@@ -14,6 +14,7 @@ import { getSignalService } from "@/lib/signal/runtime";
 import { z } from "zod";
 
 import { signalToolDescriptions } from "./signal-tool-descriptions";
+import { advertised, invalidInputToolError, toToolError } from "./signal-tool-helpers";
 import { asToolError, asToolResult } from "./tool-result";
 
 export { signalMcpToolNames } from "./signal-tool-descriptions";
@@ -29,21 +30,6 @@ const toolSchemas = {
   support: supportInputSchema.extend({ featureRequestId: featureRequestIdSchema }),
 };
 
-/**
- * Advertise the zod JSON Schema in tools/list but let every call through, so the
- * handler can return `invalid_input` with a resolution instead of the SDK's bare message.
- */
-const advertised = <S extends z.ZodType>(
-  schema: S,
-): StandardSchemaWithJSON<z.input<S>, unknown> => ({
-  "~standard": {
-    jsonSchema: schema["~standard"].jsonSchema,
-    validate: (value: unknown) => ({ value }),
-    vendor: "signal",
-    version: 1,
-  },
-});
-
 const plainToolMeta = { _meta: {} };
 
 const requireService = (): SignalService => {
@@ -54,26 +40,6 @@ const requireService = (): SignalService => {
     message: "Signal is not configured on this deployment (database or AI keys missing).",
     resolution: "Retry later or ask the operator to configure DATABASE_URL and the AI Gateway key.",
     status: 503,
-  });
-};
-
-/** Keep structured details (issues, existing records); drop raw strings that may wrap provider messages. */
-const safeDetails = (details: unknown) =>
-  details && typeof details === "object" ? details : undefined;
-
-const toToolError = (error: unknown) => {
-  if (error instanceof SignalError)
-    return asToolError({
-      code: error.code,
-      details: safeDetails(error.details),
-      message: error.message,
-      resolution: error.resolution,
-    });
-  console.error("[signal] unexpected MCP tool error", error);
-  return asToolError({
-    code: "internal_error",
-    message: "Unexpected error",
-    resolution: "Retry the call; if it keeps failing, report it to the operator.",
   });
 };
 
@@ -113,15 +79,7 @@ const malformedIdError = () =>
 
 const invalidInputError = (error: z.ZodError) => {
   if (error.issues.some((issue) => issue.path[0] === "featureRequestId")) return malformedIdError();
-  return asToolError({
-    code: "invalid_input",
-    details: error.issues.map((issue) => ({
-      message: issue.message,
-      path: issue.path.join("."),
-    })),
-    message: `Invalid arguments: ${z.prettifyError(error)}`,
-    resolution: "Fix the fields listed in details to match the tool's input schema and call again.",
-  });
+  return invalidInputToolError(error);
 };
 
 interface SignalToolOptions<S extends z.ZodType> {
