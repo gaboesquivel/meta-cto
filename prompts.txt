@@ -302,3 +302,7 @@ Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick).
 2026-10-29T03:01:50Z — build progress
 Summary: Integrated 003 task 04 (#26) at bc39a6c; folded blind-detail leak and resetDemo scoping into task 05.
 Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick), DESIGN.md (worker).
+
+2026-10-29T03:18:45Z — build progress
+Summary: Integrated 003 task 05 (#27) at 9d8278f after fix round (Answer Key as need clusters; search hides blind restated need); started task 07.
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick).
