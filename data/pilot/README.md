@@ -17,7 +17,8 @@ $SIGNAL_PRIVATE_DATA_DIR/
 
 Start by copying the templates (`cp data/pilot/{manifest,backlog,feedback,answer-key}.json
 "$SIGNAL_PRIVATE_DATA_DIR/pilot/"`) and fill them there. The commands refuse, and say why, when
-the variable is unset, the folder or a file is missing, or the folder resolves (after symlinks)
+the variable is unset, the folder or a file is missing, or the folder, its `pilot/` or `evals/`
+subfolder, or any file resolves (after symlinks, case-folded on case-insensitive filesystems)
 inside the git working tree (`git rev-parse --show-toplevel`). Only the lock is written back into
 this folder. Each Operator keeps their own copy; the committed fingerprint proves it is the same.
 

@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "vitest";
 
 import {
+  checkPrivateFiles,
   gitTopLevel,
+  isInsideTree,
   missingPrivateFiles,
   PRIVATE_DATA_ENV,
   PRIVATE_LAYOUT,
@@ -21,6 +31,15 @@ const setup = () => {
   mkdirSync(path.join(repo, "data"), { recursive: true });
   mkdirSync(outside);
   return { base, outside, repo };
+};
+
+/** A resolved private folder outside a fake checkout, with an empty pilot/ subfolder. */
+const filled = () => {
+  const { outside, repo } = setup();
+  const dir = resolvePrivateDataDir(outside, { topLevel: repo });
+  assert.ok(dir.ok);
+  mkdirSync(dir.pilotDir);
+  return { dir, outside, repo };
 };
 
 describe("resolvePrivateDataDir", () => {
@@ -98,6 +117,37 @@ describe("resolvePrivateDataDir", () => {
     assert.ok(resolvePrivateDataDir(sibling, { topLevel: repo }).ok);
   });
 
+  it("refuses a child folder whose name starts with '..'", () => {
+    const { repo } = setup();
+    const child = path.join(repo, "..secret");
+    mkdirSync(child);
+    const result = resolvePrivateDataDir(child, { topLevel: repo });
+    assert.ok(!result.ok);
+    assert.equal(result.code, "inside_repo");
+  });
+
+  it("refuses a wrong-case path into the repo on a case-insensitive filesystem", (context) => {
+    const { base, repo } = setup();
+    const upper = path.join(base, "REPO", "data");
+    if (!existsSync(upper) || statSync(upper).ino !== statSync(path.join(repo, "data")).ino) {
+      context.skip();
+    }
+    const result = resolvePrivateDataDir(upper, { topLevel: repo });
+    assert.ok(!result.ok);
+    assert.equal(result.code, "inside_repo");
+  });
+
+  it("refuses an outside root whose pilot/ or evals/ is a symlink into the repo", () => {
+    for (const sub of [PRIVATE_LAYOUT.pilot, PRIVATE_LAYOUT.evals]) {
+      const { outside, repo } = setup();
+      symlinkSync(path.join(repo, "data"), path.join(outside, sub));
+      const result = resolvePrivateDataDir(outside, { topLevel: repo });
+      assert.ok(!result.ok, sub);
+      assert.equal(result.code, "inside_repo");
+      assert.match(result.message, new RegExp(sub, "u"));
+    }
+  });
+
   it("resolves a relative path against cwd", () => {
     const { base, repo } = setup();
     const result = resolvePrivateDataDir("private", { cwd: base, topLevel: repo });
@@ -130,6 +180,63 @@ describe("privateDataDir", () => {
   it("finds no top level outside a git checkout", () => {
     const { outside } = setup();
     assert.equal(gitTopLevel(outside), null);
+  });
+});
+
+describe("isInsideTree", () => {
+  it("treats only the tree itself and real descendants as inside", () => {
+    const top = path.join(path.sep, "work", "repo");
+    assert.ok(isInsideTree(top, top, false));
+    assert.ok(isInsideTree(top, path.join(top, "data"), false));
+    assert.ok(isInsideTree(top, path.join(top, "..secret"), false));
+    assert.ok(!isInsideTree(top, path.join(path.sep, "work", "repo-private"), false));
+    assert.ok(!isInsideTree(top, path.join(path.sep, "work"), false));
+    assert.ok(!isInsideTree(top, path.join(path.sep, "work", "other"), false));
+  });
+
+  it("folds case when the filesystem is case-insensitive", () => {
+    const top = path.join(path.sep, "Work", "Repo");
+    const wrongCase = path.join(path.sep, "work", "REPO", "data");
+    assert.ok(isInsideTree(top, wrongCase, true));
+    assert.ok(!isInsideTree(top, wrongCase, false));
+  });
+});
+
+describe("checkPrivateFiles", () => {
+  it("accepts real files in a real outside folder", () => {
+    const { dir } = filled();
+    writeFileSync(path.join(dir.pilotDir, "a.json"), "[]");
+    assert.equal(checkPrivateFiles(dir, "pilot", ["a.json"], "data/pilot"), null);
+  });
+
+  it("names missing files and the template folder", () => {
+    const { dir } = filled();
+    const message = checkPrivateFiles(dir, "pilot", ["a.json"], "data/pilot");
+    assert.ok(message);
+    assert.match(message, /Missing in .*a\.json/u);
+    assert.match(message, /data\/pilot/u);
+  });
+
+  it("refuses a file symlinked into the repo", () => {
+    const { dir, repo } = filled();
+    const target = path.join(repo, "data", "answer-key.json");
+    writeFileSync(target, "[]");
+    symlinkSync(target, path.join(dir.pilotDir, "a.json"));
+    const message = checkPrivateFiles(dir, "pilot", ["a.json"], "data/pilot");
+    assert.ok(message);
+    assert.match(message, /a\.json/u);
+    assert.match(message, /inside the git working tree/u);
+  });
+
+  it("refuses a subfolder swapped for a symlink into the repo after resolving", () => {
+    const { outside, repo } = setup();
+    const dir = resolvePrivateDataDir(outside, { topLevel: repo });
+    assert.ok(dir.ok);
+    symlinkSync(path.join(repo, "data"), path.join(outside, PRIVATE_LAYOUT.evals));
+    writeFileSync(path.join(repo, "data", "held-out-v2.json"), "[]");
+    const message = checkPrivateFiles(dir, "evals", ["held-out-v2.json"], "evals/signal-verdict");
+    assert.ok(message);
+    assert.match(message, /inside the git working tree/u);
   });
 });
 

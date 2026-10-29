@@ -6,7 +6,10 @@ import type { ExpectedVerdict, PredictedVerdict } from "./metrics";
 import { evalDir } from "./paths";
 import type { V2Readings } from "./readings";
 
-/** Append-only log of every eval run, one JSON object per line. Commit it with the reports. */
+/**
+ * Local, append-only log of v1 and Dev Set runs, one JSON object per line. Gitignored and never
+ * committed: runs are recorded in the database (spec 004). v2 runs never go here.
+ */
 export const RUN_LOG_FILE = "runs.jsonl";
 
 export { currentPromptVersion, promptVersion } from "./prompt-version";
