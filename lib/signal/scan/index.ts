@@ -9,8 +9,17 @@ import { DEFAULT_JUDGE_TIMEOUT_MS, parseInput } from "../service/context";
 export const DEFAULT_SCAN_LIMIT = 20;
 /** Feature Requests judged at once; bounds cost and rate-limit pressure. */
 export const SCAN_CONCURRENCY = 2;
+/** Most Feature Requests one REST scan call may take, so it fits one serverless function run. */
+export const REST_SCAN_LIMIT = 50;
+/**
+ * Elapsed time after which a scan call starts no new Feature Requests (the scan route's
+ * `maxDuration` is 300 s; in-flight judgments still finish).
+ */
+export const DEFAULT_SCAN_DEADLINE_MS = 240_000;
 
 export interface BacklogScanDeps {
+  /** Stop starting new rows once this much time has elapsed in one scan call (default 240 s). */
+  deadlineMs?: number;
   judge: Judge;
   judgeTimeoutMs?: number;
   /** The judge's model id, stored on each Suspected Duplicate for provenance. */
@@ -76,6 +85,7 @@ const sameNeedJudgments = (output: JudgeOutput, candidateIds: Set<string>) =>
 export const createBacklogScan = (deps: BacklogScanDeps): BacklogScan => {
   const now = deps.now ?? (() => new Date());
   const timeoutMs = deps.judgeTimeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS;
+  const deadlineMs = deps.deadlineMs ?? DEFAULT_SCAN_DEADLINE_MS;
 
   /** Judges one Feature Request against its open neighbors; returns newly stored pair keys, or null on judge failure. */
   const scanOne = async (row: FeatureRequestRow): Promise<string[] | null> => {
@@ -128,7 +138,10 @@ export const createBacklogScan = (deps: BacklogScanDeps): BacklogScan => {
       });
       const pairs = new Set<string>();
       let scanned = 0;
+      const startedAt = now().getTime();
       await runPool(rows, SCAN_CONCURRENCY, async (row) => {
+        // Past the deadline the row stays unscanned and counts as remaining.
+        if (now().getTime() - startedAt >= deadlineMs) return;
         const found = await scanOne(row);
         if (!found) return;
         for (const key of found) pairs.add(key);

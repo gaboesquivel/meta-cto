@@ -264,6 +264,34 @@ describe("backlog scan", () => {
     assert.deepEqual(await scan.scan({ limit: 200 }), { pairsFound: 0, remaining: 1, scanned: 3 });
   });
 
+  it("stops starting new rows once the deadline has passed", async () => {
+    for (const index of [0, 1, 2, 3, 4]) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential inserts keep createdAt order.
+      await addTitled(`Request ${index}`, unit(index));
+    }
+    let clock = 0;
+    const base = titleJudge({});
+    // Each judge call takes 150 s on the fake clock.
+    const judge: Judge = {
+      judge: async (input) => {
+        clock += 150_000;
+        return await base.judge.judge(input);
+      },
+    };
+    const scan = createBacklogScan({
+      deadlineMs: 240_000,
+      judge,
+      now: () => new Date(clock),
+      repo: context.repo,
+      workspaceId: context.workspaceId,
+    });
+    // Two rows start at 0 s (concurrency 2); by 300 s the deadline has passed, so no third starts.
+    assert.deepEqual(await scan.scan({ limit: 5 }), { pairsFound: 0, remaining: 3, scanned: 2 });
+    assert.equal(base.state.calls.length, 2);
+    // The next call gets a fresh deadline and continues with the rest.
+    assert.deepEqual(await scan.scan({ limit: 5 }), { pairsFound: 0, remaining: 1, scanned: 2 });
+  });
+
   it("rejects a limit outside 1 to 200", async () => {
     const scan = createBacklogScan({
       judge: titleJudge({}).judge,

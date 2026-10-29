@@ -218,6 +218,21 @@ describe("POST /api/review/scan", () => {
     expect(response.status).toBe(400);
     expect(review.scan).not.toHaveBeenCalled();
   });
+
+  it("accepts the REST cap of 50", async () => {
+    const response = await scan("bearer", { limit: 50 });
+    expect(response.status).toBe(200);
+    expect(review.scan).toHaveBeenCalledWith({ limit: 50 });
+  });
+
+  it("returns 400 invalid_input naming the cap for a limit above 50", async () => {
+    const response = await scan("bearer", { limit: 51 });
+    expect(response.status).toBe(400);
+    const body = await readBody(response);
+    expect(body.code).toBe("invalid_input");
+    expect(`${String(body.error)} ${String(body.resolution)}`).toMatch(/50/u);
+    expect(review.scan).not.toHaveBeenCalled();
+  });
 });
 
 describe.each(writes)("Operator access on %s", (_name, call) => {
