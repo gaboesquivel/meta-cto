@@ -133,7 +133,7 @@ describe("loadPilot", () => {
     assert.equal(unchanged?.embedding, null);
   });
 
-  it("refuses to load a set changed after freeze, and invalid files", async () => {
+  it("refuses a set changed after freeze and records the refusal with the fingerprint it saw", async () => {
     const files = pilotFixture();
     const frozen = freezePilot({ files, lock: null, now: new Date() });
     assert.ok(frozen.ok);
@@ -142,6 +142,29 @@ describe("loadPilot", () => {
     assert.equal(changed.ok, false);
     assert.match(changed.ok ? "" : changed.message, /changed after freeze: reading reset/u);
 
+    const pilotId = await workspaceId(db, PILOT_WORKSPACE.slug);
+    const attempt = await repo.latestPilotLoadAttempt(pilotId);
+    assert.equal(attempt?.outcome, "refused");
+    assert.equal(attempt?.fingerprint, changed.status.fingerprint);
+    assert.notEqual(attempt?.fingerprint, frozen.lock.fingerprint);
+    // A refusal is never loaded data: no backlog row and no ground truth.
+    assert.equal(await requestCount(db, pilotId), 0);
+    assert.equal(await repo.pilotGroundTruth(pilotId), null);
+  });
+
+  it("records an accepted attempt once the load runs", async () => {
+    const files = pilotFixture();
+    const lock = frozenLock(files);
+    const result = await loadPilot({ embedder: null, files, lock, repo });
+    assert.ok(result.ok);
+    const attempt = await repo.latestPilotLoadAttempt(result.workspaceId);
+    assert.deepEqual(
+      { fingerprint: attempt?.fingerprint, outcome: attempt?.outcome },
+      { fingerprint: lock.fingerprint, outcome: "accepted" },
+    );
+  });
+
+  it("refuses invalid files without writing anything", async () => {
     const invalid = pilotFixture();
     at(invalid.backlog.featureRequests, 0).account = "nobody";
     const refused = await loadPilot({ embedder: null, files: invalid, lock: null, repo });

@@ -1,7 +1,14 @@
 import { and, asc, count, desc, eq, isNotNull, ne } from "drizzle-orm";
 
 import type { SignalDb } from "./db";
-import { evalRuns, pilotAnswerKey, pilotFeedback, pilotLoads, workspaces } from "./schema";
+import {
+  evalRuns,
+  pilotAnswerKey,
+  pilotFeedback,
+  pilotLoadAttempts,
+  pilotLoads,
+  workspaces,
+} from "./schema";
 import type { AnswerKeyLabels, NeedLabel } from "./service/answer-key";
 
 /**
@@ -13,7 +20,20 @@ import type { AnswerKeyLabels, NeedLabel } from "./service/answer-key";
 export type AnswerKeyKind = "feature_request" | "feedback";
 export type EvalRunStatus = "completed" | "failed" | "refused";
 export type PilotLoadRow = typeof pilotLoads.$inferSelect;
-export type EvalRunRow = typeof evalRuns.$inferSelect;
+export type PilotLoadAttemptOutcome = "accepted" | "refused";
+
+/** The latest pilot load attempt or eval run on a set: when, and the fingerprint it saw. */
+export interface PilotLoadAttempt {
+  at: string;
+  fingerprint: string;
+  outcome: PilotLoadAttemptOutcome;
+}
+
+export interface EvalAttempt {
+  at: string;
+  fingerprint: string;
+  status: EvalRunStatus;
+}
 
 export interface PilotGroundTruthInput {
   answerKey: {
@@ -121,21 +141,29 @@ const isConfirmed = (row: { confirmedAt: string | null; confirmedBy: string | nu
 const judged = (run: Pick<NewEvalRun, "completed" | "failures" | "status">) =>
   run.status !== "refused" && run.completed + run.failures > 0;
 
-const toEvalReading = (row: EvalRunRow): EvalReading => ({
-  completed: row.completed,
+/** The columns a reading needs: never the per-pair `results` or `failure_details` jsonb. */
+const readingColumns = {
+  completed: evalRuns.completed,
+  createdAt: evalRuns.createdAt,
+  failures: evalRuns.failures,
+  fingerprint: evalRuns.fingerprint,
+  id: evalRuns.id,
+  judgedPairs: evalRuns.judgedPairs,
+  model: evalRuns.model,
+  pairs: evalRuns.pairs,
+  promptVersion: evalRuns.promptVersion,
+  readings: evalRuns.readings,
+  repeat: evalRuns.repeat,
+  sameNeedPositives: evalRuns.sameNeedPositives,
+  setName: evalRuns.setName,
+  status: evalRuns.status,
+};
+
+type ReadingRow = Omit<EvalReading, "createdAt"> & { createdAt: Date };
+
+const toEvalReading = (row: ReadingRow): EvalReading => ({
+  ...row,
   createdAt: row.createdAt.toISOString(),
-  failures: row.failures,
-  fingerprint: row.fingerprint,
-  id: row.id,
-  judgedPairs: row.judgedPairs,
-  model: row.model,
-  pairs: row.pairs,
-  promptVersion: row.promptVersion,
-  readings: row.readings,
-  repeat: row.repeat,
-  sameNeedPositives: row.sameNeedPositives,
-  setName: row.setName,
-  status: row.status,
 });
 
 const toLoadRecord = (row: PilotLoadRow): PilotLoadRecord => ({
@@ -182,12 +210,31 @@ export const createPilotDataRepository = (db: SignalDb) => {
     },
 
     /**
+     * The latest run on a set that saw a fingerprint, whatever its status (refused and failed
+     * included): the Proof Report compares it with the lock to flag a set changed after freeze.
+     */
+    async latestEvalAttempt(setName: string): Promise<EvalAttempt | null> {
+      const [row] = await db
+        .select({
+          createdAt: evalRuns.createdAt,
+          fingerprint: evalRuns.fingerprint,
+          status: evalRuns.status,
+        })
+        .from(evalRuns)
+        .where(and(eq(evalRuns.setName, setName), isNotNull(evalRuns.fingerprint)))
+        .orderBy(desc(evalRuns.createdAt))
+        .limit(1);
+      if (!row?.fingerprint) return null;
+      return { at: row.createdAt.toISOString(), fingerprint: row.fingerprint, status: row.status };
+    },
+
+    /**
      * The reading: the latest run on this set that judged pairs and is not a repeat, optionally
      * for one fingerprint and one prompt version. Null when there is none.
      */
     async latestEvalReading(key: Partial<Omit<EvalRunKey, "setName">> & { setName: string }) {
       const [row] = await db
-        .select()
+        .select(readingColumns)
         .from(evalRuns)
         .where(
           and(
@@ -203,6 +250,19 @@ export const createPilotDataRepository = (db: SignalDb) => {
         .orderBy(desc(evalRuns.createdAt))
         .limit(1);
       return row ? toEvalReading(row) : null;
+    },
+
+    /** The latest pilot load attempt of the Workspace, accepted or refused; null before any. */
+    async latestPilotLoadAttempt(workspaceId: string): Promise<PilotLoadAttempt | null> {
+      const [row] = await db
+        .select()
+        .from(pilotLoadAttempts)
+        .where(eq(pilotLoadAttempts.workspaceId, workspaceId))
+        .orderBy(desc(pilotLoadAttempts.createdAt))
+        .limit(1);
+      return row
+        ? { at: row.createdAt.toISOString(), fingerprint: row.fingerprint, outcome: row.outcome }
+        : null;
     },
 
     /** The current pilot ground truth for scoring and the Proof Report; null before a load. */
@@ -266,9 +326,24 @@ export const createPilotDataRepository = (db: SignalDb) => {
           judgedPairs: judged(input),
           origin: "eval",
         })
-        .returning();
+        .returning(readingColumns);
       if (!row) throw new Error("eval run insert returned nothing");
       return toEvalReading(row);
+    },
+
+    /** Records a pilot load attempt with the fingerprint it saw; a refusal writes nothing else. */
+    async recordPilotLoadAttempt(input: {
+      at?: Date;
+      fingerprint: string;
+      outcome: PilotLoadAttemptOutcome;
+      workspaceId: string;
+    }): Promise<void> {
+      await db.insert(pilotLoadAttempts).values({
+        fingerprint: input.fingerprint,
+        outcome: input.outcome,
+        workspaceId: input.workspaceId,
+        ...(input.at ? { createdAt: input.at } : {}),
+      });
     },
 
     /**

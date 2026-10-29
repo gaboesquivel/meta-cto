@@ -326,6 +326,30 @@ export const pilotLoads = pgTable(
   (table) => [index("pilot_loads_workspace_loaded").on(table.workspaceId, table.loadedAt)],
 );
 
+/**
+ * One pilot load attempt (spec 004, review F3): `accepted` when the files matched the lock (or no
+ * lock) and the load ran, `refused` when the files no longer matched the committed lock. Holds the
+ * fingerprint the attempt saw, never content; a refused attempt is never loaded data. The Proof
+ * Report compares the latest attempt with the lock so an edit after freeze reaches readiness.
+ */
+export const pilotLoadAttempts = pgTable(
+  "pilot_load_attempts",
+  {
+    createdAt: createdAt(),
+    /** The pilot files' fingerprint as the attempt read them. */
+    fingerprint: text("fingerprint").notNull(),
+    id: id(),
+    outcome: text("outcome").$type<"accepted" | "refused">().notNull(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [
+    index("pilot_load_attempts_workspace_created").on(table.workspaceId, table.createdAt),
+    check("pilot_load_attempts_outcome", sql`${table.outcome} in ('accepted', 'refused')`),
+  ],
+);
+
 /** A pilot feedback item an agent files through a Check; never a Feature Request. */
 export const pilotFeedback = pgTable(
   "pilot_feedback",
@@ -409,6 +433,8 @@ export const evalRuns = pgTable(
       table.fingerprint,
       table.promptVersion,
     ),
+    /** The Proof Report's latest-run reads: by set, newest first. */
+    index("eval_runs_set_created").on(table.setName, table.createdAt),
     check("eval_runs_status", sql`${table.status} in ('completed', 'failed', 'refused')`),
     check("eval_runs_origin", sql`${table.origin} = 'eval'`),
   ],

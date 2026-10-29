@@ -4,7 +4,7 @@ import type { ReviewMetrics } from "@/lib/signal/contracts";
 import type { AnswerKeyScores } from "@/lib/signal/service/answer-key";
 
 import { DEFAULT_MIN_PILOT_FILINGS } from "./bars";
-import { buildProofReport } from "./report";
+import { buildProofReport, proofReportFor, SUPPORTING_WITHHELD_NOTE } from "./report";
 import type { HeldOutV2State, PilotFilesState, ProofBarKey, ProofInputs, V2Run } from "./report";
 
 const metrics = (overrides: Partial<ReviewMetrics> = {}): ReviewMetrics => ({
@@ -43,6 +43,7 @@ const pilotFiles = (overrides: Partial<Extract<PilotFilesState, { readable: true
     messages: [],
     readable: true,
     ready: true,
+    refrozen: false,
     unconfirmed: 0,
     ...overrides,
   }) satisfies PilotFilesState;
@@ -55,6 +56,7 @@ const heldOutV2 = (overrides: Partial<Extract<HeldOutV2State, { readable: true }
     message: null,
     pairs: 160,
     readable: true,
+    refrozen: false,
     sameNeedPositives: 70,
     ...overrides,
   }) satisfies HeldOutV2State;
@@ -276,7 +278,17 @@ describe("Intake Duplicate Rate bar", () => {
     expect(report.readiness.readingResets.join(" ")).toMatch(
       /Pilot data changed after freeze: reading reset/u,
     );
-    expect(report.supporting.notes.join(" ")).toMatch(/Answer Key changed after freeze/u);
+    expect(report.supporting.notes.join(" ")).toMatch(/Pilot files changed after freeze/u);
+  });
+
+  it("says 're-frozen, no reading yet', not a reset, when the lock changed and nothing is loaded for it", () => {
+    const overrides = { pilotFiles: pilotFiles({ ready: false, refrozen: true }) };
+    expect(reasonsOf(overrides, "intakeDuplicateRate")).toMatch(
+      /Pilot data re-frozen, no reading yet/u,
+    );
+    const report = buildProofReport(inputs(overrides));
+    expect(report.readiness.readingResets).toEqual([]);
+    expect(report.supporting.notes.join(" ")).toMatch(/re-frozen, no reading yet/u);
   });
 
   it("is inconclusive when the pilot files are not frozen or unreadable", () => {
@@ -399,6 +411,14 @@ describe("Same-Need Precision bar (kill line)", () => {
     expect(report.readiness.readingResets.join(" ")).toMatch(/Held-Out Set v2 changed/u);
   });
 
+  it("says 're-frozen, no reading yet' when Held-Out Set v2 was frozen again", () => {
+    const overrides = { heldOutV2: heldOutV2({ refrozen: true }) };
+    expect(reasonsOf(overrides, "sameNeedPrecision")).toMatch(
+      /Held-Out Set v2 re-frozen, no reading yet/u,
+    );
+    expect(buildProofReport(inputs(overrides)).readiness.readingResets).toEqual([]);
+  });
+
   it("shows a stale reading but is inconclusive without one for the current prompt version", () => {
     const stale = run({ promptVersion: "pv-older000000" });
     const report = buildProofReport(inputs({ v2LatestReading: stale, v2Reading: null }));
@@ -484,5 +504,23 @@ describe("supporting metrics (no bar)", () => {
     const report = buildProofReport(inputs({ answerKeyScores: null }));
     expect(report.supporting.agentCorrectness).toBeNull();
     expect(report.supporting.notes.join(" ")).toMatch(/Answer Key scores are unavailable/u);
+  });
+});
+
+describe("proofReportFor: access", () => {
+  const report = buildProofReport(inputs());
+
+  it("gives Operator access the whole report, supporting scores included", () => {
+    expect(proofReportFor(report, "operator")).toEqual(report);
+  });
+
+  it("withholds the supporting scores from Pilot Key callers, keeping bars and readiness", () => {
+    const pilot = proofReportFor(report, "pilot");
+    expect(pilot.supporting).toEqual({ note: SUPPORTING_WITHHELD_NOTE, withheld: true });
+    expect(SUPPORTING_WITHHELD_NOTE).toMatch(/Operator only during the pilot/u);
+    expect(pilot.bars).toEqual(report.bars);
+    expect(pilot.readiness).toEqual(report.readiness);
+    expect(pilot.verdict).toBe(report.verdict);
+    expect(JSON.stringify(pilot)).not.toMatch(/agentCorrectness|pmAgreement|suggestionAcceptance/u);
   });
 });

@@ -326,4 +326,38 @@ describe("Proof Report: aggregates only, from stored ground truth", () => {
       assert.deepEqual(findPayloadItems(body, name), [], `${name} has item-level fields`);
     }
   });
+
+  test("Pilot Key payloads (REST and public MCP) carry no supporting counts; Operator payloads do", async () => {
+    const SUPPORTING_COUNTS =
+      /"(?:agentCorrectness|pmAgreement|suggestionAcceptance|correct|harm|miss|agree|disagree|blind|nonBlind|checksWithSameNeed|createsAfterSameNeed)"/u;
+    const rest = await getProof(new Request("http://localhost/api/proof", { headers: PILOT }));
+    const restRaw = await rest.text();
+    const { raw: mcpRaw, result: mcp } = await rpc(
+      postPublicMcp,
+      { method: "tools/call", params: { arguments: {}, name: "proof_report" } },
+      PILOT,
+    );
+    for (const [name, raw, body] of [
+      ["REST (Pilot Key)", restRaw, JSON.parse(restRaw) as unknown],
+      ["public MCP", mcpRaw, mcp.structuredContent],
+    ] as const) {
+      assert.doesNotMatch(raw, SUPPORTING_COUNTS, `${name} leaked a supporting count`);
+      const { supporting } = body as { supporting?: { note?: string; withheld?: boolean } };
+      assert.equal(supporting?.withheld, true, `${name} did not withhold supporting`);
+      assert.match(supporting?.note ?? "", /Operator only during the pilot/u);
+    }
+
+    const operatorRest = await getProof(
+      new Request("http://localhost/api/proof", { headers: OPERATOR }),
+    );
+    const { result: operatorMcp } = await rpc(
+      postOperatorMcp,
+      { method: "tools/call", params: { arguments: {}, name: "proof_report" } },
+      OPERATOR,
+    );
+    for (const body of [(await operatorRest.json()) as unknown, operatorMcp.structuredContent]) {
+      const { supporting } = body as { supporting?: { agentCorrectness?: unknown } };
+      assert.ok(supporting?.agentCorrectness, "Operator report is missing Agent Correctness");
+    }
+  });
 });
