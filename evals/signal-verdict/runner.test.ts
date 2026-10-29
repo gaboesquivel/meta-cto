@@ -182,6 +182,27 @@ describe("runEval on Held-Out Set v2", () => {
     assert.match(entry?.message ?? "", /reading reset/u);
   });
 
+  test("reads v2 pairs from a separate private folder; lock, log and report stay in dir", async () => {
+    const { pairs, verdicts } = fullSet();
+    const dir = v2Dir(pairs);
+    const setDir = mkdtempSync(path.join(tmpdir(), "v2-private-"));
+    writeFileSync(path.join(setDir, V2_SET_FILE), JSON.stringify(pairs, null, 2));
+    writeFileSync(path.join(dir, V2_SET_FILE), "[]");
+    const outcome = await runEval({
+      dir,
+      getService: () => Promise.resolve(mockService(verdicts)),
+      now: () => NOW,
+      prompt: PROMPT,
+      set: "held-out-v2",
+      setDir,
+    });
+    assert.equal(outcome.status, "completed");
+    assert.equal(outcome.entry.counts.pairs, pairs.length);
+    assert.equal(readRunLog(dir).length, 1);
+    assert.ok(existsSync(path.join(dir, "report.v2.md")));
+    assert.ok(!existsSync(path.join(setDir, "report.v2.md")));
+  });
+
   test("reads precision with intervals, logs the run and writes the v2 report", async () => {
     const { pairs, verdicts } = fullSet();
     const dir = v2Dir(pairs);

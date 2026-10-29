@@ -182,13 +182,18 @@ const v2Report = (input: {
 };
 
 export interface RunEvalOptions {
-  /** Holds the v2 set and lock, and receives the run log and reports. */
+  /** Holds the v2 lock (committed), and receives the run log and reports. */
   dir?: string;
   /** Called only after the set passes its gate, so a refused v2 never builds a service. */
   getService: () => Promise<EvalService | null>;
   now?: () => Date;
   prompt?: { id: string; model: string };
   set: RunSetName;
+  /**
+   * Holds the v2 pairs (`held-out-v2.json`): the private folder's `evals/` from the CLI
+   * (spec 004). Defaults to `dir`.
+   */
+  setDir?: string;
 }
 
 export interface RunEvalOutcome {
@@ -211,10 +216,12 @@ const reportFileFor = (set: RunSetName, repeat: boolean): string => {
  */
 export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> => {
   const dir = options.dir ?? evalDir();
+  const setDir = options.setDir ?? dir;
   const at = (options.now ?? (() => new Date()))();
   const prompt = options.prompt ?? currentPromptVersion();
   const isV2 = options.set === V2_SET_NAME;
-  const pairs: EvalPair[] = isV2 ? loadHeldOutV2(dir) : loadEvalSet(options.set as EvalSetName);
+  const v2Pairs = isV2 ? loadHeldOutV2(setDir) : null;
+  const pairs: EvalPair[] = v2Pairs ?? loadEvalSet(options.set as EvalSetName);
   const base: RunLogEntry = {
     at: at.toISOString(),
     counts: {
@@ -238,8 +245,8 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
     return { entry, message, report: null, reportFile: null, status };
   };
 
-  if (isV2) {
-    const ready = checkV2Ready(loadHeldOutV2(dir), readV2Lock(dir));
+  if (v2Pairs) {
+    const ready = checkV2Ready(v2Pairs, readV2Lock(dir));
     if (!ready.ok) return stop("refused", ready.message);
   }
   const repeat =
