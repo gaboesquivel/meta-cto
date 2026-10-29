@@ -109,12 +109,16 @@ export const readId = async (params: Promise<{ id: string }>) => {
   return id;
 };
 
+/** Object details are spread into the body; arrays (zod issues) go under `issues`; others are dropped. */
+const detailsToExtra = (details: unknown): Record<string, unknown> | undefined => {
+  if (Array.isArray(details)) return { issues: details };
+  if (details && typeof details === "object") return details as Record<string, unknown>;
+  return undefined;
+};
+
 export const toErrorResponse = async (error: unknown) => {
   if (error instanceof SignalError) {
-    const extra =
-      error.details && typeof error.details === "object"
-        ? (error.details as Record<string, unknown>)
-        : undefined;
+    const extra = detailsToExtra(error.details);
     return await signalJsonError(
       {
         code: error.code,

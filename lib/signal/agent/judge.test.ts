@@ -1,3 +1,5 @@
+import { once } from "node:events";
+
 import { MockLanguageModelV4 } from "ai/test";
 import { describe, expect, it } from "vitest";
 
@@ -170,5 +172,21 @@ describe("createLlmJudge", () => {
 
     expect(model.doGenerateCalls).toHaveLength(1);
     expect(output.judgments).toEqual([]);
+  });
+
+  it("aborts the model call when timeoutMs elapses", async () => {
+    let aborted = false;
+    const model = new MockLanguageModelV4({
+      doGenerate: async ({ abortSignal }): Promise<GenerateResult> => {
+        if (!abortSignal) throw new Error("no abort signal");
+        await once(abortSignal, "abort");
+        aborted = true;
+        throw new Error("aborted");
+      },
+    });
+    await expect(
+      createLlmJudge({ model, timeoutMs: 20 }).judge({ candidates, draft }),
+    ).rejects.toThrow();
+    expect(aborted).toBe(true);
   });
 });
