@@ -45,8 +45,10 @@ export const withholdBlindNeeds = async <T extends FeatureRequestSummary>(
 
 /**
  * Blind Review (spec 003) on the read side: while a new Feature Request chosen for Blind Review
- * has no decision of its own, its detail withholds the AI's restated need and the AI's Related
- * Need links (source `check`), and no other Feature Request's detail shows the AI's link to it.
+ * has no decision of its own, its detail withholds the AI's restated need, the AI's Related Need
+ * links (source `check`) and the Skip Reason (one exists only when the Check found a Same Need
+ * candidate, so it would reveal the AI's flag); no other Feature Request's detail shows the AI's
+ * link to it.
  * Everything else on the detail stays. With no blind share (the Crewday demo) nothing changes.
  */
 export const withholdForBlindReview = async (
@@ -69,6 +71,7 @@ export const withholdForBlindReview = async (
     relatedLinks: detail.relatedLinks.filter(
       (link) => !(link.source === "check" && hidden.has(link.featureRequestId)),
     ),
+    skipReason: self ? null : detail.skipReason,
     underlyingNeed: self ? null : detail.underlyingNeed,
   };
 };

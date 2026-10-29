@@ -254,9 +254,16 @@ export const createRepository = (db: SignalDb) => ({
     return { comments: commentRows, supports: supportRows };
   },
 
+  /** Reads first: the insert runs only the first time a slug is seen. */
   async ensureWorkspace(input: { name: string; slug: string }) {
+    const bySlug = async () => {
+      const [row] = await db.select().from(workspaces).where(eq(workspaces.slug, input.slug));
+      return row;
+    };
+    const existing = await bySlug();
+    if (existing) return existing;
     await db.insert(workspaces).values(input).onConflictDoNothing({ target: workspaces.slug });
-    const [row] = await db.select().from(workspaces).where(eq(workspaces.slug, input.slug));
+    const row = await bySlug();
     if (!row) throw new Error(`workspace ${input.slug} missing after upsert`);
     return row;
   },
@@ -406,6 +413,21 @@ export const createRepository = (db: SignalDb) => ({
       .orderBy(asc(featureRequests.createdAt));
   },
 
+  /** Every Feature Request in the Workspace, oldest first: keys only, no text or embedding. */
+  async listFeatureRequestKeys(workspaceId: string) {
+    return await db
+      .select({
+        checkId: featureRequests.checkId,
+        createdAt: featureRequests.createdAt,
+        createdViaCheck: featureRequests.createdViaCheck,
+        id: featureRequests.id,
+        seedKey: featureRequests.seedKey,
+      })
+      .from(featureRequests)
+      .where(eq(featureRequests.workspaceId, workspaceId))
+      .orderBy(asc(featureRequests.createdAt), asc(featureRequests.id));
+  },
+
   async listFeatureRequests(input: { limit: number; offset: number; workspaceId: string }) {
     return await db
       .select()
@@ -414,6 +436,16 @@ export const createRepository = (db: SignalDb) => ({
       .orderBy(desc(featureRequests.createdAt), asc(featureRequests.title))
       .limit(input.limit)
       .offset(input.offset);
+  },
+
+  /** Open Feature Requests by id and title only (the Blind Review choices). */
+  async listOpenFeatureRequestTitles(workspaceId: string) {
+    return await db
+      .select({ id: featureRequests.id, title: featureRequests.title })
+      .from(featureRequests)
+      .where(
+        and(eq(featureRequests.workspaceId, workspaceId), isNull(featureRequests.duplicateOfId)),
+      );
   },
 
   /** Open: not a confirmed duplicate. */

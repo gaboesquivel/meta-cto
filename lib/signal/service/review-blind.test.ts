@@ -28,6 +28,7 @@ const suspectedNewRequest = async (blindShare: number) => {
     description: "Approve shift trades description",
     embedding: unit(1),
     origin: harness.origin,
+    skipReason: "Skipped: about trades, not swaps",
     title: "Approve shift trades",
     underlyingNeed: "AI restated need",
     workspaceId: harness.workspaceId,
@@ -252,9 +253,11 @@ describe("blind request detail (get_feature_request, REST detail, detail page)",
 
     assert.equal(detail.underlyingNeed, null);
     assert.deepEqual(detail.relatedLinks, []);
+    // A Skip Reason exists only when the Check found a Same Need candidate: it reveals the AI's flag.
+    assert.equal(detail.skipReason, null);
     assert.doesNotMatch(
       JSON.stringify(detail),
-      /AI restated need|AI related reason|same approval/u,
+      /AI restated need|AI related reason|same approval|Skipped:/u,
     );
     // Everything else stays.
     assert.equal(detail.title, "Approve shift trades");
@@ -273,6 +276,7 @@ describe("blind request detail (get_feature_request, REST detail, detail page)",
     const detail = await harness.service.get(fresh.id);
 
     assert.equal(detail.underlyingNeed, "AI restated need");
+    assert.equal(detail.skipReason, "Skipped: about trades, not swaps");
     assert.equal(detail.relatedLinks[0]?.reason, "AI related reason");
     const other = await harness.service.get(backlog.id);
     assert.equal(other.relatedLinks[0]?.featureRequestId, fresh.id);
@@ -282,6 +286,7 @@ describe("blind request detail (get_feature_request, REST detail, detail page)",
     const { backlog, fresh, harness } = await withAiLink(1);
 
     const hidden = await harness.service.search({});
+    assert.doesNotMatch(JSON.stringify(hidden), /Skipped:/u);
     const needs = new Map(hidden.items.map((item) => [item.id, item.underlyingNeed]));
     assert.equal(needs.get(fresh.id), null);
     assert.equal(needs.get(backlog.id), "Approvals");
@@ -298,6 +303,7 @@ describe("blind request detail (get_feature_request, REST detail, detail page)",
     const detail = await harness.service.get(fresh.id);
 
     assert.equal(detail.underlyingNeed, "AI restated need");
+    assert.equal(detail.skipReason, "Skipped: about trades, not swaps");
     assert.equal(detail.relatedLinks[0]?.featureRequestId, backlog.id);
     const page = await harness.service.search({});
     assert.equal(

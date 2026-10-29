@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "vitest";
 
-import { scoreAgentCorrectness, scorePmAgreement } from "./answer-key";
+import { pmDecisionOf, scoreAgentCorrectness, scorePmAgreement } from "./answer-key";
 import type { Harness } from "./test-fixtures";
 import { createSignalService } from "./index";
 import { addNewRequest, addRequest, cedar, createHarness, staff, unit } from "./test-fixtures";
@@ -254,6 +254,29 @@ describe("Agent correctness: agent Supports, Comments and creates scored against
       [0.5, 2, 0.5, 3],
     );
     assert.equal(score.blind.excludedUnconfirmed, 1);
+  });
+
+  it("counts a Product Manager decision only for the request it was made on, or either side of a Duplicate", () => {
+    // New pilot requests A and B. The PM decides B Related to A, a Duplicate of C onto D, and
+    // blind No Duplicates on E. A is only named as B's other side: A itself is still undecided.
+    const decisions = [
+      { blind: false, decision: "related", featureRequestId: "B", otherId: "A" },
+      { blind: false, decision: "duplicate", featureRequestId: "C", otherId: "D" },
+      { blind: true, decision: "none", featureRequestId: "E", otherId: null },
+    ] as const;
+
+    const verdicts = Object.fromEntries(
+      ["A", "B", "C", "D", "E"].map((id) => [id, pmDecisionOf(id, [...decisions])]),
+    );
+
+    assert.deepEqual(verdicts, {
+      A: undefined,
+      B: { blind: false, duplicateOf: undefined },
+      // A Duplicate decides both sides, each paired with the other.
+      C: { blind: false, duplicateOf: "D" },
+      D: { blind: false, duplicateOf: "C" },
+      E: { blind: true, duplicateOf: undefined },
+    });
   });
 });
 
