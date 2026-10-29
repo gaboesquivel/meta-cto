@@ -129,4 +129,9 @@ describe("commitDeploymentStatus", () => {
     assert.equal(result?.status.log_url, "https://vercel.com/success");
     assert.equal(commitDeploymentStatus([status("ci/other", "success", "x")]), null);
   });
+
+  it("leaves a missing deployment unverified", () => {
+    const pages = [{ path: "/", status: 200 }];
+    assert.equal(verdict({ checks: "passed", deployment: "missing", pages }), "unverified");
+  });
 });

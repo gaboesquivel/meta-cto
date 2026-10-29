@@ -4,7 +4,7 @@
 
 When a user request's work is done, append one entry to `prompts.txt`: ISO 8601 timestamp, the prompt, a one-line summary of the result, skills used, docs changed or created, and any question the user answered with that answer.
 
-`prompts.txt` is a shared file for Flow's `build` and `ship`. Commit its entry on the branch of the work it describes, in that work's commit or the next one. Never make a commit that changes only `prompts.txt`; with no work branch open, leave the entry uncommitted. Worker agents never write it.
+`prompts.txt` is a shared file for Flow's `build` and `ship`. Commit its entry on the branch of the work it describes, in that work's commit or the next one. Never make a commit that changes only `prompts.txt`; after review, or with no work branch open, leave the entry uncommitted for the next work branch to carry. Worker agents never write it.
 
 ## Checks
 
