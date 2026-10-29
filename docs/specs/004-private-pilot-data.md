@@ -1,6 +1,6 @@
 # 004 — Keep pilot ground truth private
 
-Status: accepted (2026-10-29) · Issue: [#32](https://github.com/gaboesquivel/meta-cto/issues/32)
+Status: implemented (2026-10-29) · Issue: [#32](https://github.com/gaboesquivel/meta-cto/issues/32)
 Slice: hardening of the proof slice ([spec 003](003-prove-the-verdict.md)) before any pilot data is written
 Decisions: [0004 Keep pilot ground truth out of the public repo](../decisions/0004-private-pilot-data-in-the-database.md) (Accepted), [0003](../decisions/0003-proof-before-slice-3.md) (Accepted)
 
@@ -62,9 +62,17 @@ Encrypting data at rest beyond what Neon provides, sharing the private folder be
 
 The v1 Held-Out Set stays public: it was published before this decision and remains the first reading.
 
+## Verification (2026-10-29)
+
+- Step 3 refusals, live CLI (`pnpm signal:pilot:check`): unset → "SIGNAL_PRIVATE_DATA_DIR is not set"; inside the repo → "inside the git working tree … Move the folder outside the repository"; outside but empty → names the missing files and says to copy the templates there. Pass.
+- Step 5 bundle: `pnpm build` traces no `data/pilot` content, `held-out-v2.json` or `runs.jsonl` into any route; only the two lock files are allowed. Pass.
+- Steps 2–6 data paths (freeze writes only locks; load stores ground truth with the lock fingerprint; v2 run stored; Proof Report from stored data; edit → "changed after freeze: reading reset"): covered by PGlite tests (`lib/signal/repository-pilot-data`, `lib/pilot-load`, `evals/signal-verdict`, `lib/signal/proof`). Not exercised against a preview database: that needs the preview's `DATABASE_URL` and `SIGNAL_PILOT_KEY` set on the deployment.
+- Agent scenario: `tests/signal-contract/ground-truth-exposure.test.ts` walks every OpenAPI operation and public and Operator MCP tool; no payload carries ground truth. Pass.
+- Suite: 72 files / 898 tests, `pnpm build` green.
+
 ## Tasks
 
 - [x] 01: Private data folder outside the repository (#33) — [e365f96](https://github.com/gaboesquivel/meta-cto/commit/e365f9690c78be038a88724531f085bbe08aaf73)
 - [x] 02: Store pilot ground truth and v2 readings in the database (#34) — [f546b95](https://github.com/gaboesquivel/meta-cto/commit/f546b95193022bafaccfdbf55563a5fd994a13e5)
 - [x] 03: Proof Report reads the database (#35) — [5904939](https://github.com/gaboesquivel/meta-cto/commit/5904939595f17792ce6ec36584e19068867e01df)
-- [ ] 04: Verify on a preview and align docs (#36)
+- [x] 04: Verify on a preview and align docs (#36) — [d0f114a](https://github.com/gaboesquivel/meta-cto/commit/d0f114a08612f908d6d751eebd5e423253b23499)
