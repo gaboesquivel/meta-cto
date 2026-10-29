@@ -1,6 +1,6 @@
 import { workspace } from "@/data/crewday/seed";
 import { createGatewayEmbedder, createLlmJudge, resolveJudgeModel } from "@/lib/signal/agent";
-import type { Embedder, Judge, SignalService } from "@/lib/signal/contracts";
+import type { Embedder, Judge, ReviewService, SignalService } from "@/lib/signal/contracts";
 import { getDb } from "@/lib/signal/db";
 import type { SignalDb } from "@/lib/signal/db";
 import { createRepository } from "@/lib/signal/repository";
@@ -77,3 +77,9 @@ export const getSignalService = (): SignalService | null => {
   });
   return cached;
 };
+
+/**
+ * Review service for the Crewday Demo Workspace, or null when unconfigured.
+ * Stub until spec 002 task 07 wires the real implementation.
+ */
+export const getReviewService = (): ReviewService | null => null;

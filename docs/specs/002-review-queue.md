@@ -91,7 +91,7 @@ Moving Supports or Comments between rows, bulk or automatic decisions, AI-sugges
 
 ## Tasks
 
-- [ ] 01: Review contracts and data model (#15)
+- [x] 01: Review contracts and data model (#15) — [a348b8e](https://github.com/gaboesquivel/meta-cto/commit/a348b8e992265789eab559eab982afe4e530469a)
 - [ ] 02: Review service: queue, decisions, evidence, metrics (#19) — blocked by 01
 - [ ] 03: Backlog scan as an Operator action (#16) — blocked by 01
 - [ ] 04: Review REST API with Operator access (#14) — blocked by 01
