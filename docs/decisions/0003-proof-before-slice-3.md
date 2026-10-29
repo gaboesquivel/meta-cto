@@ -1,12 +1,13 @@
 ---
-status: proposed
+status: accepted
 category: product
 date: 2026-10-29
+accepted: 2026-10-29
 ---
 
 # Prove the verdict before slice 3: human-confirmed ground truth and preset bars
 
-Status: Proposed (2026-10-29). Adds to `PRODUCT.md` (MVP slices, main metric and kill criterion, riskiest assumptions) and `GLOSSARY.md` (Workspace, new terms); leaves the 85% same-need precision kill line and decision 0002's metric definitions unchanged.
+Status: Accepted (2026-10-29). Adds to `PRODUCT.md` (MVP slices, main metric and kill criterion, riskiest assumptions) and `GLOSSARY.md` (Workspace, new terms); leaves the 85% same-need precision kill line and decision 0002's metric definitions unchanged.
 
 **Context.** Slices 1 and the review queue ([spec 001](../specs/001-check-before-create.md), [spec 002](../specs/002-review-queue.md)) are live, but nothing shows the verdict works. Production metrics are empty (the backlog scan was never run there), they cannot tell pilot use from demo, seed or eval activity, and the Held-Out Set has 25 pairs (10 same-need positives, 4 of 25 on one target) that an agent both wrote and labeled. Slice 3 summarizes and groups whatever the verdict produces, so building it first would make unproven verdicts look authoritative. Signal has no real customers to pilot with; its users are agents filing over MCP and one or two people acting as Product Managers.
 

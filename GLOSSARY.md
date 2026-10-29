@@ -81,7 +81,7 @@ _Avoid_: Metadata, customer data, enrichment
 ## People and tenancy
 
 **Workspace**:
-One product team's Signal space and the boundary of all its Feature Requests. In the MVP there is one: the Crewday Demo Workspace.
+One product team's Signal space and the boundary of all its Feature Requests. In the MVP: the Crewday Demo Workspace and a Pilot Workspace ([decision 0003](docs/decisions/0003-proof-before-slice-3.md)).
 _Avoid_: Tenant, organization, project
 
 **Account**:
@@ -175,6 +175,30 @@ _Avoid_: Accuracy
 **Crewday Demo Workspace**:
 The seeded Workspace for Crewday, a fictional workforce-scheduling SaaS, used for the demo, the replay and the Eval Set. Demo data, not Signal's target market.
 _Avoid_: Test tenant, sample data
+
+**Pilot Workspace**:
+The Workspace for the proof run (spec 003): a generated backlog and feedback set with an Answer Key, filed by agents and reviewed by people. Reachable only with a Pilot Key; separate from the Crewday Demo Workspace.
+_Avoid_: Staging, sandbox
+
+**Answer Key**:
+For each pilot feedback item, the existing Feature Request it shares a need with, or none; confirmed by a person and frozen before the run.
+_Avoid_: Ground truth file, labels
+
+**Origin**:
+Where a Check or domain event came from: `pilot`, `demo`, `seed` or `eval`. Recorded at the source; metrics read one Origin at a time.
+_Avoid_: Source, environment
+
+**Held-Out Set v2**:
+The second frozen Held-Out Set: person-confirmed labels, at least 60 same-need positives, written without sight of the current prompt. The first (v1, 25 pairs) stays frozen as the first reading.
+_Avoid_: New eval, test set
+
+**Agent Correctness**:
+The share of agent Supports and creates in the Pilot Workspace that match the Answer Key. A Support on a different need counts as harm.
+_Avoid_: Agent accuracy, acceptance
+
+**Blind Review**:
+A Review Decision made without seeing the AI's suggestion or Reason; recorded as blind, to measure agreement with the Answer Key free of anchoring.
+_Avoid_: Unassisted review
 
 ## Platform (template)
 
