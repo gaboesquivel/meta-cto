@@ -4,11 +4,14 @@ import type { NextConfig } from "next";
 /** Markdown negotiation when Accept asks for markdown and does not list text/html. */
 const markdownAcceptPattern = "^(?!.*text/html).*text/markdown";
 
-/** Files the Proof Report reads at request time (lib/signal/proof/sources.ts). */
+/**
+ * The only files the Proof Report reads at request time: the committed freeze locks (fingerprint,
+ * time and counts; lib/signal/proof/locks.ts). Pilot and v2 content is read from the database and
+ * never traced into the deployment (spec 004, decision 0004).
+ */
 const proofReportFiles = [
-  "./data/pilot/*.json",
-  "./evals/signal-verdict/held-out-v2*.json",
-  "./evals/signal-verdict/runs.jsonl",
+  "./data/pilot/pilot.lock.json",
+  "./evals/signal-verdict/held-out-v2.lock.json",
 ];
 
 const nextConfig: NextConfig = {

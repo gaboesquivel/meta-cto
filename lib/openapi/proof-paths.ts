@@ -75,9 +75,19 @@ const scoredGroup = {
   type: "object",
 };
 
+/** Readiness from the committed lock and the stored data: flags and counts, never items. */
 const fileState = {
   additionalProperties: true,
-  properties: { changed: bool, frozen: bool, message: str, readable: bool },
+  properties: {
+    changed: {
+      description: "Stored data or reading differs from the lock: reading reset",
+      ...bool,
+    },
+    frozen: { description: "A freeze lock is committed", ...bool },
+    loaded: { description: "Pilot only: the ground truth is stored in the database", ...bool },
+    message: str,
+    readable: bool,
+  },
   required: ["readable"],
   type: "object",
 };

@@ -38,6 +38,8 @@ const pilotFiles = (overrides: Partial<Extract<PilotFilesState, { readable: true
     frozen: true,
     frozenAt: "2026-10-30T09:00:00.000Z",
     frozenFeedback: 210,
+    loaded: true,
+    loadedAt: "2026-10-30T10:00:00.000Z",
     messages: [],
     readable: true,
     ready: true,
@@ -54,7 +56,6 @@ const heldOutV2 = (overrides: Partial<Extract<HeldOutV2State, { readable: true }
     pairs: 160,
     readable: true,
     sameNeedPositives: 70,
-    unconfirmed: 0,
     ...overrides,
   }) satisfies HeldOutV2State;
 
@@ -272,7 +273,9 @@ describe("Intake Duplicate Rate bar", () => {
     const overrides = { pilotFiles: pilotFiles({ changed: true, ready: false }) };
     expect(reasonsOf(overrides, "intakeDuplicateRate")).toMatch(/reading reset/iu);
     const report = buildProofReport(inputs(overrides));
-    expect(report.readiness.readingResets.join(" ")).toMatch(/Pilot files changed after freeze/u);
+    expect(report.readiness.readingResets.join(" ")).toMatch(
+      /Pilot data changed after freeze: reading reset/u,
+    );
     expect(report.supporting.notes.join(" ")).toMatch(/Answer Key changed after freeze/u);
   });
 
@@ -283,6 +286,20 @@ describe("Intake Duplicate Rate bar", () => {
     expect(
       reasonsOf({ pilotFiles: { message: "bad json", readable: false } }, "intakeDuplicateRate"),
     ).toMatch(/could not be read: bad json/iu);
+  });
+
+  it("is inconclusive with 'pilot data not loaded' when the database holds no pilot data", () => {
+    const report = buildProofReport(
+      inputs({
+        answerKeyScores: null,
+        pilotFiles: pilotFiles({ loaded: false, loadedAt: null, ready: false }),
+      }),
+    );
+    const intakeBar = report.bars.find((bar) => bar.key === "intakeDuplicateRate");
+    expect(intakeBar?.verdict).toBe("inconclusive");
+    expect(intakeBar?.reasons.join(" ")).toMatch(/pilot data not loaded/iu);
+    expect(report.verdict).toBe("inconclusive");
+    expect(report.supporting.notes.join(" ")).toMatch(/pilot data not loaded/iu);
   });
 
   it("is inconclusive with null values when pilot metrics are unavailable", () => {
@@ -398,7 +415,7 @@ describe("Same-Need Precision bar (kill line)", () => {
 
   it("is inconclusive with no reading at all", () => {
     expect(reasonsOf({ v2LatestReading: null, v2Reading: null }, "sameNeedPrecision")).toMatch(
-      /no Held-Out Set v2 reading yet/iu,
+      /no v2 reading/iu,
     );
   });
 
