@@ -13,6 +13,7 @@ import {
   canonicalIdFor,
   describeDecision,
   duplicateOriginLabel,
+  filterBlindChoices,
   formatRate,
   groupEvidenceByAccount,
   metricCards,
@@ -53,6 +54,7 @@ const support = (
 });
 
 const decision = (overrides: Partial<ReviewDecision> = {}): ReviewDecision => ({
+  blind: false,
   actor: { name: "Priya", type: "staff" },
   canonicalId: null,
   createdAt: "2026-10-28T00:00:00.000Z",
@@ -360,5 +362,26 @@ describe("describeDecision", () => {
     expect(describeDecision(decision(), new Map())).toBe(
       "Distinct: “a Feature Request” and “a Feature Request”",
     );
+  });
+});
+
+describe("filterBlindChoices", () => {
+  const choices = [
+    { id: A, title: "Approve shift trades" },
+    { id: B, title: "Manager approval for swaps" },
+    { id: S, title: "Zeta export" },
+  ];
+
+  it("shows nothing until the Product Manager types", () => {
+    expect(filterBlindChoices(choices, "  ", A)).toEqual([]);
+  });
+
+  it("matches titles case-insensitively, keeps title order and excludes the request itself", () => {
+    expect(filterBlindChoices(choices, "APPRO", A)).toEqual([choices[1]]);
+    expect(filterBlindChoices(choices, "a", S).map((choice) => choice.id)).toEqual([A, B]);
+  });
+
+  it("caps the matches", () => {
+    expect(filterBlindChoices(choices, "e", "none", 2)).toHaveLength(2);
   });
 });

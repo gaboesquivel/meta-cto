@@ -3,6 +3,7 @@ import type {
   DecideInput,
   DuplicateEvidence,
   EvidenceVia,
+  FeatureRequestRef,
   ReviewDecision,
   ReviewDecisionKind,
   ReviewMetrics,
@@ -156,6 +157,26 @@ export const buildDecisionBody = (input: {
   const violation = decisionRuleViolation(decide);
   if (violation) return { message: violation, ok: false };
   return { body: { ...decide, actor: { name, type: "staff" } }, ok: true };
+};
+
+/** Blind Review matches shown at once; the Product Manager narrows by typing. */
+export const BLIND_CHOICE_LIMIT = 8;
+
+/**
+ * Blind Review: Feature Requests whose title contains the typed text, in title order (no AI
+ * ranking), without the request under review. Empty until something is typed.
+ */
+export const filterBlindChoices = (
+  choices: FeatureRequestRef[],
+  query: string,
+  selfId: string,
+  limit = BLIND_CHOICE_LIMIT,
+): FeatureRequestRef[] => {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  return choices
+    .filter((choice) => choice.id !== selfId && choice.title.toLowerCase().includes(needle))
+    .slice(0, limit);
 };
 
 export type ReviewActionBlock = "name" | "pending" | "sign_in";

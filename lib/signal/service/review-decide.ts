@@ -4,7 +4,7 @@ import type { FeatureRequestRow } from "../repository";
 import { orderedPair, toReviewDecision } from "../repository";
 import { UNIQUE_VIOLATION, databaseErrorCode, parseInput, requireFeatureRequest } from "./context";
 import type { ReviewContext } from "./review-context";
-import { actorColumns, invalidDecision } from "./review-context";
+import { actorColumns, invalidDecision, isBlind } from "./review-context";
 
 const CHECK_VIOLATION = "23514";
 
@@ -12,7 +12,18 @@ const CHECK_VIOLATION = "23514";
 const resolveSuggestion = async (
   context: ReviewContext,
   input: DecideInput,
+  blind: boolean,
 ): Promise<string | null> => {
+  if (blind) {
+    // A blind reviewer was shown no suggestion, so the decision answers none.
+    if (input.suggestionId) {
+      throw invalidDecision(
+        "This Feature Request is under Blind Review; its decision answers no suggestion.",
+        "Omit suggestionId and retry.",
+      );
+    }
+    return null;
+  }
   if (!input.otherId) {
     if (input.suggestionId) throw invalidDecision("A none decision answers no suggestion.");
     return null;
@@ -53,11 +64,12 @@ const insertDecision = async (
   context: ReviewContext,
   input: DecideInput,
   actor: Actor,
-  suggestionId: string | null,
+  { blind, suggestionId }: { blind: boolean; suggestionId: string | null },
 ) => {
   try {
     return await context.repo.insertReviewDecision({
       ...actorColumns(actor),
+      blind,
       canonicalId: input.canonicalId ?? null,
       decision: input.decision,
       featureRequestId: input.featureRequestId,
@@ -107,7 +119,10 @@ const loadSides = async (context: ReviewContext, input: DecideInput) => {
   return { featureRequest, other };
 };
 
-/** Records a Review Decision; a Duplicate also associates the non-canonical side with the canonical. */
+/**
+ * Records a Review Decision; a Duplicate also associates the non-canonical side with the canonical.
+ * The decision is blind when its Feature Request is a new one chosen for Blind Review.
+ */
 export const runDecide = async (
   context: ReviewContext,
   raw: DecideInput,
@@ -118,7 +133,8 @@ export const runDecide = async (
   const violation = decisionRuleViolation(input);
   if (violation) throw invalidDecision(violation, "Fix the decision fields and retry.");
   const { featureRequest, other } = await loadSides(context, input);
-  const suggestionId = await resolveSuggestion(context, input);
+  const blind = isBlind(context, featureRequest);
+  const suggestionId = await resolveSuggestion(context, input, blind);
   const sides = other && input.decision === "duplicate" ? [featureRequest, other] : [];
   const canonical = sides.find((row) => row.id === input.canonicalId);
   const duplicate = sides.find((row) => row.id !== input.canonicalId);
@@ -126,12 +142,15 @@ export const runDecide = async (
     const refused = await duplicateViolation(context, canonical, duplicate);
     if (refused) throw invalidDecision(refused, "Undo the decision that set it up, then retry.");
   }
-  const decision = toReviewDecision(await insertDecision(context, input, actor, suggestionId));
+  const decision = toReviewDecision(
+    await insertDecision(context, input, actor, { blind, suggestionId }),
+  );
   if (duplicate) await associate(context, decision, duplicate.id);
   await context.repo.insertEvent({
     origin: context.origin,
     payload: {
       actor,
+      blind: decision.blind,
       canonicalId: decision.canonicalId,
       decision: decision.decision,
       decisionId: decision.id,

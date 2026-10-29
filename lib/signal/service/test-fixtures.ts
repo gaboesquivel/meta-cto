@@ -79,6 +79,8 @@ export interface Harness {
 }
 
 export const createHarness = async (input: {
+  /** Share of new Feature Requests chosen for Blind Review (0 by default, as in the demo). */
+  blindShare?: number;
   judge?: JudgeBehavior;
   judgeTimeoutMs?: number;
   /** The caller's Origin for both services; demo when omitted. */
@@ -107,6 +109,7 @@ export const createHarness = async (input: {
     workspaceId: workspace.id,
   });
   const review = createReviewService({
+    blindShare: input.blindShare,
     now: () => clock.now,
     origin,
     repo: input.reviewRepo ? input.reviewRepo(repo) : repo,

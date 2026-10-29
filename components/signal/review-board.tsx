@@ -14,6 +14,7 @@ import type {
 import { callApi } from "./api";
 import { ErrorNotice } from "./error-notice";
 import { OperatorSignIn } from "./operator-sign-in";
+import { BlindReviewItem } from "./review-blind-item";
 import { DecisionLine, ReviewItem } from "./review-item";
 import type { ReviewActions } from "./review-item";
 import { ReviewMetricsPanel } from "./review-metrics";
@@ -112,6 +113,7 @@ export const ReviewBoard = ({ operator }: { operator: boolean }) => {
       map.set(item.featureRequest.id, item.featureRequest.title);
       for (const suspicion of item.suspicions) map.set(suspicion.other.id, suspicion.other.title);
     }
+    for (const choice of queue.data?.blindChoices ?? []) map.set(choice.id, choice.title);
     return map;
   }, [queue.data]);
 
@@ -211,14 +213,23 @@ export const ReviewBoard = ({ operator }: { operator: boolean }) => {
           </p>
         ) : null}
         <div className="flex flex-col gap-4">
-          {items.map((item) => (
-            <ReviewItem
-              actions={actions}
-              describe={describe}
-              item={item}
-              key={item.featureRequest.id}
-            />
-          ))}
+          {items.map((item) =>
+            item.blind ? (
+              <BlindReviewItem
+                actions={actions}
+                choices={queue.data?.blindChoices ?? []}
+                item={item}
+                key={item.featureRequest.id}
+              />
+            ) : (
+              <ReviewItem
+                actions={actions}
+                describe={describe}
+                item={item}
+                key={item.featureRequest.id}
+              />
+            ),
+          )}
         </div>
       </section>
 

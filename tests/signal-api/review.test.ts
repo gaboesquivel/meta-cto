@@ -13,6 +13,7 @@ import { GET as getQueue } from "../../app/api/review/queue/route";
 import { POST as postScan } from "../../app/api/review/scan/route";
 import {
   actor,
+  blindReviewQueue,
   DECISION_ID,
   FR_ID,
   idParams,
@@ -106,6 +107,17 @@ describe("GET /api/review/queue", () => {
     const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(reviewQueue);
+  });
+
+  it("returns a blind item with no AI suggestion, Reason or restated need, plus blindChoices", async () => {
+    review.queue.mockResolvedValueOnce(blindReviewQueue);
+    const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as typeof blindReviewQueue;
+    expect(body.items[0]).toMatchObject({ blind: true, suspicions: [] });
+    expect(body.items[0]?.featureRequest.underlyingNeed).toBeNull();
+    expect(body.blindChoices).toEqual(blindReviewQueue.blindChoices);
+    expect(JSON.stringify(body)).not.toMatch(/reason|suggestionId/u);
   });
 
   it("returns 503 service_unavailable when the review service is not configured", async () => {
@@ -311,6 +323,18 @@ describe("OpenAPI document for review routes", () => {
     const operation = paths[path]?.[method];
     expect(operation?.operationId).toBe(operationId);
     expect(Object.keys(operation?.responses ?? {})).toEqual(expect.arrayContaining(statuses));
+  });
+
+  it("documents Blind Review on the queue and the decision", () => {
+    const schemas = doc.components.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; required?: string[] }
+    >;
+    const queueSchema = JSON.stringify(schemas.SignalReviewQueue);
+    expect(queueSchema).toContain("blindChoices");
+    expect(queueSchema).toContain('"blind"');
+    expect(schemas.SignalReviewDecision?.required).toContain("blind");
+    expect(schemas.SignalReviewDecision?.properties).toHaveProperty("blind");
   });
 
   it("documents the ReviewMetrics shape on GET /api/metrics", () => {

@@ -1,8 +1,10 @@
 import type {
   Actor,
+  FeatureRequestRef,
   FeatureRequestSummary,
   ReviewDecision,
   ReviewQueue,
+  ReviewQueueItem,
   ReviewService,
   ReviewSuspicionView,
 } from "../contracts";
@@ -13,7 +15,7 @@ import { isUuid, parseInput } from "./context";
 import { runMetrics } from "./metrics";
 import { runDecide } from "./review-decide";
 import type { ReviewContext, ReviewServiceDeps } from "./review-context";
-import { actorColumns, decisionNotFound } from "./review-context";
+import { actorColumns, decisionNotFound, isBlind } from "./review-context";
 import { summarize } from "./views";
 
 export type { ReviewServiceDeps } from "./review-context";
@@ -56,10 +58,24 @@ const summariesById = async (context: ReviewContext, ids: string[]) => {
   return new Map(summaries.map((row) => [row.id, row]));
 };
 
-/** New requests not yet reviewed and requests with undecided suspicions, each with every suspicion's state. */
+/** Every open Feature Request by title, id and title only: no AI ranking for a blind reviewer. */
+const blindChoicesOf = async (context: ReviewContext): Promise<FeatureRequestRef[]> => {
+  const rows = await context.repo.listOpenFeatureRequests(context.workspaceId);
+  return rows
+    .map((row) => ({ id: row.id, title: row.title }))
+    .toSorted((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+};
+
+/**
+ * New requests not yet reviewed and requests with undecided suspicions, each with every
+ * suspicion's state. Blind Review (spec 003): a blind item shows no suspicion and no restated need,
+ * and suspicions touching a blind request are withheld from the other side too; a backlog request
+ * left with nothing undecided to show waits until the blind request is decided.
+ */
 const runQueue = async (context: ReviewContext): Promise<ReviewQueue> => {
   const rows = await context.repo.listReviewQueueRequests(context.workspaceId);
   const ids = rows.map((row) => row.id);
+  const blindIds = new Set(rows.filter((row) => isBlind(context, row)).map((row) => row.id));
   const suspicions = await context.repo.listSuspectedDuplicates(ids);
   const decisions = await activeDecisionsByPair(context, ids);
   const others = await summariesById(
@@ -67,7 +83,19 @@ const runQueue = async (context: ReviewContext): Promise<ReviewQueue> => {
     suspicions.flatMap((row) => [row.featureRequestAId, row.featureRequestBId]),
   );
   const summaries = await summarize(context, rows);
-  const items = summaries.map((featureRequest, index) => {
+  const items = summaries.flatMap((featureRequest, index): ReviewQueueItem[] => {
+    const isNew = rows[index]?.createdViaCheck ?? false;
+    if (blindIds.has(featureRequest.id)) {
+      return [
+        {
+          blind: true,
+          featureRequest: { ...featureRequest, underlyingNeed: null },
+          isNew,
+          suspicions: [],
+        },
+      ];
+    }
+    let withheld = 0;
     const views = suspicions.flatMap((row) => {
       const otherId = otherOf(row, featureRequest.id);
       const other = others.get(otherId);
@@ -76,6 +104,10 @@ const runQueue = async (context: ReviewContext): Promise<ReviewQueue> => {
         (row.featureRequestAId === featureRequest.id ||
           row.featureRequestBId === featureRequest.id);
       if (!(touches && other)) return [];
+      if (blindIds.has(otherId)) {
+        withheld += 1;
+        return [];
+      }
       return [
         toSuspicionView(
           row,
@@ -84,10 +116,13 @@ const runQueue = async (context: ReviewContext): Promise<ReviewQueue> => {
         ),
       ];
     });
-    return { featureRequest, isNew: rows[index]?.createdViaCheck ?? false, suspicions: views };
+    const waitsForBlind = withheld > 0 && !isNew && !views.some((view) => view.decision === null);
+    return waitsForBlind ? [] : [{ blind: false, featureRequest, isNew, suspicions: views }];
   });
   const fresh = items.filter((item) => item.isNew).length;
-  return { counts: { backlog: items.length - fresh, new: fresh }, items };
+  const queue: ReviewQueue = { counts: { backlog: items.length - fresh, new: fresh }, items };
+  if (blindIds.size > 0) queue.blindChoices = await blindChoicesOf(context);
+  return queue;
 };
 
 /** Undo keeps the decision as history; a Duplicate's association ends. */
@@ -130,6 +165,7 @@ const runUndo = async (
 /** The Product Manager's review behaviour; Operator access is checked by REST and MCP. */
 export const createReviewService = (deps: ReviewServiceDeps): ReviewService => {
   const context: ReviewContext = {
+    blindShare: deps.blindShare ?? 0,
     now: deps.now ?? (() => new Date()),
     origin: deps.origin ?? DEMO_ORIGIN,
     repo: deps.repo,

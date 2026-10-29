@@ -9,6 +9,7 @@ import { featureRequests, workspaces } from "@/lib/signal/schema";
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
 import {
+  blindShareFor,
   createRuntimeReviewService,
   createRuntimeService,
   getSignalService,
@@ -81,17 +82,17 @@ describe("signal runtime", () => {
   });
 });
 
+const filing = {
+  actor: { name: "pilot-agent", type: "agent" as const },
+  draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+};
+
+const fileThroughCheck = async (service: ReturnType<typeof createRuntimeService>) => {
+  const check = await service.check(filing);
+  return await service.create({ ...filing, checkId: check.checkId });
+};
+
 describe("pilot runtime", () => {
-  const filing = {
-    actor: { name: "pilot-agent", type: "agent" as const },
-    draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
-  };
-
-  const fileThroughCheck = async (service: ReturnType<typeof createRuntimeService>) => {
-    const check = await service.check(filing);
-    return await service.create({ ...filing, checkId: check.checkId });
-  };
-
   it("acts on the Pilot Workspace with Origin pilot, not the Crewday demo", async () => {
     const db = await createTestDb();
     const pilot = createRuntimeService({ db, embedder, judge, origin: "pilot" });
@@ -154,6 +155,38 @@ describe("pilot runtime", () => {
     assert.equal(demoQueue.counts.new, 1);
     assert.equal(pilotQueue.counts.new, 1);
     assert.notEqual(demoQueue.items[0]?.featureRequest.id, pilotQueue.items[0]?.featureRequest.id);
+  });
+});
+
+describe("blindShareFor", () => {
+  afterEach(() => {
+    delete process.env.SIGNAL_PILOT_BLIND_SHARE;
+    delete process.env.SIGNAL_DEMO_BLIND_SHARE;
+  });
+
+  it("blinds about 30% of pilot requests and none in the demo by default", () => {
+    assert.equal(blindShareFor("pilot"), 0.3);
+    assert.equal(blindShareFor("demo"), 0);
+    assert.equal(blindShareFor("eval"), 0);
+  });
+
+  it("reads each Workspace's share from the environment and ignores invalid values", () => {
+    process.env.SIGNAL_PILOT_BLIND_SHARE = "0.5";
+    process.env.SIGNAL_DEMO_BLIND_SHARE = "1";
+    assert.equal(blindShareFor("pilot"), 0.5);
+    assert.equal(blindShareFor("demo"), 1);
+    process.env.SIGNAL_PILOT_BLIND_SHARE = "2";
+    process.env.SIGNAL_DEMO_BLIND_SHARE = "nope";
+    assert.equal(blindShareFor("pilot"), 0.3);
+    assert.equal(blindShareFor("demo"), 0);
+  });
+
+  it("marks pilot queue items blind with the configured share", async () => {
+    const db = await createTestDb();
+    await fileThroughCheck(createRuntimeService({ db, embedder, judge, origin: "pilot" }));
+    const queue = await createRuntimeReviewService({ blindShare: 1, db, origin: "pilot" }).queue();
+    assert.equal(queue.items[0]?.blind, true);
+    assert.ok(queue.blindChoices);
   });
 });
 
