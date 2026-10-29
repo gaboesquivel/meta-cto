@@ -8,7 +8,7 @@ disable-model-invocation: false
 
 **Preserve intent** for the project you are in. Align its root context when work changes what that product is, how it behaves, how it is built, or how the team names important concepts.
 
-This skill runs no other skill and authorizes no implementation (decision 0024). It is **not** project initialization.
+This skill runs no other skill and authorizes no implementation. It is **not** project initialization.
 
 ## Whose product
 
@@ -17,7 +17,7 @@ This skill runs no other skill and authorizes no implementation (decision 0024).
 
 Do not replace a project's product identity with Flow's tagline, mission, principles, or strategic chain.
 
-`flow start` and "start project" are not this skill. The optional `start` skill (decision 0010) is this setup plus a template bootstrap from flow-next or flow-mono (decision 0026), and confirms template, name, destination, and preset before writing. If someone asks to scaffold a repository without `start`, stop and do not create starter trees, instruction-file snippets, or a Flow-branded `PRODUCT.md`.
+`flow start` and "start project" are not this skill. The optional `start` skill is this setup plus a template bootstrap from flow-next or flow-mono, and confirms template, name, destination, and preset before writing. If someone asks to scaffold a repository without `start`, stop and do not create starter trees, instruction-file snippets, or a Flow-branded `PRODUCT.md`.
 
 ## Invocation
 
@@ -31,11 +31,11 @@ Hosts may match this skill when the user asks to update or sync the docs. That i
 
 ## Flow block
 
-"Set up Flow here" opts the project into Flow mode (decision 0020). This section is the one definition of the block; `start` writes the same block during a bootstrap, before its checks. Deleting the block opts out.
+"Set up Flow here" opts the project into Flow mode. This section is the one definition of the block; `start` writes the same block during a bootstrap, before its checks. Deleting the block opts out.
 
 **Repository.** The block needs a Git repository: follow `write-agents` [Repository](../write-agents/SKILL.md#repository) before writing it. Aligning root files does not.
 
-**Ask.** Read any existing block first. When `Delivery:` is missing or `unset` and the request does not name it, ask once before writing: **GitHub** (issues and pull requests) or **local** (decisions 0030, 0037), with a suggestion as `build`'s Delivery mode section describes; that section owns the rule and what each mode does. If `build` is unavailable, ask without a suggestion. A recorded value stays unless the user names a new one, so a re-run with it set asks nothing. Setup asks for no discovery depth (decision 0036); a leftover `Process:` line is dropped on the next write.
+**Ask.** Read any existing block first. When `Delivery:` is missing or `unset` and the request does not name it, ask once before writing: **GitHub** (issues and pull requests) or **local**, with a suggestion as `build`'s Delivery mode section describes; that section owns the rule and what each mode does. If `build` is unavailable, ask without a suggestion. A recorded value stays unless the user names a new one, so a re-run with it set asks nothing. Setup asks for no discovery depth; a leftover `Process:` line is dropped on the next write.
 
 **Write** with this skill's [`lib/flow-block.mjs`](lib/flow-block.mjs): `node <skill-dir>/lib/flow-block.mjs <absolute-project-path> [local|github]`. A legacy `pull-request` value is read and rewritten as `github`. The helper owns the layout and block rules: which file holds the block, the `@AGENTS.md` import, markers, the phrase table (`PHRASES`), keeping the recorded value, moving a stale block out of an ignored `AGENTS.md`, and refusing malformed markers or symlinked, out-of-project, or shared instruction files. Never touch text outside the markers and that import line.
 
@@ -47,7 +47,7 @@ Report the helper's output: the block's file (`Wrote` or `Unchanged`), any stale
 
 ## Boundaries
 
-- Do not edit adopter `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, or similar instruction files outside the Flow block and the `@AGENTS.md` import, and write the block only when the user asks or `start` runs a confirmed bootstrap (decision 0020).
+- Do not edit adopter `AGENTS.md`, `CLAUDE.md`, `.cursorrules`, or similar instruction files outside the Flow block and the `@AGENTS.md` import, and write the block only when the user asks or `start` runs a confirmed bootstrap.
 - Do not require installation, initialization, or a prior skill invocation.
 - Do not treat alignment edits as permission to implement unrelated code. For authorized implementation and tests, invoke the `build` skill when installed.
 - Do not create `docs/specs/` or `docs/decisions/` records here; use `to-spec` or explicit decision work when durable bounded artifacts are justified.

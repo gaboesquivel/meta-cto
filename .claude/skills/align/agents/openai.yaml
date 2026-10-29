@@ -1,0 +1,5 @@
+interface:
+  display_name: "Align"
+  short_description: "Check the product against its vision and goals"
+policy:
+  allow_implicit_invocation: true
