@@ -38,4 +38,5 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 ## Local development
 
 - `pnpm setup`: dependencies and template technical skills
-- `pnpm dev`: migrate, seed, then Portless at `meta-cto.localhost`
+- `pnpm dev`: migrate, seed, then Portless at `https://meta-cto.localhost` (proxy pinned to 443, so the URL never carries a port)
+- `pnpm dev:port`: migrate, seed, then plain `next dev` at `localhost:<port>`, for agents and subagents running dev servers in parallel (one per worktree; set `PORT` or take Next's next free port)
