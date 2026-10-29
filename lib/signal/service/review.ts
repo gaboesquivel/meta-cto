@@ -60,10 +60,8 @@ const summariesById = async (context: ReviewContext, ids: string[]) => {
 
 /** Every open Feature Request by title, id and title only: no AI ranking for a blind reviewer. */
 const blindChoicesOf = async (context: ReviewContext): Promise<FeatureRequestRef[]> => {
-  const rows = await context.repo.listOpenFeatureRequests(context.workspaceId);
-  return rows
-    .map((row) => ({ id: row.id, title: row.title }))
-    .toSorted((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
+  const rows = await context.repo.listOpenFeatureRequestTitles(context.workspaceId);
+  return rows.toSorted((a, b) => a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
 };
 
 /**

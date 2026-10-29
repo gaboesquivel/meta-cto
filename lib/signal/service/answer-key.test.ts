@@ -437,4 +437,27 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
     });
     assert.equal(scores.pmAgreement.blind.decided, 0);
   });
+
+  it("does not count a Related or Distinct decision for the request it only names as the other side", async () => {
+    const pilot = await pilotHarness();
+    const named = await createFor(pilot, "fb-3");
+    const decided = await createFor(pilot, "fb-1");
+    // Disagree for `decided` (fr-swap shares fb-1's need); `named` has no decision of its own.
+    await pilot.review.decide(
+      {
+        decision: "related",
+        featureRequestId: decided.id,
+        otherId: named.id,
+        sharedDimension: "shifts",
+      },
+      staff,
+    );
+
+    const scores = await score(pilot);
+
+    assert.deepEqual(
+      [scores.pmAgreement.nonBlind.decided, scores.pmAgreement.nonBlind.disagree],
+      [1, 1],
+    );
+  });
 });

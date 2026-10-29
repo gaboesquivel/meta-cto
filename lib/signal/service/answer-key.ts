@@ -1,7 +1,7 @@
 import type { Origin } from "../contracts";
 import { rateOf } from "../contracts";
 import { PILOT_ORIGIN, PILOT_WORKSPACE, pilotKeyOfSeed } from "../pilot";
-import type { FeatureRequestRow, SignalRepository } from "../repository";
+import type { ReviewDecisionRow, SignalRepository } from "../repository";
 
 /**
  * Answer Key scoring (spec 003, decision 0003): Agent Correctness and Product Manager agreement
@@ -37,7 +37,7 @@ export interface AnswerKeyLabels {
  */
 export type RequestRef = { backlog: string } | { filedFor: string | null };
 
-/** An agent's Support, Comment or create in the pilot. */
+/** An agent's Support, Comment or create in the pilot: the actions Agent Correctness scores. */
 export type AgentAction =
   | { feedbackItemId: string | null; kind: "comment" | "support"; target: RequestRef }
   | {
@@ -57,7 +57,7 @@ export type AgentOutcome =
   | "unresolved";
 
 /**
- * Agent Correctness with its counts. `rate` = correct ÷ scored, where scored = correct + harm +
+ * Agent Correctness over agent Supports, Comments and creates, with its counts. `rate` = correct ÷ scored, where scored = correct + harm +
  * miss. Unlinked (no feedback item), unmatched (no Answer Key entry), unconfirmed (entry not
  * confirmed) and unresolved (the target's need is not in the confirmed key) are counted, not scored.
  */
@@ -85,7 +85,10 @@ export type PmVerdict =
       kind: "not_duplicate";
     };
 
-/** A decided new pilot Feature Request: Related, Distinct and No Duplicates are not_duplicate. */
+/**
+ * A decided new pilot Feature Request (see `pmDecisionOf`): Related, Distinct and No Duplicates
+ * are not_duplicate.
+ */
 export interface PmJudgement {
   /** Decided under Blind Review: the request's own active decision is blind. */
   blind: boolean;
@@ -287,37 +290,49 @@ const feedbackByCheck = async (scope: PilotScope) => {
   return map;
 };
 
-const PAGE = 500;
-
-/** Every Feature Request in the Workspace, oldest first. */
-const allRequests = async (scope: PilotScope) => {
-  const rows: FeatureRequestRow[] = [];
-  for (let offset = 0; ; offset += PAGE) {
-    // oxlint-disable-next-line no-await-in-loop
-    const page = await scope.repo.listFeatureRequests({
-      limit: PAGE,
-      offset,
-      workspaceId: scope.workspaceId,
-    });
-    rows.push(...page);
-    if (page.length < PAGE) break;
-  }
-  return rows.toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-};
+type RequestKeyRow = Awaited<ReturnType<SignalRepository["listFeatureRequestKeys"]>>[number];
 
 const UNKNOWN: RequestRef = { filedFor: null };
 
+/**
+ * The Product Manager's decision for a new request, from active Review Decisions: only those made
+ * on the request itself, plus a Duplicate on either side (it decides both). A Related or Distinct
+ * decision on another request that only names this one as its other side is not this request's
+ * decision. `duplicateOf` is the other side of the Duplicate; `blind` reads the request's own
+ * decisions. Undefined when the request is undecided.
+ */
+export const pmDecisionOf = (
+  id: string,
+  decisions: Pick<ReviewDecisionRow, "blind" | "decision" | "featureRequestId" | "otherId">[],
+): { blind: boolean; duplicateOf: string | undefined } | undefined => {
+  const own = decisions.filter((row) => row.featureRequestId === id);
+  const duplicate =
+    own.find((row) => row.decision === "duplicate") ??
+    decisions.find((row) => row.decision === "duplicate" && row.otherId === id);
+  if (own.length === 0 && !duplicate) return undefined;
+  const duplicateOf =
+    duplicate?.featureRequestId === id
+      ? (duplicate.otherId ?? undefined)
+      : duplicate?.featureRequestId;
+  return { blind: own.some((row) => row.blind), duplicateOf };
+};
+
 const loadPilotActivity = async (scope: PilotScope) => {
-  const feedbackOf = await feedbackByCheck(scope);
+  const [feedbackOf, rows, created, supported, commented] = await Promise.all([
+    feedbackByCheck(scope),
+    scope.repo.listFeatureRequestKeys(scope.workspaceId),
+    eventsOf(scope, "feature_request_created"),
+    eventsOf(scope, "feature_request_supported"),
+    eventsOf(scope, "comment_added"),
+  ]);
   const linked = (checkId: string | null) => (checkId ? (feedbackOf.get(checkId) ?? null) : null);
-  const rows = await allRequests(scope);
   const rowById = new Map(rows.map((row) => [row.id, row]));
-  const refOf = (row: FeatureRequestRow): RequestRef => {
+  const refOf = (row: RequestKeyRow): RequestRef => {
     const backlog = pilotKeyOfSeed(row.seedKey);
     return backlog ? { backlog } : { filedFor: linked(row.checkId) };
   };
   /** The backlog and every request filed before `row`. */
-  const before = (row: FeatureRequestRow | undefined): RequestRef[] =>
+  const before = (row: RequestKeyRow | undefined): RequestRef[] =>
     rows
       .filter(
         (other) =>
@@ -327,9 +342,6 @@ const loadPilotActivity = async (scope: PilotScope) => {
       )
       .map(refOf);
 
-  const created = await eventsOf(scope, "feature_request_created");
-  const supported = await eventsOf(scope, "feature_request_supported");
-  const commented = await eventsOf(scope, "comment_added");
   const engaged = [
     ...supported.map((event) => ({ ...event, kind: "support" as const })),
     ...commented.map((event) => ({ ...event, kind: "comment" as const })),
@@ -360,18 +372,15 @@ const loadPilotActivity = async (scope: PilotScope) => {
     featureRequestIds: newIds,
   });
   const judgements = newIds.flatMap((id): PmJudgement[] => {
-    const touching = decisions.filter((row) => row.featureRequestId === id || row.otherId === id);
-    if (touching.length === 0) return [];
-    const duplicate = touching.find((row) => row.decision === "duplicate");
-    const otherId =
-      duplicate?.featureRequestId === id ? duplicate.otherId : duplicate?.featureRequestId;
-    const other = otherId ? rowById.get(otherId) : undefined;
+    const decided = pmDecisionOf(id, decisions);
+    if (!decided) return [];
     const row = rowById.get(id);
+    const other = decided.duplicateOf ? rowById.get(decided.duplicateOf) : undefined;
     return [
       {
-        blind: touching.some((decision) => decision.featureRequestId === id && decision.blind),
+        blind: decided.blind,
         feedbackItemId: linked(row?.checkId ?? null),
-        verdict: duplicate
+        verdict: decided.duplicateOf
           ? { kind: "duplicate", other: other ? refOf(other) : UNKNOWN }
           : { earlier: before(row), kind: "not_duplicate" },
       },
@@ -387,11 +396,19 @@ const loadPilotActivity = async (scope: PilotScope) => {
 export const createAnswerKeyScoring = (deps: {
   answerKey: AnswerKeyLabels;
   repo: SignalRepository;
-}) => ({
-  score: async (): Promise<AnswerKeyScores> => {
-    const { id: workspaceId } = await deps.repo.ensureWorkspace(PILOT_WORKSPACE);
-    const scope: PilotScope = { origin: PILOT_ORIGIN, repo: deps.repo, workspaceId };
-    const activity = await loadPilotActivity(scope);
-    return scoreAnswerKey({ ...activity, answerKey: deps.answerKey });
-  },
-});
+  /** The Pilot Workspace id when the caller has it; otherwise looked up once and kept. */
+  workspaceId?: string;
+}) => {
+  let { workspaceId } = deps;
+  return {
+    score: async (): Promise<AnswerKeyScores> => {
+      if (workspaceId === undefined) {
+        const workspace = await deps.repo.ensureWorkspace(PILOT_WORKSPACE);
+        workspaceId = workspace.id;
+      }
+      const scope: PilotScope = { origin: PILOT_ORIGIN, repo: deps.repo, workspaceId };
+      const activity = await loadPilotActivity(scope);
+      return scoreAnswerKey({ ...activity, answerKey: deps.answerKey });
+    },
+  };
+};
