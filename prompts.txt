@@ -239,3 +239,7 @@ Skills used: tldr. Docs changed: none.
 2026-10-29T02:13:44Z — "update readme with first diagram"
 Summary: Added an Architecture section to README.md with the Signal architecture diagram as Mermaid (actors → check/review service → AI judge, Postgres, held-out eval). Committed; not pushed.
 Skills used: none. Docs changed: README.md.
+
+2026-10-29T02:13:59Z — "Not yet"
+Question (assistant → user): Push to origin/main? Answer: Not yet. Left 9ee8291 unpushed.
+Skills used: none. Docs changed: none.
