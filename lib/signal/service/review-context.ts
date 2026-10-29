@@ -43,6 +43,6 @@ export const actorColumns = (actor: Actor) => ({ actorName: actor.name, actorTyp
 
 /** A new (created through a Check) Feature Request chosen for Blind Review in this Workspace. */
 export const isBlind = (
-  context: ReviewContext,
+  context: Pick<ReviewContext, "blindShare" | "workspaceId">,
   row: Pick<FeatureRequestRow, "createdViaCheck" | "id">,
 ) => row.createdViaCheck && isChosenForBlindReview(context.workspaceId, row.id, context.blindShare);

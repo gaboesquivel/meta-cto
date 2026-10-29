@@ -16,6 +16,7 @@ import { createRepository } from "../repository";
 import type { SignalRepository } from "../repository";
 import { accounts, comments, featureRequests, relatedLinks, supports, workspaces } from "../schema";
 import { createTestDb } from "../test-db";
+import { PILOT_WORKSPACE } from "../pilot";
 import { seedCrewday } from "./index";
 
 const fakeEmbedder = (): Embedder & { calls: string[] } => {
@@ -133,6 +134,76 @@ describe("seedCrewday", () => {
     assert.equal(after.isDemo, false);
     const all = await db.select({ value: count() }).from(featureRequests);
     assert.equal(all[0]?.value, seedFeatureRequests.length + 1);
+  });
+
+  it("reset deletes demo rows only in the Crewday Demo Workspace, never Pilot Workspace rows", async () => {
+    await seedCrewday({ embedder: null, repo });
+    const pilot = await repo.ensureWorkspace(PILOT_WORKSPACE);
+    const account = await repo.upsertAccount({ name: "Acme Diner", workspaceId: pilot.id });
+    // The pilot loader stores backlog rows through the seed upsert, which marks them demo.
+    const backlog = await repo.upsertSeedFeatureRequest({
+      createdByActorName: "Sam (CSM)",
+      createdByActorType: "staff",
+      description: "Staff want to swap shifts.",
+      embedding: null,
+      onBehalfOfAccountId: account.id,
+      seedKey: "pilot:fr-swap",
+      title: "Shift swaps in the app",
+      underlyingNeed: null,
+      workspaceId: pilot.id,
+    });
+    assert.equal(backlog.isDemo, true);
+    const filed = await repo.insertFeatureRequest({
+      createdByActorName: "Helper bot",
+      createdByActorType: "agent",
+      createdViaCheck: true,
+      description: "Let my team trade shifts.",
+      embedding: null,
+      origin: "pilot",
+      title: "Trade shifts",
+      underlyingNeed: null,
+      workspaceId: pilot.id,
+    });
+    await repo.insertSupport({
+      accountId: account.id,
+      actorName: "Helper bot",
+      actorType: "agent",
+      featureRequestId: backlog.id,
+      isDemo: true,
+    });
+    await repo.insertComment({
+      accountId: account.id,
+      actorName: "Helper bot",
+      actorType: "agent",
+      body: "Also wants trades.",
+      featureRequestId: backlog.id,
+      isDemo: true,
+    });
+    await repo.insertRelatedLink({
+      a: filed.id,
+      b: backlog.id,
+      isDemo: true,
+      reason: "both about shifts",
+      sharedDimension: "shifts",
+      source: "check",
+    });
+
+    await seedCrewday({ db, embedder: null, repo, reset: true });
+
+    const pilotRows = await db
+      .select({ id: featureRequests.id })
+      .from(featureRequests)
+      .where(eq(featureRequests.workspaceId, pilot.id));
+    assert.deepEqual(pilotRows.map((row) => row.id).toSorted(), [backlog.id, filed.id].toSorted());
+    const kept = await Promise.all([
+      repo.listSupports(backlog.id),
+      repo.listComments(backlog.id),
+      repo.listRelatedLinks(backlog.id),
+    ]);
+    assert.deepEqual(
+      kept.map((rows) => rows.length),
+      [1, 1, 1],
+    );
   });
 
   it("reset restores demo state after demo rows are edited", async () => {

@@ -188,6 +188,25 @@ describe("blindShareFor", () => {
     assert.equal(queue.items[0]?.blind, true);
     assert.ok(queue.blindChoices);
   });
+
+  it("withholds a blind pilot request's restated need from its detail until it is decided", async () => {
+    const db = await createTestDb();
+    const pilot = createRuntimeService({ blindShare: 1, db, embedder, judge, origin: "pilot" });
+    await fileThroughCheck(pilot);
+    // The second filing has a candidate to judge, so the judge restates its need.
+    const created = await fileThroughCheck(pilot);
+    assert.equal(created.underlyingNeed, "Reliable shift trades");
+    const hidden = await pilot.get(created.id);
+    assert.equal(hidden.underlyingNeed, null);
+
+    await createRuntimeReviewService({ blindShare: 1, db, origin: "pilot" }).decide(
+      { decision: "none", featureRequestId: created.id },
+      { name: "Ana", type: "staff" },
+    );
+
+    const shown = await pilot.get(created.id);
+    assert.equal(shown.underlyingNeed, "Reliable shift trades");
+  });
 });
 
 describe("judgeTimeoutFromEnv", () => {
