@@ -97,6 +97,29 @@ or `null` (no existing request shares the need).
 ]
 ```
 
+## Agent harness: linking filings to feedback items
+
+Agents file each feedback item through a Check with the Pilot Key. To score Agent Correctness,
+pass the feedback item `key` as the optional `feedbackItemId` on `check_feature_request` (or
+`POST /api/checks`), then pass that Check's `checkId` on the Support, Comment or create that
+follows. A filing without a `checkId`, or whose Check has no `feedbackItemId`, counts as
+unlinked and is not scored.
+
+```json
+{
+  "actor": { "name": "pilot-agent-1", "type": "agent" },
+  "draft": { "title": "Trade shifts", "description": "Let my team trade shifts themselves." },
+  "feedbackItemId": "fb-1",
+  "onBehalfOf": { "account": { "name": "Acme Diner" } }
+}
+```
+
+Scoring (`lib/signal/service/answer-key.ts`): a Support or Comment on the request the Answer Key
+names is correct, on any other request harm; a create is a miss when the key names a request and
+correct when it says `null`. Product Manager agreement compares each decided new request's
+Duplicate (or not) with the key, blind and non-blind apart. Unconfirmed entries are excluded and
+counted.
+
 ## Commands (Operator only; never part of a build)
 
 - `pnpm signal:pilot:check` — counts, unconfirmed entries, frozen or changed. No database.

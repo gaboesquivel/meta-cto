@@ -230,6 +230,13 @@ export const signalSchemas = {
     properties: {
       actor: ref("SignalActor"),
       draft: ref("SignalDraft"),
+      feedbackItemId: {
+        description:
+          "Pilot agent harness only: the pilot feedback item key this Check files; links the Support, Comment or create that uses this checkId to the Answer Key",
+        maxLength: 120,
+        minLength: 1,
+        type: "string",
+      },
       onBehalfOf: ref("SignalOnBehalfOf"),
     },
     required: ["draft", "actor"],
@@ -837,6 +844,13 @@ export const signalMcpTools = {
       properties: {
         actor: ref("SignalActor"),
         draft: ref("SignalDraft"),
+        feedbackItemId: {
+          description:
+            "Pilot agent harness only: the pilot feedback item key this Check files; links the Support, Comment or create that uses this checkId to the Answer Key",
+          maxLength: 120,
+          minLength: 1,
+          type: "string",
+        },
         onBehalfOf: ref("SignalOnBehalfOf"),
       },
       required: ["draft", "actor"],

@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
+import type { AnswerKeyLabel } from "@/lib/signal/service/answer-key";
+
 /**
  * Pilot files (spec 003, task 03): the pre-pilot backlog, the feedback agents will file, the
  * Answer Key and the manifest that states the expected backlog duplicate rate. All four are
@@ -169,6 +171,14 @@ export const answerKeyFor = (
     ? { confirmed: isConfirmed(entry), sharesNeedWith: entry.sharesNeedWith }
     : undefined;
 };
+
+/** Every Answer Key entry as Answer Key scoring reads it; unconfirmed ones are excluded there. */
+export const answerKeyLabels = (files: Pick<PilotFiles, "answerKey">): AnswerKeyLabel[] =>
+  files.answerKey.map((entry) => ({
+    confirmed: isConfirmed(entry),
+    feedback: entry.feedback,
+    sharesNeedWith: entry.sharesNeedWith,
+  }));
 
 const duplicates = (keys: string[]) => [...new Set(keys.filter((k, i) => keys.indexOf(k) !== i))];
 const sameName = (a: string | null | undefined, b: string | null | undefined) =>

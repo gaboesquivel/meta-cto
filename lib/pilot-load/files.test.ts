@@ -6,6 +6,7 @@ import { describe, it } from "vitest";
 
 import {
   answerKeyFor,
+  answerKeyLabels,
   checkPilotReady,
   fingerprint,
   freezePilot,
@@ -157,6 +158,19 @@ describe("answerKeyFor", () => {
     assert.deepEqual(answerKeyFor(files, "fb-1"), { confirmed: true, sharesNeedWith: "fr-swap" });
     assert.deepEqual(answerKeyFor(files, "fb-2"), { confirmed: true, sharesNeedWith: null });
     assert.equal(answerKeyFor(files, "fb-404"), undefined);
+  });
+});
+
+describe("answerKeyLabels", () => {
+  it("gives every Answer Key entry with whether a person confirmed it, for scoring", () => {
+    const files = pilotFixture();
+    const [first] = files.answerKey;
+    assert.ok(first);
+    files.answerKey = [{ ...first, confirmedBy: null }, ...files.answerKey.slice(1)];
+    assert.deepEqual(answerKeyLabels(files), [
+      { confirmed: false, feedback: "fb-1", sharesNeedWith: "fr-swap" },
+      { confirmed: true, feedback: "fb-2", sharesNeedWith: null },
+    ]);
   });
 });
 

@@ -147,6 +147,8 @@ export const runCheck = async (context: ServiceContext, raw: CheckInput): Promis
       actor: input.actor,
       checkId,
       degraded: judged.degraded,
+      // The pilot feedback item this Check files, when the agent harness names it (spec 003).
+      ...(input.feedbackItemId ? { feedbackItemId: input.feedbackItemId } : {}),
       relatedNeed: countVerdict(judged.candidates, "related_need"),
       sameNeed: countVerdict(judged.candidates, "same_need"),
     },

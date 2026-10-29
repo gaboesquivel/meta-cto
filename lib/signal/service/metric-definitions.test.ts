@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "vitest";
 
+import { scoreAgentCorrectness, scorePmAgreement } from "./answer-key";
 import type { Harness } from "./test-fixtures";
 import { createSignalService } from "./index";
 import { addNewRequest, addRequest, cedar, createHarness, staff, unit } from "./test-fixtures";
@@ -18,6 +19,7 @@ const DEFINED_IN_PRODUCT = [
   "Suspected Duplication",
   "undo rate",
   "Origin",
+  "Agent correctness",
 ] as const;
 
 const productMetricSection = async () => {
@@ -130,6 +132,100 @@ describe("Review Coverage: reviewed new requests over new requests", () => {
 
     const metrics = await harness.review.metrics();
     assert.deepEqual(metrics.reviewCoverage, { rate: 0.5, reviewed: 1, total: 2 });
+  });
+});
+
+describe("Review Coverage under Blind Review: a blind request is reviewed by its own decision", () => {
+  it("counts a blind new request once its blind decision is made, its unseen suspicion still open", async () => {
+    const harness = await createHarness({ blindShare: 1 });
+    const backlog = await addRequest(harness, "Manager approval for swaps", unit(0));
+    const fresh = await addNewRequest(harness, "Approve shift trades", unit(1));
+    await suspect(harness, fresh.id, backlog.id);
+    const before = await harness.review.metrics();
+    // 0 reviewed of 1 new request: the blind reviewer has not decided yet.
+    assert.deepEqual(before.reviewCoverage, { rate: 0, reviewed: 0, total: 1 });
+
+    await harness.review.decide({ decision: "none", featureRequestId: fresh.id }, staff);
+
+    const metrics = await harness.review.metrics();
+    // 1 reviewed ÷ 1 new = 100%, although the suspicion it never saw is still undecided: it
+    // stays Suspected Duplication workload for the backlog side.
+    assert.deepEqual(metrics.reviewCoverage, { rate: 1, reviewed: 1, total: 1 });
+    assert.deepEqual(metrics.suspectedDuplication, { open: 2, rate: 1, total: 2 });
+  });
+});
+
+describe("Agent correctness: agent Supports, Comments and creates scored against the Answer Key", () => {
+  const answerKey = [
+    { confirmed: true, feedback: "fb-swap", sharesNeedWith: "fr-swap" },
+    { confirmed: true, feedback: "fb-payroll", sharesNeedWith: null },
+    { confirmed: false, feedback: "fb-draft", sharesNeedWith: "fr-swap" },
+  ];
+
+  it("counts a Support on a different need as harm and a needless create as a miss", () => {
+    const score = scoreAgentCorrectness(
+      [
+        // Correct: Support on the request the Answer Key names.
+        { feedbackItemId: "fb-swap", kind: "support", targetKey: "fr-swap" },
+        // Harm: Support on a request the Answer Key says is a different need.
+        { feedbackItemId: "fb-swap", kind: "support", targetKey: "fr-clock" },
+        // Miss: create when the Answer Key names an existing request.
+        { feedbackItemId: "fb-swap", kind: "create", targetKey: null },
+        // Correct: create when the Answer Key says no request shares the need.
+        { feedbackItemId: "fb-payroll", kind: "create", targetKey: null },
+        // Excluded and counted: the entry is not confirmed by a person.
+        { feedbackItemId: "fb-draft", kind: "support", targetKey: "fr-swap" },
+        // Counted, not scored: no Answer Key entry.
+        { feedbackItemId: "fb-unknown", kind: "create", targetKey: null },
+      ],
+      answerKey,
+    );
+
+    // 2 correct ÷ 4 scored (2 correct + 1 harm + 1 miss) = 50%.
+    assert.deepEqual(score, {
+      actions: 6,
+      correct: 2,
+      excludedUnconfirmed: 1,
+      harm: 1,
+      miss: 1,
+      rate: 0.5,
+      scored: 4,
+      unlinked: 0,
+      unmatched: 1,
+    });
+  });
+
+  it("reports Product Manager agreement with the Answer Key, blind and non-blind apart", () => {
+    const score = scorePmAgreement(
+      [
+        // Non-blind agree: Duplicate of the keyed request.
+        {
+          blind: false,
+          feedbackItemId: "fb-swap",
+          verdict: { duplicateOfKey: "fr-swap", kind: "duplicate" },
+        },
+        // Non-blind disagree: Related (not Duplicate) when the key names a request.
+        { blind: false, feedbackItemId: "fb-swap", verdict: { kind: "not_duplicate" } },
+        // Blind agree: no duplicate when the key says none.
+        { blind: true, feedbackItemId: "fb-payroll", verdict: { kind: "not_duplicate" } },
+        // Blind disagree: Duplicate when the key says none.
+        {
+          blind: true,
+          feedbackItemId: "fb-payroll",
+          verdict: { duplicateOfKey: "fr-swap", kind: "duplicate" },
+        },
+        // Blind, excluded: unconfirmed entry.
+        { blind: true, feedbackItemId: "fb-draft", verdict: { kind: "not_duplicate" } },
+      ],
+      answerKey,
+    );
+
+    // Non-blind 1 ÷ 2 = 50%; blind 1 ÷ 2 = 50%, with 3 decided and 1 excluded.
+    assert.deepEqual(
+      [score.nonBlind.rate, score.nonBlind.decided, score.blind.rate, score.blind.decided],
+      [0.5, 2, 0.5, 3],
+    );
+    assert.equal(score.blind.excludedUnconfirmed, 1);
   });
 });
 
