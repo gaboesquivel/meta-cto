@@ -2,15 +2,10 @@
 
 import { Button } from "@/components/button";
 import { Input } from "@/components/input";
+import { safeNext } from "@/lib/auth/safe-next";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-/** Same-site path to return to after sign-in; anything else falls back to the console. */
-const safeNext = (search: string): string => {
-  const next = new URLSearchParams(search).get("next");
-  return next?.startsWith("/") && !next.startsWith("//") ? next : "/operator";
-};
 
 export default function OperatorAccessPage() {
   const router = useRouter();
@@ -41,7 +36,7 @@ export default function OperatorAccessPage() {
             setError(body.message ?? "Access denied");
             return;
           }
-          router.replace(safeNext(window.location.search));
+          router.replace(safeNext(window.location.search, window.location.origin));
           router.refresh();
         }}
       >
