@@ -126,6 +126,7 @@ export const signalSchemas = {
     properties: {
       actor: ref("SignalActor"),
       body: { maxLength: 2000, minLength: 1, type: "string" },
+      checkId: { format: "uuid", type: "string" },
       onBehalfOf: ref("SignalOnBehalfOf"),
     },
     required: ["actor", "body"],
@@ -144,7 +145,7 @@ export const signalSchemas = {
         type: "string",
       },
     },
-    required: ["checkId", "draft", "actor"],
+    required: ["draft", "actor"],
     type: "object",
   },
   SignalDraft: draft,
@@ -224,7 +225,8 @@ export const signalPaths = {
       tags,
     },
     post: {
-      description: "Requires a recent Check (checkId) for the same Draft.",
+      description:
+        "Requires a recent, unused Check (checkId) for the same Draft; omitting it returns check_required.",
       operationId: "createFeatureRequest",
       requestBody: jsonBody("SignalCreateInput"),
       responses: {
@@ -234,7 +236,7 @@ export const signalPaths = {
           type: "object",
         }),
         "400": invalidInput,
-        "409": err("Check missing or Draft differs from the Check", [
+        "409": err("Check missing, already used, or Draft differs from the Check", [
           "check_required",
           "check_mismatch",
         ]),
