@@ -454,7 +454,7 @@ export const signalSchemas = {
     properties: {
       limit: {
         description: "Feature Requests to scan in this call; the rest stay for the next call",
-        maximum: 200,
+        maximum: 50,
         minimum: 1,
         type: "integer",
       },
