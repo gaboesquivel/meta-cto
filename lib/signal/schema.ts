@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   jsonb,
   pgTable,
@@ -10,6 +11,7 @@ import {
   uuid,
   vector,
 } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const EMBEDDING_DIMENSIONS = 1536;
 
@@ -54,7 +56,11 @@ export const featureRequests = pgTable(
     createdAt: createdAt(),
     createdByActorName: text("created_by_actor_name").notNull(),
     createdByActorType: text("created_by_actor_type").notNull(),
+    /** New (created through a Check) versus pre-Signal backlog; the split for Intake Duplicate Rate. */
+    createdViaCheck: boolean("created_via_check").notNull().default(false),
     description: text("description").notNull(),
+    /** Mark Duplicate: a reversible association to the canonical Feature Request. */
+    duplicateOfId: uuid("duplicate_of_id").references((): AnyPgColumn => featureRequests.id),
     embedding: vector("embedding", { dimensions: EMBEDDING_DIMENSIONS }),
     id: id(),
     isDemo: isDemo(),
@@ -63,6 +69,8 @@ export const featureRequests = pgTable(
     requesterRole: text("requester_role"),
     seedKey: seedKey(),
     skipReason: text("skip_reason"),
+    /** When the backlog scan judged this Feature Request; null means not scanned yet. */
+    suspicionScannedAt: timestamp("suspicion_scanned_at", { withTimezone: true }),
     title: text("title").notNull(),
     underlyingNeed: text("underlying_need"),
     workspaceId: uuid("workspace_id")
@@ -73,6 +81,8 @@ export const featureRequests = pgTable(
     index("feature_requests_workspace").on(table.workspaceId),
     // One Check, one create: a Check authorizes at most one Feature Request.
     uniqueIndex("feature_requests_check_id").on(table.checkId),
+    index("feature_requests_duplicate_of").on(table.duplicateOfId),
+    check("feature_requests_duplicate_not_self", sql`${table.duplicateOfId} <> ${table.id}`),
   ],
 );
 
@@ -165,4 +175,96 @@ export const events = pgTable(
       .references(() => workspaces.id),
   },
   (table) => [index("events_workspace_type").on(table.workspaceId, table.type)],
+);
+
+/** An AI Same Need judgment between two existing Feature Requests, stored once per unordered pair (a < b). */
+export const suspectedDuplicates = pgTable(
+  "suspected_duplicates",
+  {
+    featureRequestAId: uuid("feature_request_a_id")
+      .notNull()
+      .references(() => featureRequests.id),
+    featureRequestBId: uuid("feature_request_b_id")
+      .notNull()
+      .references(() => featureRequests.id),
+    id: id(),
+    judgedAt: timestamp("judged_at", { withTimezone: true }).notNull().defaultNow(),
+    model: text("model"),
+    reason: text("reason").notNull(),
+    source: text("source").notNull(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [
+    uniqueIndex("suspected_duplicates_pair").on(table.featureRequestAId, table.featureRequestBId),
+    index("suspected_duplicates_b").on(table.featureRequestBId),
+    index("suspected_duplicates_workspace").on(table.workspaceId),
+    check(
+      "suspected_duplicates_ordered",
+      sql`${table.featureRequestAId} < ${table.featureRequestBId}`,
+    ),
+    check("suspected_duplicates_source", sql`${table.source} in ('check', 'scan')`),
+  ],
+);
+
+/** A Product Manager's Review Decision; Undo sets `undone_at` and keeps the row as history. */
+export const reviewDecisions = pgTable(
+  "review_decisions",
+  {
+    actorName: text("actor_name").notNull(),
+    actorType: text("actor_type").notNull(),
+    canonicalId: uuid("canonical_id").references(() => featureRequests.id),
+    createdAt: createdAt(),
+    decision: text("decision").notNull(),
+    featureRequestId: uuid("feature_request_id")
+      .notNull()
+      .references(() => featureRequests.id),
+    id: id(),
+    otherId: uuid("other_id").references(() => featureRequests.id),
+    sharedDimension: text("shared_dimension"),
+    suggestionId: uuid("suggestion_id").references(() => suspectedDuplicates.id),
+    undoneAt: timestamp("undone_at", { withTimezone: true }),
+    undoneByActorName: text("undone_by_actor_name"),
+    undoneByActorType: text("undone_by_actor_type"),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [
+    index("review_decisions_workspace_created").on(table.workspaceId, table.createdAt),
+    index("review_decisions_feature_request").on(table.featureRequestId),
+    index("review_decisions_other").on(table.otherId),
+    // At most one active decision per unordered pair, and one active "none" per Feature Request.
+    uniqueIndex("review_decisions_active_pair")
+      .on(
+        sql`least(${table.featureRequestId}, ${table.otherId})`,
+        sql`greatest(${table.featureRequestId}, ${table.otherId})`,
+      )
+      .where(sql`${table.undoneAt} is null and ${table.otherId} is not null`),
+    uniqueIndex("review_decisions_active_none")
+      .on(table.featureRequestId)
+      .where(sql`${table.undoneAt} is null and ${table.decision} = 'none'`),
+    check(
+      "review_decisions_kind",
+      sql`${table.decision} in ('duplicate', 'related', 'distinct', 'none')`,
+    ),
+    check("review_decisions_other_not_self", sql`${table.otherId} <> ${table.featureRequestId}`),
+    check(
+      "review_decisions_none_has_no_other",
+      sql`(${table.decision} = 'none') = (${table.otherId} is null)`,
+    ),
+    check(
+      "review_decisions_duplicate_has_canonical",
+      sql`(${table.decision} = 'duplicate') = (${table.canonicalId} is not null)`,
+    ),
+    check(
+      "review_decisions_canonical_in_pair",
+      sql`${table.canonicalId} is null or ${table.canonicalId} in (${table.featureRequestId}, ${table.otherId})`,
+    ),
+    check(
+      "review_decisions_related_has_dimension",
+      sql`(${table.decision} = 'related') = (${table.sharedDimension} is not null)`,
+    ),
+  ],
 );

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Shared contracts for spec 001: used by the service, REST routes, MCP tools and UI. */
+/** Shared contracts for specs 001 and 002: used by the service, REST routes, MCP tools and UI. */
 
 export const MAX_TITLE = 120;
 export const MAX_DESCRIPTION = 2000;
@@ -105,6 +105,18 @@ export interface FeatureRequestSummary {
   underlyingNeed: string | null;
 }
 
+/** A pointer to another Feature Request, for labels and links. */
+export interface FeatureRequestRef {
+  id: string;
+  title: string;
+}
+
+/** Provenance of evidence shown on a canonical Feature Request but recorded on one of its duplicates. */
+export interface EvidenceVia {
+  featureRequestId: string;
+  title: string;
+}
+
 export interface SupportView {
   account: { name: string; plan: string | null; segment: string | null; size: string | null };
   actor: Actor;
@@ -112,6 +124,8 @@ export interface SupportView {
   id: string;
   quote: string | null;
   requester: string | null;
+  /** Set when the Support was recorded on a confirmed duplicate of this Feature Request. */
+  via?: EvidenceVia;
 }
 
 export interface CommentView {
@@ -120,6 +134,8 @@ export interface CommentView {
   body: string;
   createdAt: string;
   id: string;
+  /** Set when the Comment was recorded on a confirmed duplicate of this Feature Request. */
+  via?: EvidenceVia;
 }
 
 export interface RelatedLinkView {
@@ -136,25 +152,184 @@ export interface FeatureRequestDetail extends FeatureRequestSummary {
   relatedLinks: RelatedLinkView[];
   skipReason: string | null;
   supports: SupportView[];
+  /**
+   * Canonical evidence (spec 002). Optional until the review service fills them; then always set.
+   * `duplicates`: confirmed duplicates of this Feature Request; their Supports and Comments
+   * appear in `supports`/`comments` with `via`, each Account counted once in `accountCount`.
+   * `duplicateOf`: the canonical Feature Request when this one is a confirmed duplicate.
+   * `reviewHistory`: Review Decisions involving this Feature Request, undone ones included.
+   */
+  duplicateOf?: FeatureRequestRef | null;
+  duplicates?: FeatureRequestRef[];
+  reviewHistory?: ReviewDecision[];
 }
 
-export interface Metrics {
+/** `rate` is null when the denominator is zero; counts are always reported. */
+export const rateOf = (numerator: number, denominator: number): number | null =>
+  denominator === 0 ? null : numerator / denominator;
+
+/** Spec 001 metrics, still returned by the spec 001 service until the review service lands. */
+export interface SuggestionMetrics {
   checks: number;
   checksWithSameNeed: number;
   createsAfterSameNeed: number;
+  suggestionAcceptance: number | null;
+}
+
+/**
+ * @deprecated Spec 001 placeholder shape; replaced by `ReviewMetrics` once the review service lands.
+ */
+export interface Spec001Metrics extends SuggestionMetrics {
   fragmentationRate: null;
   reviewCoverage: 0;
-  suggestionAcceptance: number | null;
+}
+
+/** Spec 002 metrics: the target shape of `GET /api/metrics`. */
+export interface ReviewMetrics extends SuggestionMetrics {
+  /** Reviewed pre-Signal Feature Requests confirmed Duplicate ÷ reviewed pre-Signal Feature Requests. */
+  backlogBaseline: { duplicates: number; rate: number | null; reviewed: number };
+  /** Main metric: reviewed new Feature Requests confirmed Duplicate ÷ reviewed new Feature Requests. */
+  intakeDuplicateRate: { duplicates: number; rate: number | null; reviewed: number };
+  /** Reviewed new Feature Requests ÷ new Feature Requests. */
+  reviewCoverage: { rate: number | null; reviewed: number; total: number };
+  /** AI-suspected, unconfirmed: open Feature Requests with an undecided Suspected Duplicate ÷ open. */
+  suspectedDuplication: { open: number; rate: number | null; total: number };
+  /** Duplicate decisions later undone ÷ Duplicate decisions. */
+  undoRate: { decisions: number; rate: number | null; undone: number };
+}
+
+/** Transitional union: narrows to `ReviewMetrics` when the review service replaces spec 001's. */
+export type Metrics = ReviewMetrics | Spec001Metrics;
+
+export const isReviewMetrics = (metrics: Metrics): metrics is ReviewMetrics =>
+  "intakeDuplicateRate" in metrics;
+
+// Review context (spec 002, decision 0002).
+
+export const SUSPICION_SOURCES = ["check", "scan"] as const;
+export const REVIEW_DECISION_KINDS = ["duplicate", "related", "distinct", "none"] as const;
+export const MAX_SHARED_DIMENSION = 200;
+
+export type SuspicionSource = (typeof SUSPICION_SOURCES)[number];
+/** "none": the Product Manager confirmed a Feature Request with no suspicions has no duplicate. */
+export type ReviewDecisionKind = (typeof REVIEW_DECISION_KINDS)[number];
+
+/** Two existing Feature Requests the AI judged Same Need; never counted as duplication. */
+export interface SuspectedDuplicate {
+  /** The unordered pair, stored sorted ascending. */
+  featureRequestIds: [string, string];
+  id: string;
+  judgedAt: string;
+  model: string | null;
+  reason: string;
+  source: SuspicionSource;
+}
+
+export interface ReviewDecision {
+  actor: Actor;
+  /** Duplicate only: the canonical Feature Request, one of `featureRequestId` and `otherId`. */
+  canonicalId: string | null;
+  createdAt: string;
+  decision: ReviewDecisionKind;
+  featureRequestId: string;
+  id: string;
+  /** Null only for "none". */
+  otherId: string | null;
+  /** Related only: the Shared Dimension the Product Manager stated. */
+  sharedDimension: string | null;
+  /** The Suspected Duplicate this decision answered, if any. */
+  suggestionId: string | null;
+  undoneAt: string | null;
+  undoneBy: Actor | null;
+}
+
+/**
+ * Optional fields are checked by `decisionRuleViolation` (and the service) rather than the schema,
+ * so a missing canonical or Shared Dimension returns `invalid_decision`, not `invalid_input`.
+ */
+export const decideInputSchema = z.object({
+  canonicalId: z.string().uuid().optional(),
+  decision: z.enum(REVIEW_DECISION_KINDS),
+  featureRequestId: z.string().uuid(),
+  otherId: z.string().uuid().optional(),
+  sharedDimension: z.string().trim().min(1).max(MAX_SHARED_DIMENSION).optional(),
+  suggestionId: z.string().uuid().optional(),
+});
+
+/** REST and MCP bodies: the decision plus who records it (Operator access is checked separately). */
+export const decideRequestSchema = decideInputSchema.extend({ actor: actorSchema });
+export const undoRequestSchema = z.object({ actor: actorSchema });
+export const scanOptionsSchema = z.object({
+  /** Feature Requests to scan in this call; the rest stay for the next call. */
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+export type DecideInput = z.infer<typeof decideInputSchema>;
+export type ScanOptions = z.infer<typeof scanOptionsSchema>;
+
+/** Rules a decision must meet before it touches storage; returns a message, or null when valid. */
+export const decisionRuleViolation = (input: DecideInput): string | null => {
+  if (input.decision === "none") {
+    return input.otherId || input.canonicalId || input.sharedDimension
+      ? "A none decision takes no other Feature Request, canonical or Shared Dimension."
+      : null;
+  }
+  if (!input.otherId) return "Name the other Feature Request with otherId.";
+  if (input.otherId === input.featureRequestId)
+    return "A Feature Request can't be decided against itself.";
+  if (input.decision === "duplicate") {
+    return input.canonicalId === input.featureRequestId || input.canonicalId === input.otherId
+      ? null
+      : "A Duplicate needs canonicalId set to featureRequestId or otherId.";
+  }
+  if (input.canonicalId) return "Only a Duplicate takes a canonicalId.";
+  if (input.decision === "related") {
+    return input.sharedDimension ? null : "Related needs the Shared Dimension you see in both.";
+  }
+  return input.sharedDimension ? "Only Related takes a Shared Dimension." : null;
+};
+
+export interface ReviewSuspicionView {
+  /** The active decision on this pair; null while undecided. */
+  decision: ReviewDecision | null;
+  judgedAt: string;
+  model: string | null;
+  other: FeatureRequestSummary;
+  reason: string;
+  source: SuspicionSource;
+  suggestionId: string;
+}
+
+export interface ReviewQueueItem {
+  featureRequest: FeatureRequestSummary;
+  /** Created through a Check (spec 001); otherwise a pre-Signal backlog Feature Request. */
+  isNew: boolean;
+  suspicions: ReviewSuspicionView[];
+}
+
+export interface ReviewQueue {
+  counts: { backlog: number; new: number };
+  items: ReviewQueueItem[];
+}
+
+export interface ScanResult {
+  pairsFound: number;
+  /** Open Feature Requests still not scanned after this call. */
+  remaining: number;
+  scanned: number;
 }
 
 /** Agent-actionable error; REST maps it with `jsonError`, MCP returns it as an error result. */
 export type SignalErrorCode =
   | "already_supported"
+  | "already_undone"
   | "check_expired"
   | "check_mismatch"
   | "check_required"
+  | "invalid_decision"
   | "invalid_input"
   | "not_found"
+  | "operator_required"
   | "service_unavailable"
   | "skip_reason_required";
 
@@ -211,6 +386,7 @@ export interface SignalService {
   comment: (featureRequestId: string, input: CommentInput) => Promise<CommentView>;
   create: (input: CreateInput) => Promise<FeatureRequestDetail>;
   get: (featureRequestId: string) => Promise<FeatureRequestDetail>;
+  /** Transitional: the spec 001 service returns `Spec001Metrics` until the review service lands. */
   metrics: () => Promise<Metrics>;
   search: (
     input: SearchInput,
@@ -219,4 +395,12 @@ export interface SignalService {
     featureRequestId: string,
     input: SupportInput,
   ) => Promise<{ created: boolean; featureRequest: FeatureRequestDetail; support: SupportView }>;
+}
+
+/** Review port (spec 002). Writes need Operator access, checked by REST and MCP before calling. */
+export interface ReviewService {
+  decide: (input: DecideInput, actor: Actor) => Promise<ReviewDecision>;
+  queue: () => Promise<ReviewQueue>;
+  scan: (options?: ScanOptions) => Promise<ScanResult>;
+  undo: (decisionId: string, actor: Actor) => Promise<ReviewDecision>;
 }
