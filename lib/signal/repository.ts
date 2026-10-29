@@ -23,6 +23,7 @@ import type {
   SuspicionSource,
 } from "./contracts";
 import type { SignalDb } from "./db";
+import { createPilotDataRepository } from "./repository-pilot-data";
 import {
   accounts,
   checks,
@@ -202,6 +203,8 @@ const isConfirmedDuplicate: SQL = sql`(${featureRequests.duplicateOfId} is not n
 const countWhere = (condition: SQL) => sql<number>`(count(*) filter (where ${condition}))::int`;
 
 export const createRepository = (db: SignalDb) => ({
+  ...createPilotDataRepository(db),
+
   /** Undo of a Duplicate: ends the association. */
   async clearDuplicateOf(id: string) {
     await db.update(featureRequests).set({ duplicateOfId: null }).where(eq(featureRequests.id, id));

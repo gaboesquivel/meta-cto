@@ -8,11 +8,11 @@ import type { SignalDb } from "@/lib/signal/db";
 import { PILOT_WORKSPACE } from "@/lib/signal/pilot";
 import { createRepository } from "@/lib/signal/repository";
 import type { SignalRepository } from "@/lib/signal/repository";
-import { accounts, featureRequests, workspaces } from "@/lib/signal/schema";
+import { accounts, featureRequests, pilotFeedback, workspaces } from "@/lib/signal/schema";
 import { seedCrewday } from "@/lib/signal/seed";
 import { createTestDb } from "@/lib/signal/test-db";
 
-import { freezePilot } from "./files";
+import { answerKeyLabels, freezePilot } from "./files";
 import { at, pilotFixture } from "./fixture";
 import { loadPilot, pilotSeedKey } from "./load";
 
@@ -41,6 +41,12 @@ const requestCount = async (db: SignalDb, id: string) => {
     .from(featureRequests)
     .where(eq(featureRequests.workspaceId, id));
   return row?.value ?? 0;
+};
+
+const frozenLock = (files = pilotFixture()) => {
+  const frozen = freezePilot({ files, lock: null, now: new Date("2026-10-28T00:00:00Z") });
+  assert.ok(frozen.ok);
+  return frozen.lock;
 };
 
 describe("loadPilot", () => {
@@ -155,5 +161,95 @@ describe("loadPilot", () => {
     assert.ok(result.ok);
     assert.deepEqual(result.status.unconfirmed, ["fb-1"]);
     assert.equal(result.status.frozen, false);
+  });
+
+  describe("pilot ground truth", () => {
+    it("stores the feedback set, Answer Key and manifest with the lock fingerprint", async () => {
+      const files = pilotFixture();
+      const lock = frozenLock(files);
+      const result = await loadPilot({ embedder: null, files, lock, repo });
+      assert.ok(result.ok);
+      assert.deepEqual(result.groundTruth, { fingerprint: lock.fingerprint, outcome: "loaded" });
+
+      const truth = await repo.pilotGroundTruth(result.workspaceId);
+      assert.ok(truth);
+      assert.equal(truth.fingerprint, lock.fingerprint);
+      assert.equal(truth.feedbackCount, 2);
+      assert.equal(truth.expectedBacklogDuplicateRate, 0.15);
+      assert.deepEqual(truth.manifest, files.manifest);
+      assert.deepEqual(truth.labels, answerKeyLabels(files));
+      assert.deepEqual(truth.counts, {
+        accounts: 1,
+        answerKey: 3,
+        featureRequests: 1,
+        feedback: 2,
+        sharesNeed: 1,
+      });
+      const stored = await db.select().from(pilotFeedback);
+      const [account] = await db.select().from(accounts).where(eq(accounts.name, "Acme Diner"));
+      assert.deepEqual(
+        stored.map((f) => [f.key, f.accountKey, f.accountId, f.customerName, f.title]).toSorted(),
+        [
+          ["fb-1", "acme", account?.id, "Ana", "Trade shifts"],
+          ["fb-2", "acme", account?.id, "Bo", "Payroll export"],
+        ],
+      );
+    });
+
+    it("is a no-op when reloaded with the same fingerprint", async () => {
+      const lock = frozenLock();
+      await loadPilot({ embedder: null, files: pilotFixture(), lock, repo });
+      const again = await loadPilot({ embedder: null, files: pilotFixture(), lock, repo });
+      assert.ok(again.ok);
+      assert.equal(again.groundTruth.outcome, "unchanged");
+      const history = await repo.pilotLoadHistory(again.workspaceId);
+      assert.equal(history.length, 1);
+    });
+
+    it("replaces the ground truth and records a reset when a new set is frozen", async () => {
+      const first = await loadPilot({
+        embedder: null,
+        files: pilotFixture(),
+        lock: frozenLock(),
+        repo,
+      });
+      assert.ok(first.ok);
+      const edited = pilotFixture();
+      at(edited.answerKey.feedback, 1).needId = "swap";
+      const lock = frozenLock(edited);
+      const second = await loadPilot({ embedder: null, files: edited, lock, repo });
+      assert.ok(second.ok);
+      assert.deepEqual(second.groundTruth, { fingerprint: lock.fingerprint, outcome: "reset" });
+      const truth = await repo.pilotGroundTruth(second.workspaceId);
+      assert.equal(truth?.fingerprint, lock.fingerprint);
+      assert.equal(truth?.reset, true);
+      assert.deepEqual(
+        truth?.labels.feedback.map((l) => l.needId),
+        ["swap", "swap"],
+      );
+      const history = await repo.pilotLoadHistory(second.workspaceId);
+      assert.deepEqual(
+        history.map((h) => h.reset),
+        [false, true],
+      );
+    });
+
+    it("never stores ground truth that is not frozen or not fully confirmed", async () => {
+      const unfrozen = await loadPilot({ embedder: null, files: pilotFixture(), lock: null, repo });
+      assert.ok(unfrozen.ok);
+      assert.equal(unfrozen.groundTruth.outcome, "skipped");
+      assert.match(
+        unfrozen.groundTruth.outcome === "skipped" ? unfrozen.groundTruth.reason : "",
+        /not frozen/u,
+      );
+
+      const files = pilotFixture();
+      const lock = frozenLock(files);
+      at(files.answerKey.feedback, 0).confirmedBy = null;
+      // Unconfirming changes the fingerprint, so the set is refused as changed after freeze.
+      const changed = await loadPilot({ embedder: null, files, lock, repo });
+      assert.equal(changed.ok, false);
+      assert.equal(await repo.pilotGroundTruth(unfrozen.workspaceId), null);
+    });
   });
 });

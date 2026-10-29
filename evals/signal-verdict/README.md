@@ -6,7 +6,7 @@ Eval Set for the Check's Verdicts (spec 001, Testing Decisions → Quality eval;
 - `held-out-v2.json`: **empty template** for Held-Out Set v2 (decision 0003). It stays empty here (a test fails otherwise). The filled pairs live in the private folder, `$SIGNAL_PRIVATE_DATA_DIR/evals/held-out-v2.json`, outside the repository (spec 004, decision 0004), and are never committed. People write and confirm them without sight of the judge prompt; never use them for tuning.
 - `held-out-v2.lock.json`: the freeze record (fingerprint, time, counts), written here by `freeze`. Absent until the set is frozen; commit it once written. The lock is the only v2 artifact in the repository.
 - `dev.json`: Dev Set, for tuning prompts and retrieval. Its drafts never appear in either Held-Out Set.
-- `runs.jsonl`: append-only run log, one JSON line per run (including refusals and failures). Commit it with the reports.
+- Run records: every run (including refusals and failures) is recorded in the database (`eval_runs`, Origin `eval`) the Proof Report reads (spec 004, decision 0004); set `DATABASE_URL`. Held-Out Set v2 runs refuse without it and are recorded only there. v1 and Dev Set runs also append to a local `runs.jsonl`, which is gitignored and never committed.
 - Each pair: a Draft, a `target` seed key from `data/crewday/seed.ts`, the `expected` Verdict for that target, and a `note` on why.
 
 ## Held-Out Set v2: private folder
@@ -54,7 +54,7 @@ pnpm exec tsx evals/signal-verdict/run.ts --set held-out-v2  # needs a confirmed
 Add `--local` to run against an in-memory database seeded with the Crewday Demo Workspace instead of the shared one. Otherwise it needs the seeded Crewday Demo Workspace and the database and AI keys (`getSignalService("eval")` must return a service). Eval Checks record Origin `eval`, so they never count in demo or pilot metrics. A target not returned among the candidates counts as `absent`.
 
 - v1 and dev print a table and write `report.md` (held-out) or `report.dev.md` (dev), as before.
-- v2 refuses (and logs the refusal) unless every pair is confirmed, the set is frozen, and it matches the frozen fingerprint. It writes `report.v2.md` with same-need and related-need precision, each with a 95% Wilson interval, its counts and a verdict against the bar, plus the same-need positives check.
+- v2 refuses (and logs the refusal) unless every pair is confirmed, the set is frozen, and it matches the frozen fingerprint. It writes `report.v2.md` (gitignored; it lists v2 pair ids and labels) with same-need and related-need precision, each with a 95% Wilson interval, its counts and a verdict against the bar, plus the same-need positives check.
 - **One reading per prompt version.** Each run logs its prompt version: `pv-` plus a hash of the judge system prompt, user prompt template, output schema and model id (read from `lib/signal/agent`). A second v2 run on the same set and prompt version (after a completed run, or a failed run that judged pairs) is flagged "repeat run, not a new reading" and writes `report.v2.repeat.md`, leaving `report.v2.md` alone.
 - A Check that throws or comes back degraded is a failure: it scores as `unknown`, is listed in the report and log, marks the run `failed`, and makes its verdicts inconclusive.
 - A run that fails before any pair reaches the Check (service unavailable, a target that does not resolve) is logged `failed` with nothing completed. It is never a reading and never makes the next run a repeat.
