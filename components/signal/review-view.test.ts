@@ -18,7 +18,9 @@ import {
   groupEvidenceByAccount,
   metricCards,
   reviewActionState,
+  reviewWorkspaceOptions,
   splitCommentsByVia,
+  withWorkspace,
 } from "./review-view";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -383,5 +385,38 @@ describe("filterBlindChoices", () => {
 
   it("caps the matches", () => {
     expect(filterBlindChoices(choices, "e", "none", 2)).toHaveLength(2);
+  });
+});
+
+describe("withWorkspace", () => {
+  it("leaves demo paths unchanged", () => {
+    expect(withWorkspace("/api/review/queue", "demo")).toBe("/api/review/queue");
+  });
+
+  it("adds the pilot selector, never the Pilot Key", () => {
+    expect(withWorkspace("/api/review/queue", "pilot")).toBe("/api/review/queue?workspace=pilot");
+    expect(withWorkspace("/api/metrics?origin=pilot", "pilot")).toBe(
+      "/api/metrics?origin=pilot&workspace=pilot",
+    );
+  });
+});
+
+describe("reviewWorkspaceOptions", () => {
+  it("offers no switch without an Operator session", () => {
+    expect(reviewWorkspaceOptions({ operator: false, pilotAvailable: true })).toBeNull();
+  });
+
+  it("offers the Crewday demo and the Pilot to an Operator", () => {
+    const options = reviewWorkspaceOptions({ operator: true, pilotAvailable: true });
+    expect(options?.map((option) => [option.value, option.available])).toEqual([
+      ["demo", true],
+      ["pilot", true],
+    ]);
+  });
+
+  it("shows the Pilot as unavailable when no Pilot Key is configured", () => {
+    const pilot = reviewWorkspaceOptions({ operator: true, pilotAvailable: false })?.[1];
+    expect(pilot?.available).toBe(false);
+    expect(pilot?.note).toMatch(/SIGNAL_PILOT_KEY/u);
   });
 });

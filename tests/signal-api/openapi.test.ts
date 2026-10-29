@@ -36,6 +36,7 @@ describe("OpenAPI document for Signal routes", () => {
     "search_feature_requests",
     "get_feature_request",
     "proof_report",
+    "review_metrics",
   ])("catalogs MCP tool %s with x-mcp-tool and a description", (tool) => {
     const schemas = doc.components.schemas as Record<string, Record<string, unknown>>;
     const schema = schemas[`McpTool_${tool}`];
@@ -89,5 +90,29 @@ describe("OpenAPI document for Signal routes", () => {
     expect(schemas.ProofBar?.required).toEqual(
       expect.arrayContaining(["value", "counts", "interval", "verdict", "reasons"]),
     );
+  });
+
+  it("documents the Operator's workspace selector on the review routes", () => {
+    const paths = doc.paths as unknown as Record<
+      string,
+      Record<string, { parameters?: { in: string; name: string }[] }>
+    >;
+    for (const [path, method] of [
+      ["/api/review/queue", "get"],
+      ["/api/metrics", "get"],
+      ["/api/review/decisions", "post"],
+      ["/api/review/decisions/{id}/undo", "post"],
+      ["/api/review/scan", "post"],
+    ] as const) {
+      const names = (paths[path]?.[method]?.parameters ?? []).map((parameter) => parameter.name);
+      expect(names, `${method} ${path}`).toContain("workspace");
+    }
+  });
+
+  it("tells clients to branch on the pilot_key_required reason", () => {
+    const schemes = doc.components.securitySchemes as Record<string, { description?: string }>;
+    expect(schemes.pilotKey?.description).toMatch(/missing.*invalid.*disabled/su);
+    const schemas = doc.components.schemas as Record<string, { description?: string }>;
+    expect(schemas.McpTool_review_metrics?.description).toMatch(/details\.reason/u);
   });
 });

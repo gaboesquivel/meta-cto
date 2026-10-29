@@ -58,14 +58,31 @@ export const signalSecuritySchemes = {
   },
   pilotKey: {
     description:
-      "The Pilot Key (SIGNAL_PILOT_KEY). Selects the Pilot Workspace (Origin pilot); without it the route acts on the Crewday Demo Workspace. A wrong or empty key, or none configured, is refused with pilot_key_required.",
+      "The Pilot Key (SIGNAL_PILOT_KEY). Selects the Pilot Workspace (Origin pilot); without it the route acts on the Crewday Demo Workspace. A wrong or empty key, or none configured, is refused with pilot_key_required; clients branch on its reason (the REST body's `reason`, `error.details.reason` over MCP): missing (send the key), invalid (wrong key; check it with the operator) or disabled (no Pilot Key configured on this deployment; drop the header to use the demo).",
     in: "header",
     name: "X-Signal-Pilot-Key",
     type: "apiKey",
   },
 };
 
-const pilotRefused = "pilot_key_required: the Pilot Key is missing or wrong (details in reason)";
+const pilotRefused =
+  "pilot_key_required: the Pilot Key is missing or wrong; branch on reason (missing | invalid)";
+
+/**
+ * `?workspace=` on the review routes and metrics: how an Operator works the Pilot Workspace from
+ * the browser (`/review`) without holding the Pilot Key; the server resolves it.
+ */
+const workspaceParameter = {
+  description:
+    "The Workspace to act on. Omit (or demo) for the Crewday Demo Workspace, or the Pilot Key header's. pilot needs Operator access (session cookie, Bearer or X-Operator-Secret) unless the Pilot Key header is sent; the server resolves the Pilot Workspace itself, so a browser never holds the Pilot Key. Without Operator access it is refused with operator_required; with no Pilot Key configured, with pilot_key_required (reason disabled). demo together with the Pilot Key header is invalid_input.",
+  in: "query",
+  name: "workspace",
+  schema: { enum: ["demo", "pilot"], type: "string" },
+};
+
+const workspaceOperatorRequired = err("workspace=pilot without Operator access", [
+  "operator_required",
+]);
 
 const operatorSecurity = [{ operatorBearer: [] }, { operatorSecret: [] }, { operatorSession: [] }];
 
@@ -679,8 +696,10 @@ const demoPaths = {
     get: {
       operationId: "getSignalMetrics",
       parameters: [
+        workspaceParameter,
         {
-          description: "The one Origin to read; defaults to the caller's own (demo).",
+          description:
+            "The one Origin to read; defaults to the caller's own (demo, or pilot with the Pilot Key or workspace=pilot).",
           in: "query",
           name: "origin",
           schema: originSchema,
@@ -689,6 +708,7 @@ const demoPaths = {
       responses: {
         "200": ok("Signal metrics, each rate with its counts", ref("SignalMetrics")),
         "400": invalidInput,
+        "401": workspaceOperatorRequired,
         "503": unavailable,
       },
       summary: "Prevention and review metrics",
@@ -700,6 +720,7 @@ const demoPaths = {
       description:
         "Operator access only; add the Pilot Key to act on the Pilot Workspace. Confirm Duplicate, Related, Distinct, or none (no duplicate).",
       operationId: "decideReview",
+      parameters: [workspaceParameter],
       requestBody: jsonBody("SignalReviewDecideInput"),
       responses: {
         "201": ok("Decision recorded", {
@@ -727,7 +748,10 @@ const demoPaths = {
       description:
         "Operator access only; add the Pilot Key to act on the Pilot Workspace. Ends the decision's effect; the decision and its undo stay in history.",
       operationId: "undoReviewDecision",
-      parameters: [{ ...idParameter, description: "Review Decision id (uuid)" }],
+      parameters: [
+        { ...idParameter, description: "Review Decision id (uuid)" },
+        workspaceParameter,
+      ],
       requestBody: jsonBody("SignalUndoInput"),
       responses: {
         "200": ok("Decision undone", {
@@ -752,8 +776,11 @@ const demoPaths = {
       description:
         "Open read. New Feature Requests not yet reviewed and backlog Feature Requests with undecided suspected duplicates, each with the AI's Reason, except items under Blind Review, which withhold it.",
       operationId: "getReviewQueue",
+      parameters: [workspaceParameter],
       responses: {
         "200": ok("Review Queue", ref("SignalReviewQueue")),
+        "400": invalidInput,
+        "401": workspaceOperatorRequired,
         "503": unavailable,
       },
       summary: "Read the Review Queue",
@@ -765,6 +792,7 @@ const demoPaths = {
       description:
         "Operator access only; add the Pilot Key to act on the Pilot Workspace. Judges unscanned backlog Feature Requests for suspected duplicates (paid AI calls); call again while remaining > 0.",
       operationId: "scanBacklog",
+      parameters: [workspaceParameter],
       requestBody: {
         content: { "application/json": { schema: ref("SignalScanInput") } },
         required: false,
@@ -815,7 +843,7 @@ const withPilotKey = <T extends object>(paths: T): T =>
                 : err("Pilot Key missing or wrong", ["pilot_key_required"]),
               "503": describedWith(
                 operation.responses["503"] ?? unavailable,
-                "pilot_key_required: the Pilot Key is sent but none is configured",
+                "pilot_key_required (reason disabled): the Pilot Key is sent, or workspace=pilot asked, but none is configured",
               ),
             },
             security: operation.security
@@ -901,6 +929,22 @@ export const signalMcpTools = {
       type: "object",
     },
     summary: "Get a Feature Request with Supports by Account, Comments and Related Links",
+  },
+  review_metrics: {
+    operationId: "mcpReviewMetrics",
+    requestBody: {
+      properties: {
+        origin: {
+          description:
+            "The one Origin to read; defaults to the caller's own (demo, or pilot with the Pilot Key)",
+          enum: ["pilot", "demo", "seed", "eval"],
+          type: "string",
+        },
+      },
+      type: "object",
+    },
+    summary:
+      "Read the prevention and review metrics; same body as GET /api/metrics. Public and Operator MCP: the Crewday demo by default, the Pilot Workspace with the Pilot Key header. A refused key is pilot_key_required: branch on error.details.reason (missing | invalid | disabled)",
   },
   search_feature_requests: {
     operationId: "mcpSearchFeatureRequests",

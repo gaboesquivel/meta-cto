@@ -39,6 +39,7 @@ const { POST: postOperatorMcp } = await import("../../app/api/mcp/operator/route
 const { POST: postDecision } = await import("../../app/api/review/decisions/route");
 const { POST: postUndo } = await import("../../app/api/review/decisions/[id]/undo/route");
 const { GET: getQueue } = await import("../../app/api/review/queue/route");
+const { GET: getMetrics } = await import("../../app/api/metrics/route");
 const { POST: postScan } = await import("../../app/api/review/scan/route");
 
 const SECRET = "test-operator-secret-16+";
@@ -106,6 +107,25 @@ const queueOp: Operation = {
   rest: (_ip, headers) => getQueue(new Request("http://localhost/api/review/queue", { headers })),
 };
 
+/** GET /api/metrics and review_metrics (spec 003: metrics accept Origin over MCP). */
+const metricsOp = (origin?: string): Operation => ({
+  mcp: { args: origin === undefined ? {} : { origin }, tool: "review_metrics" },
+  name: "metrics",
+  rest: (_ip, headers) =>
+    getMetrics(
+      new Request(
+        `http://localhost/api/metrics${origin === undefined ? "" : `?origin=${origin}`}`,
+        { headers },
+      ),
+    ),
+});
+
+/** Both transports pass the same metrics input to the service. */
+const metricsCalledWith =
+  (input: Record<string, unknown>, service: () => ReviewService | null) => () => {
+    assert.deepEqual(vi.mocked(service()?.metrics)?.mock.calls, [[input], [input]]);
+  };
+
 const decideOp = (body: Record<string, unknown>): Operation => ({
   mcp: { args: { actor, ...body }, tool: "decide_review" },
   name: "decide",
@@ -140,7 +160,7 @@ const scanOp: Operation = {
 };
 
 /** Each pilot write reaches the Pilot Workspace's service on both transports, never the demo's. */
-const onPilotOnly = (method: "decide" | "queue" | "scan" | "undo") => () => {
+const onPilotOnly = (method: "decide" | "metrics" | "queue" | "scan" | "undo") => () => {
   assert.equal(vi.mocked(runtime.pilot?.[method])?.mock.calls.length, 2);
   assert.equal(vi.mocked(runtime.review?.[method])?.mock.calls.length, 0);
 };
@@ -195,6 +215,20 @@ const scenarios: Scenario[] = [
   },
   { expected: "ok", name: "scan succeeds", op: scanOp, restStatus: 200 },
   {
+    expected: "ok",
+    name: "metrics, caller's own Origin",
+    op: metricsOp(),
+    restStatus: 200,
+    verify: metricsCalledWith({}, () => runtime.review),
+  },
+  {
+    expected: "ok",
+    name: "metrics for Origin eval",
+    op: metricsOp("eval"),
+    restStatus: 200,
+    verify: metricsCalledWith({ origin: "eval" }, () => runtime.review),
+  },
+  {
     expected: "service_unavailable",
     name: "review service not configured",
     op: decideOp(duplicateBody),
@@ -245,6 +279,21 @@ const scenarios: Scenario[] = [
     op: scanOp,
     restStatus: 200,
     verify: onPilotOnly("scan"),
+  },
+  {
+    expected: "ok",
+    headers: PILOT,
+    name: "pilot metrics",
+    op: metricsOp(),
+    restStatus: 200,
+    verify: onPilotOnly("metrics"),
+  },
+  {
+    expected: "pilot_key_required",
+    headers: { [PILOT_KEY_HEADER]: "not-the-pilot-key-at-all" },
+    name: "metrics with a wrong Pilot Key",
+    op: metricsOp(),
+    restStatus: 401,
   },
   {
     expected: "pilot_key_required",

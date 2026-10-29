@@ -267,3 +267,41 @@ describe("Operator MCP with the Pilot Key", () => {
     assert.equal(reviews.pilot.decide.mock.calls.length, 0);
   });
 });
+
+describe("review_metrics (same metrics as GET /api/metrics)", () => {
+  it("is on the public MCP and reads the demo by default", async () => {
+    const names = await listNames();
+    assert.ok(names.has("review_metrics"), "review_metrics missing on the demo public MCP");
+    const result = await call("review_metrics", {});
+    assert.notEqual(result.isError, true);
+    assert.deepEqual(reviews.demo.metrics.mock.calls, [[{}]]);
+    assert.equal(reviews.pilot.metrics.mock.calls.length, 0);
+  });
+
+  it("reads the Pilot Workspace with the Pilot Key and passes origin through", async () => {
+    await call("review_metrics", { origin: "pilot" }, key(PILOT_KEY));
+    assert.deepEqual(reviews.pilot.metrics.mock.calls, [[{ origin: "pilot" }]]);
+    assert.equal(reviews.demo.metrics.mock.calls.length, 0);
+  });
+
+  it("refuses a wrong key with pilot_key_required (reason invalid)", async () => {
+    const error = errorOf(await call("review_metrics", {}, key("not-the-pilot-key-at-all")));
+    assert.equal(error.code, "pilot_key_required");
+    assert.equal(error.details?.reason, "invalid");
+    assert.equal(reviews.demo.metrics.mock.calls.length, 0);
+    assert.equal(reviews.pilot.metrics.mock.calls.length, 0);
+  });
+
+  it("refuses an unknown origin as invalid_input", async () => {
+    const error = errorOf(await call("review_metrics", { origin: "prod" }));
+    assert.equal(error.code, "invalid_input");
+    assert.equal(reviews.demo.metrics.mock.calls.length, 0);
+  });
+
+  it("is on the Operator MCP, bound to the Pilot Workspace by the Pilot Key", async () => {
+    await operatorCall("review_metrics", {}, OPERATOR);
+    await operatorCall("review_metrics", { origin: "eval" }, { ...OPERATOR, ...key(PILOT_KEY) });
+    assert.deepEqual(reviews.demo.metrics.mock.calls, [[{}]]);
+    assert.deepEqual(reviews.pilot.metrics.mock.calls, [[{ origin: "eval" }]]);
+  });
+});

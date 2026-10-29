@@ -4,10 +4,11 @@ import {
   actorSchema,
   decideRequestSchema,
   decisionRuleViolation,
+  metricsInputSchema,
   scanOptionsSchema,
   SignalError,
 } from "@/lib/signal/contracts";
-import { pilotKeyRefusal } from "@/lib/auth/pilot-access";
+import { originOfAccess, pilotKeyRefusal } from "@/lib/auth/pilot-access";
 import type { PilotAccess } from "@/lib/auth/pilot-access";
 import type { ReviewService } from "@/lib/signal/contracts";
 import { getReviewService } from "@/lib/signal/runtime";
@@ -34,17 +35,24 @@ export const reviewToolDescriptions = {
   decide_review:
     "Record the Product Manager's Review Decision on a Feature Request (Operator only). The AI only suggests Same Need; the Product Manager decides: duplicate (canonicalId must be featureRequestId or otherId; new evidence goes to the canonical), related (sharedDimension: the Shared Dimension seen in both), distinct, or none (no otherId: a decision that confirms the Feature Request has no duplicate; not the same as undecided). Pass suggestionId when answering a Suspected Duplicate from review_queue; omit it on a blind item (the decision records blind: true and answers no suggestion). A rule violation returns invalid_decision; see the canonical evidence afterwards with get_feature_request.",
   review_queue:
-    "Read the Review Queue: new Feature Requests not yet reviewed and backlog Feature Requests with undecided Suspected Duplicates, each with the AI's Reason. Suspicions are suggestions only; nothing counts as a duplicate until the Product Manager decides it with decide_review. Blind Review: an item with blind: true withholds the AI's suggestion, Reason and restated need; choose the other Feature Request (and canonical) yourself from blindChoices, every open Feature Request by title with no AI ranking.",
+    "Read the Review Queue: new Feature Requests not yet reviewed and backlog Feature Requests with undecided Suspected Duplicates, each with the AI's Reason. Suspicions are suggestions only; nothing counts as a duplicate until the Product Manager decides it with decide_review. Blind Review: an item with blind: true withholds the AI's suggestion, Reason and restated need; choose the other Feature Request (and canonical) yourself from blindChoices, every open Feature Request by title with no AI ranking. On the public MCP it is listed only with the Pilot Key; a refused key returns pilot_key_required (branch on error.details.reason: missing, invalid or disabled).",
   scan_backlog:
     "Scan open backlog Feature Requests for Suspected Duplicates (Operator only). Costly (embeddings and judge calls): run it only on request, never on a schedule. limit bounds this call; remaining says how many are left for the next call. Results appear in review_queue as suggestions.",
   undo_review_decision:
     "Undo a Review Decision by decisionId (Operator only). Undo keeps history: the decision stays in the Feature Request's review history marked undone, and the pair returns to review_queue. A second undo fails with already_undone.",
 } as const satisfies Record<ReviewToolName, string>;
 
+/** Read tool on both MCP endpoints (spec 003 Capabilities: metrics accept Origin over MCP). */
+export const REVIEW_METRICS_TOOL = "review_metrics";
+
+export const reviewMetricsToolDescription =
+  "Read the prevention and review metrics (read-only), the same body as GET /api/metrics: Intake Duplicate Rate next to the backlog baseline, Review Coverage, Suspected Duplication (AI-suspected workload, not confirmed duplication), Undo Rate and Suggestion Acceptance, each rate with its counts. One Origin per call: origin (demo, seed, eval or pilot) or, by default, the caller's own. Workspace: the Crewday Demo Workspace without the Pilot Key header; the Pilot Workspace with it, on the public and the Operator MCP. A refused key returns pilot_key_required; branch on error.details.reason: missing (send the key), invalid (wrong key; check it with the operator) or disabled (no Pilot Key configured on this deployment; drop the header for the demo). An unknown origin returns invalid_input.";
+
 const idSchema = z.string().trim().uuid();
 
 const toolSchemas = {
   decide: decideRequestSchema,
+  metrics: metricsInputSchema,
   queue: z.object({}),
   scan: scanOptionsSchema,
   undo: z.object({ actor: actorSchema, decisionId: idSchema }),
@@ -74,7 +82,7 @@ const plainToolMeta = { _meta: {} };
 
 const reviewFor = (access: PilotAccess): ReviewService => {
   if (access.kind === "refused") throw pilotKeyRefusal(access.reason);
-  const service = getReviewService(access.kind === "pilot" ? "pilot" : "demo");
+  const service = getReviewService(originOfAccess(access));
   if (service) return service;
   throw new SignalError({
     code: "service_unavailable",
@@ -121,6 +129,26 @@ const undo = async (
 ) => ({
   decision: await requireReview().undo(decisionId, actor),
 });
+
+/**
+ * Registers review_metrics for the caller's Workspace (`access` from the Pilot Key header; demo by
+ * default; a refused key fails the call with pilot_key_required). Public and Operator MCP alike.
+ */
+export const registerReviewMetricsMcpTool = (server: McpServer, access?: PilotAccess) => {
+  registerAppTool(
+    server,
+    REVIEW_METRICS_TOOL,
+    {
+      ...plainToolMeta,
+      description: reviewMetricsToolDescription,
+      inputSchema: advertised(toolSchemas.metrics),
+    },
+    (args) =>
+      runReviewTool(toolSchemas.metrics, args, (input) =>
+        reviewFor(access ?? { kind: "demo" }).metrics(input),
+      ),
+  );
+};
 
 /**
  * Registers the review tools for the caller's Workspace (`access` from the Pilot Key header; demo
