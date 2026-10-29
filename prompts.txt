@@ -203,3 +203,7 @@ Skills used: to-spec. Docs changed/created: PRODUCT.md, GLOSSARY.md, docs/specs/
 2026-10-29T02:30:00Z — Prompts: "Break it down", then mid-turn "and ship it"
 Summary: Ran to-tasks for spec 002: 7 sub-issues of #13 (#15 contracts and data model; #19 service; #16 backlog scan; #14 REST with Operator access; #18 Operator MCP tools; #17 UI and canonical evidence; #20 wire, verify, align docs) with blocked-by links (02–06 blocked by 01; 07 blocked by 02–06). Tasks checklist in the spec; issue #13 synced. Next: build with parallel workers, then ship.
 Skills used: to-tasks. Docs changed/created: docs/specs/002-review-queue.md.
+
+2026-10-29T03:30:00Z — Build of spec 002 (from "Break it down" + "and ship it")
+Summary: Ran the task set: task 01 (contracts + migration) first, then tasks 02–06 as five parallel workers (service, scan, REST with Operator access, Operator MCP tools, review UI), then task 07 (runtime wiring, REST/Operator-MCP parity rows by a worker, operator sign-in returns to /review, docs alignment). Suite 45 files / 475 tests. Acceptance on the branch preview passed all steps; found and fixed a provenance gap (canonical now shows duplicates' original words, Account and requester; Accounts counted once). Recorded verification in the spec; spec 002 implemented.
+Skills used: to-tasks, build. Docs changed/created: docs/specs/002-review-queue.md, ARCHITECTURE.md, DESIGN.md, docs/INTEROP.md.
