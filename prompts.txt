@@ -364,3 +364,7 @@ Skills used: build. Docs changed: none.
 2026-10-29T04:41:07Z — build 004: task 03 integrated; found worktree .claude/worktrees/agent-a4b2ec507b0847fd8 (branch worktree-agent-a4b2ec507b0847fd8, commit bd02875 docs for #36) from another session; own suite green excluding it (898). Asked user how to handle task 04.
 
 2026-10-29T05:12:07Z — build 004: merged task 04 docs from parallel session (bd02875, user approved); verified refusals and build traces; spec 004 implemented.
+
+2026-10-29T09:20:00Z — ship 004: review posted on PR #37 (blocking F1 private-dir bypass, F2 proof oracle, F3 change visibility, F4 v2 report in repo); CI green on 94fbd57; fix round 1 with 2 parallel workers.
+
+2026-10-29T12:03:59Z — ship 004: merged fix round 1 (F1-F4); lint/types/922 tests/build green.
