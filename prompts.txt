@@ -336,3 +336,7 @@ Skills used: to-spec. Docs changed: (next entry).
 2026-10-29T04:13:44Z — to-spec 004
 Summary: Wrote spec 004 (draft) and decision 0004 (Proposed) on branch 004-private-pilot-data: private folder outside repo (SIGNAL_PRIVATE_DATA_DIR), repo keeps templates + locks, load and eval runner store data/readings in Neon, Proof Report reads DB only. Not pushed, no issue.
 Skills used: to-spec. Docs changed/created: docs/specs/004-private-pilot-data.md, docs/decisions/0004-private-pilot-data-in-the-database.md.
+
+2026-10-29T04:15:16Z — "Accept and ship" (spec 004)
+Summary: Accepted spec 004 + decision 0004 (spec 003 amended); issue #32; tasks #33-#36 (linear). Starting build.
+Skills used: to-spec, to-tasks, ship, build. Docs changed: docs/specs/003-prove-the-verdict.md, docs/specs/004-private-pilot-data.md, docs/decisions/0004-private-pilot-data-in-the-database.md.
