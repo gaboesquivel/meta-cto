@@ -30,7 +30,7 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 - `seed/`: idempotent Crewday Demo Workspace seed from `data/crewday/`.
 - `runtime/`: `getSignalService()` and `getReviewService()` compose the above, or return null when `DATABASE_URL` (and, for Checks, AI keys) are missing; routes then answer 503 `service_unavailable`. The scan needs AI keys too.
 - `http/`: REST helpers (parsing, error mapping, write rate limit).
-- `lib/pilot-load/` and `data/pilot/`: Operator-run `pnpm signal:pilot:{check,freeze,load}` for the pilot backlog, feedback set and Answer Key (person-confirmed, fingerprinted and frozen before the run); never part of a build. Data paths resolve from the working directory at call time, so run them from the repo root.
+- `lib/pilot-load/` and `data/pilot/`: Operator-run `pnpm signal:pilot:{check,freeze,load}` for the pilot backlog, feedback set and Answer Key (person-confirmed, fingerprinted and frozen before the run). The commands never run in builds; the Proof Report reads the frozen files at runtime (traced into `/api/proof`, `/proof` and the MCP routes). Data paths resolve from the working directory at call time, so run them from the repo root.
 
 ## Data and environments
 

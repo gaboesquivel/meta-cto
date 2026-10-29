@@ -1,6 +1,6 @@
 # meta-cto
 
-Single-app agentic Next.js template: public Assistant, protected Operator, Eve, OpenUI Lang GenUI, MCP Streamable HTTP, and MCP Apps.
+**Signal**: a verdict before every create for feature requests, built API and MCP first ([PRODUCT.md](./PRODUCT.md)). Built on the `flow-next` Next.js template (Assistant, Operator, GenUI, MCP).
 
 ## Architecture
 
@@ -19,7 +19,7 @@ flowchart TB
 
   judge["AI judge<br/>Embed, then judge"]
   db[("Postgres + pgvector<br/>Events, evidence")]
-  evals["Held-out eval<br/>25 frozen pairs"]
+  evals["Held-out eval<br/>v1 25 pairs, v2 person-confirmed"]
 
   staff --> check
   agent --> check
@@ -41,19 +41,24 @@ Open `https://meta-cto.localhost` (Portless proxy on 443, never a port in the UR
 
 ## Scripts
 
-| Script          | Purpose                                                                                                                                                       |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pnpm setup`    | Prerequisites + non-destructive `.env.local`                                                                                                                  |
-| `pnpm dev`      | Development via Portless (`https://meta-cto.localhost`, no port)                                                                                              |
-| `pnpm dev:port` | Plain `next dev` on loopback `localhost:<port>` for parallel agents (one per worktree, copy `.env.local` in); pass `PORT` or let Next pick the next free port |
-| `pnpm qa`       | Lint, types, tests                                                                                                                                            |
-| `pnpm build`    | Production build (includes MCP App bundle)                                                                                                                    |
-| `pnpm eval`     | Offline GenUI eval + Eve tool smoke                                                                                                                           |
+| Script                                        | Purpose                                                                                                                                                       |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm setup`                                  | Prerequisites + non-destructive `.env.local`                                                                                                                  |
+| `pnpm dev`                                    | Development via Portless (`https://meta-cto.localhost`, no port)                                                                                              |
+| `pnpm dev:port`                               | Plain `next dev` on loopback `localhost:<port>` for parallel agents (one per worktree, copy `.env.local` in); pass `PORT` or let Next pick the next free port |
+| `pnpm qa`                                     | Lint, types, tests                                                                                                                                            |
+| `pnpm build`                                  | Production build (includes MCP App bundle)                                                                                                                    |
+| `pnpm eval`                                   | Offline GenUI eval + Eve tool smoke                                                                                                                           |
+| `pnpm eval:verdict`                           | Signal verdict eval on the frozen Held-Out Set (v1; `--set held-out-v2` once frozen). Costs tokens; manual only                                               |
+| `pnpm signal:scan`                            | Backlog scan for suspected duplicates (Operator action, never in builds)                                                                                      |
+| `pnpm signal:pilot:check` / `freeze` / `load` | Pilot files readiness, freeze (fingerprint lock), and load into the Pilot Workspace. Run from the repo root; never in builds                                  |
 
 ## Surfaces
 
-- **Assistant** — `/`, `/genui`, `/api/chat`, `/api/mcp`, `/mcp`
-- **Operator** — `/operator`, `/api/operator/chat`, `/api/mcp/operator` (requires `OPERATOR_SECRET`)
+- **Signal UI** — `/`, `/requests`, `/requests/new`, `/requests/[id]`, `/review` (actions need Operator sign-in), `/proof` (Operator only)
+- **Signal REST** — `/api/checks`, `/api/feature-requests`, `/api/metrics`, `/api/review/*`, `/api/proof`; listed in `/openapi.json`. The Pilot Workspace needs the `x-signal-pilot-key` header (`SIGNAL_PILOT_KEY`)
+- **MCP** — `/api/mcp` (Signal tools; the Pilot Key selects the Pilot Workspace), `/api/mcp/operator` (review tools; requires `OPERATOR_SECRET`)
+- **Template** — `/genui`, `/api/chat`, `/mcp`, `/operator`
 
 Cross-template contract: [docs/INTEROP.md](./docs/INTEROP.md).
 

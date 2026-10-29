@@ -193,7 +193,7 @@ A person-confirmed need cluster (`needId`) for every pilot backlog Feature Reque
 _Avoid_: Ground truth file, labels
 
 **Origin**:
-Where a Check or domain event came from: `pilot`, `demo`, `seed` or `eval`. Recorded at the source; metrics read one Origin at a time.
+Where a Check, domain event or Feature Request came from: `pilot`, `demo`, `seed` or `eval`. Recorded at the source. Intake metrics read the caller's Origin only; backlog measures read the Workspace's pre-Signal backlog.
 _Avoid_: Source, environment
 
 **Held-Out Set v2**:
@@ -201,11 +201,11 @@ The second frozen Held-Out Set: person-confirmed labels, at least 60 same-need p
 _Avoid_: New eval, test set
 
 **Agent Correctness**:
-The share of agent Supports and creates in the Pilot Workspace that match the Answer Key. A Support on a different need counts as harm.
+The share of agent Supports, Comments and creates in the Pilot Workspace that match the Answer Key. A Support or Comment on a different need counts as harm; a create when the need already exists counts as a miss.
 _Avoid_: Agent accuracy, acceptance
 
 **Blind Review**:
-A Review Decision made without seeing the AI's suggestion or Reason; recorded as blind, to measure agreement with the Answer Key free of anchoring.
+A new pilot Feature Request chosen (reproducibly, by share) to be reviewed without the AI's suggestion, Reason or Underlying Need, and the decision made on it, recorded as blind. Measures Product Manager agreement with the Answer Key free of anchoring.
 _Avoid_: Unassisted review
 
 ## Platform (template)
