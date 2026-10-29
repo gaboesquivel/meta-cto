@@ -92,9 +92,9 @@ Moving Supports or Comments between rows, bulk or automatic decisions, AI-sugges
 ## Tasks
 
 - [x] 01: Review contracts and data model (#15) — [a348b8e](https://github.com/gaboesquivel/meta-cto/commit/a348b8e992265789eab559eab982afe4e530469a)
-- [ ] 02: Review service: queue, decisions, evidence, metrics (#19) — blocked by 01
-- [ ] 03: Backlog scan as an Operator action (#16) — blocked by 01
-- [ ] 04: Review REST API with Operator access (#14) — blocked by 01
-- [ ] 05: Operator MCP review tools (#18) — blocked by 01
-- [ ] 06: Review UI and canonical evidence (#17) — blocked by 01
+- [x] 02: Review service: queue, decisions, evidence, metrics (#19) — [722ad86](https://github.com/gaboesquivel/meta-cto/commit/722ad86af2431ef5110801411ad640027197179d)
+- [x] 03: Backlog scan as an Operator action (#16) — [7f0d7f0](https://github.com/gaboesquivel/meta-cto/commit/7f0d7f0f39dc58f11382dd21dbc713c5349bc157)
+- [x] 04: Review REST API with Operator access (#14) — [6c23f14](https://github.com/gaboesquivel/meta-cto/commit/6c23f1437f646b7c72ccadeba52fb640fb1f0acd)
+- [x] 05: Operator MCP review tools (#18) — [690c079](https://github.com/gaboesquivel/meta-cto/commit/690c079ad6275ee89b57d0d8924505baaa71fd28)
+- [x] 06: Review UI and canonical evidence (#17) — [64e7097](https://github.com/gaboesquivel/meta-cto/commit/64e7097a21604ce075724c1a7cddeade92614eb4)
 - [ ] 07: Wire, verify and align docs (#20) — blocked by 02–06
