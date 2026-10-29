@@ -108,7 +108,7 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 - [x] 02: Pilot Workspace behind a Pilot Key (#24) — [e2a3cff](https://github.com/gaboesquivel/meta-cto/commit/e2a3cff9863ace5d6b1f5aa816f459b6d872bc8e)
 - [x] 03: Load the pilot backlog and Answer Key (#25) — [d82f793](https://github.com/gaboesquivel/meta-cto/commit/d82f793455456b368e875f0abb479e9d9e616239)
 - [x] 04: Blind review in the Review Queue (#26) — [bc39a6c](https://github.com/gaboesquivel/meta-cto/commit/bc39a6c6172ed682902692952920879ccb25a265)
-- [ ] 05: Score agent correctness and PM agreement (#27)
+- [x] 05: Score agent correctness and PM agreement (#27) — [9d8278f](https://github.com/gaboesquivel/meta-cto/commit/9d8278f2a98228145c821e536ad6b3519c2e1c7d)
 - [x] 06: Held-Out Set v2 runner with intervals (#28) — [a645ce4](https://github.com/gaboesquivel/meta-cto/commit/a645ce47e8def8075cbf94a5acb2346eda1bfa8c)
 - [ ] 07: Proof Report (#29)
 - [ ] 08: Wire, verify on a preview and align docs (#30)
