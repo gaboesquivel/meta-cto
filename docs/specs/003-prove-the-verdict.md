@@ -103,3 +103,12 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 - **Cost:** about 200 pilot Checks plus v2 readings and one backlog scan; within existing AI Gateway limits (assumption).
 
 ## Tasks
+
+- [ ] 01: Record Origin on Checks and events (#23)
+- [ ] 02: Pilot Workspace behind a Pilot Key (#24)
+- [ ] 03: Load the pilot backlog and Answer Key (#25)
+- [ ] 04: Blind review in the Review Queue (#26)
+- [ ] 05: Score agent correctness and PM agreement (#27)
+- [ ] 06: Held-Out Set v2 runner with intervals (#28)
+- [ ] 07: Proof Report (#29)
+- [ ] 08: Wire, verify on a preview and align docs (#30)
