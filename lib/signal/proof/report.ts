@@ -21,7 +21,8 @@ import type { BarVerdict, Interval, PrecisionReading } from "./bars";
 /**
  * The Proof Report (spec 003, decision 0003): every preset bar with its value, counts, 95%
  * interval where it applies, and pass, fail or inconclusive, plus what follows from them. Pure:
- * `sources.ts` reads the pilot metrics, Answer Key scores, frozen files and eval run log.
+ * `sources.ts` reads the pilot metrics, the stored pilot ground truth and Answer Key scores, the
+ * stored v2 readings, and the committed freeze locks (spec 004).
  *
  * Verdict rules: a bar passes only when its whole 95% interval clears the bar and its minimums are
  * met; it fails only when the interval is wholly on the wrong side; anything else is inconclusive,
@@ -36,27 +37,37 @@ export {
   REVIEW_COVERAGE_BAR,
 } from "./bars";
 
+/**
+ * The pilot data's readiness: frozen by the committed lock, loaded into the database, and whether
+ * the stored fingerprint still matches the lock. Unreadable when the lock or database read failed.
+ */
 export type PilotFilesState =
   | { message: string; readable: false }
   | {
       backlogRequests: number;
+      /** The stored fingerprint differs from the lock's: reading reset. */
       changed: boolean;
       /** Stated before the run (the lock's when frozen, else the manifest's). */
       expectedBacklogDuplicateRate: number | null;
       feedback: number;
       frozen: boolean;
       frozenAt: string | null;
-      /** Feedback items in the pilot lock (the filings minimum); null or absent when not frozen. */
+      /** Feedback items stored (else in the lock): the filings minimum; null or absent when unknown. */
       frozenFeedback?: number | null;
+      /** The pilot ground truth is stored in the database. */
+      loaded: boolean;
+      loadedAt: string | null;
       messages: string[];
       readable: true;
       ready: boolean;
       unconfirmed: number;
     };
 
+/** Held-Out Set v2's readiness: frozen by the committed lock; counts are the lock's. */
 export type HeldOutV2State =
   | { message: string; readable: false }
   | {
+      /** The latest stored reading is from another fingerprint than the lock's: reading reset. */
       changed: boolean;
       frozen: boolean;
       frozenAt: string | null;
@@ -65,7 +76,6 @@ export type HeldOutV2State =
       pairs: number;
       readable: true;
       sameNeedPositives: number;
-      unconfirmed: number;
     };
 
 interface PrecisionCounts {
@@ -73,7 +83,7 @@ interface PrecisionCounts {
   truePositives: number;
 }
 
-/** One logged Held-Out Set v2 run, as the report needs it. */
+/** One stored Held-Out Set v2 run, as the report needs it. */
 export interface V2Run {
   at: string;
   failures: number;
@@ -180,7 +190,7 @@ export interface ProofReport {
 const pct = (value: number) => `${Number((value * 100).toFixed(1))}%`;
 const range = (interval: Interval) => `${pct(interval.lower)}–${pct(interval.upper)}`;
 
-const PILOT_CHANGED = "Pilot files changed after freeze: reading reset.";
+const PILOT_CHANGED = "Pilot data changed after freeze: reading reset.";
 const V2_CHANGED = "Held-Out Set v2 changed after freeze: reading reset.";
 
 const CONSEQUENCES = {
@@ -221,13 +231,16 @@ const metricsReasons = (input: ProofInputs): string[] => {
 };
 
 const pilotFilesReasons = (files: PilotFilesState): string[] => {
-  if (!files.readable) return [`The pilot files could not be read: ${files.message}`];
+  if (!files.readable) return [`Pilot data could not be read: ${files.message}`];
   if (files.changed) return [PILOT_CHANGED];
+  const reasons: string[] = [];
   if (!files.frozen)
-    return [
+    reasons.push(
       "The pilot files are not frozen: the backlog and its expected rate must be fixed before the run.",
-    ];
-  return [];
+    );
+  if (!files.loaded)
+    reasons.push("Pilot data not loaded: load the frozen pilot files into this database.");
+  return reasons;
 };
 
 const intakeBar = (input: ProofInputs): ProofBar => {
@@ -344,7 +357,7 @@ const v2SetReasons = (set: HeldOutV2State): string[] => {
 
 /** Why a v2 run cannot decide a bar: missing, stale prompt version, failed pairs, too few positives. */
 const runReasons = (input: ProofInputs, run: V2Run | null): string[] => {
-  if (!run) return ["There is no Held-Out Set v2 reading yet: run the eval once."];
+  if (!run) return ["No v2 reading: run Held-Out Set v2 once against this database."];
   const reasons: string[] = [];
   if (input.v2Reading === null) {
     reasons.push(
@@ -455,7 +468,7 @@ const supportingOf = (input: ProofInputs): ProofReport["supporting"] => {
   const scores = input.answerKeyScores;
   const files = input.pilotFiles;
   if (!scores)
-    notes.push("Answer Key scores are unavailable (no database or unreadable pilot files).");
+    notes.push("Answer Key scores are unavailable (no database, or pilot data not loaded).");
   if (files.readable && files.changed) {
     notes.push(
       "Answer Key changed after freeze: reading reset; these scores read the changed key.",

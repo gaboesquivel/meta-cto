@@ -3,6 +3,9 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
+import { heldOutV2LockSchema } from "@/lib/signal/proof/locks";
+import type { HeldOutV2Lock } from "@/lib/signal/proof/locks";
+
 import { evalDir } from "./paths";
 import { evalPairSchema } from "./sets";
 
@@ -25,15 +28,9 @@ export const heldOutV2PairSchema = evalPairSchema.extend({
 
 export type HeldOutV2Pair = z.infer<typeof heldOutV2PairSchema>;
 
-export const heldOutV2LockSchema = z.object({
-  fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  frozenAt: z.iso.datetime({ offset: true }),
-  pairs: z.number().int().min(1),
-  sameNeedPositives: z.number().int().min(0),
-  set: z.literal(V2_SET_NAME),
-});
+export { heldOutV2LockSchema } from "@/lib/signal/proof/locks";
 
-export type HeldOutV2Lock = z.infer<typeof heldOutV2LockSchema>;
+export type { HeldOutV2Lock } from "@/lib/signal/proof/locks";
 
 export type V2Refusal =
   | "already_frozen"

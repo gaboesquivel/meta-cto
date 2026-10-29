@@ -292,6 +292,9 @@ describe("eval runs", () => {
     assert.equal(forPrompt?.id, older.id);
     assert.equal(await repo.latestEvalReading({ ...key, promptVersion: "pv-9" }), null);
     assert.equal(await repo.latestEvalReading({ ...key, fingerprint: "sha256:none" }), null);
+    // Without a fingerprint: the latest reading on the set, whatever it was frozen as.
+    const onSet = await repo.latestEvalReading({ setName: "held-out-v2" });
+    assert.equal(onSet?.fingerprint, "sha256:old");
 
     const [row] = await db.select().from(evalRuns).where(eq(evalRuns.id, older.id));
     assert.deepEqual(row?.readings, { sameNeed: { predicted: 1, truePositives: 1 } });

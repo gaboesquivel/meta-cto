@@ -1,10 +1,6 @@
-import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-
-import { judgeModelId, judgeOutputSchema } from "@/lib/signal/agent";
-import { buildJudgePrompt, JUDGE_SYSTEM } from "@/lib/signal/agent/prompt";
 
 import type { ExpectedVerdict, PredictedVerdict } from "./metrics";
 import { evalDir } from "./paths";
@@ -13,44 +9,8 @@ import type { V2Readings } from "./readings";
 /** Append-only log of every eval run, one JSON object per line. Commit it with the reports. */
 export const RUN_LOG_FILE = "runs.jsonl";
 
-export interface PromptConfig {
-  model: string;
-  outputSchema: string;
-  system: string;
-  /** The user prompt rendered for a fixed sample, so template changes count. */
-  userTemplate: string;
-}
-
-/** Short hash of everything that shapes a Verdict on the judge's side. */
-export const promptVersion = (config: PromptConfig): string =>
-  `pv-${createHash("sha256")
-    .update(JSON.stringify([config.system, config.userTemplate, config.outputSchema, config.model]))
-    .digest("hex")
-    .slice(0, 12)}`;
-
-/** The model a Check would use: the gateway judge model, else the direct Anthropic fallback. */
-const effectiveModel = (): string => {
-  if (process.env.AI_GATEWAY_API_KEY?.trim()) return judgeModelId();
-  return `direct:${process.env.CHAT_MODEL?.trim() || "default-chat-model"}`;
-};
-
-/** Read-only view of the judge in `lib/signal/agent`: its prompt version and model id. */
-export const currentPromptVersion = (): { id: string; model: string } => {
-  const model = effectiveModel();
-  const userTemplate = buildJudgePrompt({
-    candidates: [
-      {
-        description: "candidate",
-        featureRequestId: "fr",
-        title: "candidate",
-        underlyingNeed: null,
-      },
-    ],
-    draft: { description: "draft", title: "draft" },
-  });
-  const outputSchema = JSON.stringify(z.toJSONSchema(judgeOutputSchema));
-  return { id: promptVersion({ model, outputSchema, system: JUDGE_SYSTEM, userTemplate }), model };
-};
+export { currentPromptVersion, promptVersion } from "./prompt-version";
+export type { PromptConfig } from "./prompt-version";
 
 export type RunStatus = "completed" | "failed" | "refused";
 

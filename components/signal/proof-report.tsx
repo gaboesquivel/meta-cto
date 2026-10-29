@@ -174,11 +174,12 @@ const Readiness = ({ readiness }: { readiness: ProofReport["readiness"] }) => {
       ) : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-1 rounded-xl border p-3 text-sm">
-          <h3 className="font-semibold">Pilot files and Answer Key</h3>
+          <h3 className="font-semibold">Pilot data and Answer Key</h3>
           {files.readable ? (
             <>
               <span>
-                Frozen: {yesNo(files.frozen)} · Changed after freeze: {yesNo(files.changed)}
+                Frozen: {yesNo(files.frozen)} · Loaded: {yesNo(files.loaded)} · Changed after
+                freeze: {yesNo(files.changed)}
               </span>
               <span>Unconfirmed Answer Key entries: {files.unconfirmed}</span>
               <Muted>
@@ -196,7 +197,6 @@ const Readiness = ({ readiness }: { readiness: ProofReport["readiness"] }) => {
               <span>
                 Frozen: {yesNo(v2.frozen)} · Changed after freeze: {yesNo(v2.changed)}
               </span>
-              <span>Unconfirmed pairs: {v2.unconfirmed}</span>
               <Muted>
                 {v2.pairs} pairs · {v2.sameNeedPositives} same-need positives
               </Muted>

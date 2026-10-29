@@ -182,17 +182,17 @@ export const createPilotDataRepository = (db: SignalDb) => {
     },
 
     /**
-     * The reading: the latest run on this set and fingerprint that judged pairs and is not a
-     * repeat, optionally for one prompt version. Null when there is none.
+     * The reading: the latest run on this set that judged pairs and is not a repeat, optionally
+     * for one fingerprint and one prompt version. Null when there is none.
      */
-    async latestEvalReading(key: Omit<EvalRunKey, "promptVersion"> & { promptVersion?: string }) {
+    async latestEvalReading(key: Partial<Omit<EvalRunKey, "setName">> & { setName: string }) {
       const [row] = await db
         .select()
         .from(evalRuns)
         .where(
           and(
             eq(evalRuns.setName, key.setName),
-            eq(evalRuns.fingerprint, key.fingerprint),
+            key.fingerprint === undefined ? undefined : eq(evalRuns.fingerprint, key.fingerprint),
             eq(evalRuns.judgedPairs, true),
             eq(evalRuns.repeat, false),
             key.promptVersion === undefined

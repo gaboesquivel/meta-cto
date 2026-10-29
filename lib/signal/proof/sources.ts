@@ -1,138 +1,58 @@
-import { ZodError } from "zod";
+import { z } from "zod";
 
-import {
-  checkV2Ready,
-  loadHeldOutV2,
-  readV2Lock,
-  unconfirmedPairs,
-} from "@/evals/signal-verdict/held-out-v2";
-import { evalDir } from "@/evals/signal-verdict/paths";
-import { currentPromptVersion, currentV2Reading, readRunLog } from "@/evals/signal-verdict/run-log";
-import type { RunLogEntry } from "@/evals/signal-verdict/run-log";
-import {
-  answerKeyLabels,
-  checkPilotReady,
-  pilotDir,
-  readPilotFiles,
-  readPilotLock,
-} from "@/lib/pilot-load/files";
+import { currentPromptVersion } from "@/evals/signal-verdict/prompt-version";
 import type { ReviewMetrics } from "@/lib/signal/contracts";
 import { getDb } from "@/lib/signal/db";
-import { PILOT_ORIGIN } from "@/lib/signal/pilot";
+import { PILOT_ORIGIN, PILOT_WORKSPACE } from "@/lib/signal/pilot";
 import { createRepository } from "@/lib/signal/repository";
+import type { SignalRepository } from "@/lib/signal/repository";
+import type { EvalReading, PilotGroundTruth } from "@/lib/signal/repository-pilot-data";
 import { getReviewService } from "@/lib/signal/runtime";
 import { createAnswerKeyScoring } from "@/lib/signal/service/answer-key";
 import type { AnswerKeyLabels, AnswerKeyScores } from "@/lib/signal/service/answer-key";
 
+import { readProofLocks, V2_LOCK_SET_NAME } from "./locks";
+import type { HeldOutV2Lock, LockRead, PilotLock, ProofLocks } from "./locks";
 import { buildProofReport } from "./report";
 import type { HeldOutV2State, PilotFilesState, ProofInputs, ProofReport, V2Run } from "./report";
 
 /**
- * Reads what the Proof Report needs: pilot metrics (Origin `pilot`), Answer Key scores, the frozen
- * pilot files and Held-Out Set v2, and the eval run log. Every source degrades to a stated reason
- * instead of failing the report. Files resolve from the project root (`process.cwd()`); the routes
- * that read them list them in `outputFileTracingIncludes`.
+ * Reads what the Proof Report needs (spec 004, decision 0004): pilot metrics (Origin `pilot`), the
+ * pilot ground truth and v2 readings stored in the database, Answer Key scores from the stored
+ * labels, and the two committed freeze locks. No pilot or v2 content is read from files. Every
+ * source degrades to a stated reason ("pilot data not loaded", "no v2 reading") instead of failing
+ * the report.
  */
 
-export interface ProofSourceDeps {
-  /** Null when there is no database to score against. */
+/** The database records the report reads; no operation serves them item by item. */
+export interface ProofStore {
   answerKeyScores: (labels: AnswerKeyLabels) => Promise<AnswerKeyScores | null>;
-  evalDir: string;
+  /** The Pilot Workspace's stored ground truth; null before a load or without the Workspace. */
+  pilotGroundTruth: () => Promise<PilotGroundTruth | null>;
+  /** The latest judged, non-repeat Held-Out Set v2 run, optionally by fingerprint and prompt. */
+  v2Reading: (key: { fingerprint?: string; promptVersion?: string }) => Promise<EvalReading | null>;
+}
+
+export interface ProofSourceDeps {
+  locks: () => ProofLocks;
   now: () => Date;
-  pilotDir: string;
   /** Null when the database is not configured. */
   pilotMetrics: () => Promise<ReviewMetrics | null>;
   promptVersion: () => string;
+  /** Null when the database is not configured. */
+  store: () => ProofStore | null;
 }
 
-/**
- * A stable, path-free reason for an unreadable file set, safe to show in the report. The raw
- * error (which may name server paths) goes to the server log only.
- */
-const unreadableReason = (label: string, error: unknown): string => {
-  console.error(`[signal] proof report: ${label} unreadable`, error);
-  if (error instanceof SyntaxError) return "a file is not valid JSON.";
-  if (error instanceof ZodError) return "a file does not match its expected shape.";
-  const code = (error as { code?: unknown } | null)?.code;
-  if (code === "ENOENT") return "a file is missing from this deployment.";
-  if (code === "EACCES" || code === "EPERM") return "a file cannot be opened on this deployment.";
-  return "they could not be read; check the server log.";
+/** A stable, path-free reason for an unreadable lock; the raw error goes to the server log. */
+const lockReason = (label: string, error: unknown): string => {
+  console.error(`[signal] proof report: ${label} lock unreadable`, error);
+  if (error instanceof SyntaxError) return "a lock file is not valid JSON.";
+  if (error instanceof z.ZodError) return "a lock file does not match its expected shape.";
+  return "a lock file could not be read; check the server log.";
 };
 
-const readPilot = (dir: string): { labels: AnswerKeyLabels | null; state: PilotFilesState } => {
-  try {
-    const files = readPilotFiles(dir);
-    const lock = readPilotLock(dir);
-    const status = checkPilotReady(files, lock);
-    return {
-      labels: answerKeyLabels(files),
-      state: {
-        backlogRequests: status.counts.featureRequests,
-        changed: status.changed,
-        expectedBacklogDuplicateRate:
-          lock?.expectedBacklogDuplicateRate ?? files.manifest.expectedBacklogDuplicateRate,
-        feedback: status.counts.feedback,
-        frozen: status.frozen,
-        frozenAt: lock?.frozenAt ?? null,
-        frozenFeedback: lock?.feedback ?? null,
-        messages: status.messages,
-        readable: true,
-        ready: status.ready,
-        unconfirmed: status.counts.unconfirmed,
-      },
-    };
-  } catch (error) {
-    return {
-      labels: null,
-      state: { message: unreadableReason("pilot files", error), readable: false },
-    };
-  }
-};
-
-const readV2 = (dir: string) => {
-  try {
-    const pairs = loadHeldOutV2(dir);
-    const lock = readV2Lock(dir);
-    const ready = checkV2Ready(pairs, lock);
-    const state: HeldOutV2State = {
-      changed: !ready.ok && ready.code === "changed_after_freeze",
-      frozen: lock !== null,
-      frozenAt: lock?.frozenAt ?? null,
-      message: ready.ok ? null : ready.message,
-      pairs: pairs.length,
-      readable: true,
-      sameNeedPositives: pairs.filter((p) => p.expected === "same_need").length,
-      unconfirmed: unconfirmedPairs(pairs).length,
-    };
-    return { lock, state };
-  } catch (error) {
-    return {
-      lock: null,
-      state: { message: unreadableReason("Held-Out Set v2", error), readable: false } as const,
-    };
-  }
-};
-
-const toRun = (entry: RunLogEntry | null): V2Run | null => {
-  if (!entry) return null;
-  const { readings } = entry;
-  return {
-    at: entry.at,
-    failures: readings?.failures ?? entry.counts.failures,
-    promptVersion: entry.promptVersion,
-    relatedNeed: readings
-      ? {
-          predicted: readings.relatedNeed.predicted,
-          truePositives: readings.relatedNeed.truePositives,
-        }
-      : null,
-    sameNeed: readings
-      ? { predicted: readings.sameNeed.predicted, truePositives: readings.sameNeed.truePositives }
-      : null,
-    sameNeedPositives: readings?.sameNeedPositives ?? entry.counts.sameNeedPositives,
-    status: entry.status === "completed" ? "completed" : "failed",
-  };
-};
+const STORE_FAILED =
+  "the database could not be read; retry, and check the server log if it persists.";
 
 const safely = async <T>(label: string, run: () => Promise<T>): Promise<T | Error> => {
   try {
@@ -141,6 +61,170 @@ const safely = async <T>(label: string, run: () => Promise<T>): Promise<T | Erro
     console.error(`[signal] proof report: ${label} failed`, error);
     return error instanceof Error ? error : new Error(String(error));
   }
+};
+
+const countUnconfirmed = (labels: AnswerKeyLabels) =>
+  [...labels.featureRequests, ...labels.feedback].filter((label) => !label.confirmed).length;
+
+const pilotMessages = (
+  lock: PilotLock | null,
+  truth: PilotGroundTruth | null,
+  changed: boolean,
+): string[] => {
+  const messages: string[] = [];
+  if (changed && lock) {
+    messages.push(
+      `Pilot data changed after freeze: reading reset. The stored data no longer matches the fingerprint frozen at ${lock.frozenAt}; earlier pilot readings do not apply.`,
+    );
+  }
+  if (!lock)
+    messages.push("Pilot files are not frozen. Run the freeze command and commit the lock file.");
+  if (!truth) messages.push("Pilot data not loaded: run the pilot load against this database.");
+  const unconfirmed = truth ? countUnconfirmed(truth.labels) : 0;
+  if (unconfirmed > 0) messages.push(`Answer Key has ${unconfirmed} unconfirmed entries.`);
+  return messages;
+};
+
+/** Counts from the stored ground truth, else the lock's; null when neither exists. */
+const pilotCounts = (lock: PilotLock | null, truth: PilotGroundTruth | null) => {
+  if (truth) {
+    return {
+      backlogRequests: truth.counts.featureRequests,
+      feedback: truth.feedbackCount,
+      rate: lock?.expectedBacklogDuplicateRate ?? truth.expectedBacklogDuplicateRate,
+    };
+  }
+  if (lock) {
+    return {
+      backlogRequests: lock.featureRequests,
+      feedback: lock.feedback,
+      rate: lock.expectedBacklogDuplicateRate,
+    };
+  }
+  return null;
+};
+
+/** Readiness from the lock and the stored ground truth (null when not loaded). */
+const pilotState = (lock: PilotLock | null, truth: PilotGroundTruth | null): PilotFilesState => {
+  const changed = Boolean(lock && truth && truth.fingerprint !== lock.fingerprint);
+  const unconfirmed = truth ? countUnconfirmed(truth.labels) : 0;
+  const counts = pilotCounts(lock, truth);
+  return {
+    backlogRequests: counts?.backlogRequests ?? 0,
+    changed,
+    expectedBacklogDuplicateRate: counts?.rate ?? null,
+    feedback: counts?.feedback ?? 0,
+    frozen: lock !== null,
+    frozenAt: lock?.frozenAt ?? null,
+    frozenFeedback: counts?.feedback ?? null,
+    loaded: truth !== null,
+    loadedAt: truth?.loadedAt ?? null,
+    messages: pilotMessages(lock, truth, changed),
+    readable: true,
+    ready: lock !== null && truth !== null && !changed && unconfirmed === 0,
+    unconfirmed,
+  };
+};
+
+const readPilot = async (
+  read: LockRead<PilotLock>,
+  store: ProofStore | null,
+): Promise<{ state: PilotFilesState; truth: PilotGroundTruth | null }> => {
+  if (!read.ok) {
+    return { state: { message: lockReason("pilot", read.error), readable: false }, truth: null };
+  }
+  const truth = store ? await safely("pilot ground truth", store.pilotGroundTruth) : null;
+  if (truth instanceof Error) {
+    return { state: { message: STORE_FAILED, readable: false }, truth: null };
+  }
+  return { state: pilotState(read.lock, truth), truth };
+};
+
+const precisionSchema = z.object({ predicted: z.number(), truePositives: z.number() });
+const readingsSchema = z.object({
+  failures: z.number().optional(),
+  relatedNeed: precisionSchema,
+  sameNeed: precisionSchema,
+  sameNeedPositives: z.number().optional(),
+});
+
+const precisionCounts = (p: z.infer<typeof precisionSchema>) => ({
+  predicted: p.predicted,
+  truePositives: p.truePositives,
+});
+
+const toRun = (reading: EvalReading | null): V2Run | null => {
+  if (!reading) return null;
+  const parsed = readingsSchema.safeParse(reading.readings);
+  const counts = parsed.success ? parsed.data : null;
+  return {
+    at: reading.createdAt,
+    failures: counts?.failures ?? reading.failures,
+    promptVersion: reading.promptVersion,
+    relatedNeed: counts ? precisionCounts(counts.relatedNeed) : null,
+    sameNeed: counts ? precisionCounts(counts.sameNeed) : null,
+    sameNeedPositives: counts?.sameNeedPositives ?? reading.sameNeedPositives,
+    status: reading.status === "completed" ? "completed" : "failed",
+  };
+};
+
+interface V2Sources {
+  latest: V2Run | null;
+  reading: V2Run | null;
+  state: HeldOutV2State;
+}
+
+const V2_CHANGED_MESSAGE =
+  "Held-Out Set v2 changed after freeze: reading reset. The latest stored reading is from another fingerprint than the committed lock's; earlier v2 readings do not apply.";
+
+const V2_NOT_FROZEN =
+  "Held-Out Set v2 is not frozen. Run the freeze command and commit the lock file.";
+
+const fetchReadings = (store: ProofStore, lock: HeldOutV2Lock, promptVersion: string | null) =>
+  Promise.all([
+    promptVersion ? store.v2Reading({ fingerprint: lock.fingerprint, promptVersion }) : null,
+    store.v2Reading({ fingerprint: lock.fingerprint }),
+    store.v2Reading({}),
+  ]);
+
+const readV2 = async (
+  read: LockRead<HeldOutV2Lock>,
+  store: ProofStore | null,
+  promptVersion: string | null,
+): Promise<V2Sources> => {
+  if (!read.ok) {
+    const state = { message: lockReason("Held-Out Set v2", read.error), readable: false } as const;
+    return { latest: null, reading: null, state };
+  }
+  const { lock } = read;
+  const base = {
+    frozen: lock !== null,
+    frozenAt: lock?.frozenAt ?? null,
+    pairs: lock?.pairs ?? 0,
+    readable: true as const,
+    sameNeedPositives: lock?.sameNeedPositives ?? 0,
+  };
+  if (!lock) {
+    return {
+      latest: null,
+      reading: null,
+      state: { ...base, changed: false, message: V2_NOT_FROZEN },
+    };
+  }
+  const fetched = store
+    ? await safely("v2 readings", () => fetchReadings(store, lock, promptVersion))
+    : null;
+  if (fetched instanceof Error) {
+    return { latest: null, reading: null, state: { message: STORE_FAILED, readable: false } };
+  }
+  const [current, latest, latestAny] = fetched ?? [null, null, null];
+  // The latest reading on the set is from another fingerprint: the set changed after freeze.
+  const changed = latestAny !== null && latestAny.fingerprint !== lock.fingerprint;
+  return {
+    latest: toRun(latest),
+    reading: toRun(current),
+    state: { ...base, changed, message: changed ? V2_CHANGED_MESSAGE : null },
+  };
 };
 
 /** Why pilot metrics are missing, in words safe to show (never the raw error). */
@@ -160,21 +244,20 @@ const tryPromptVersion = (read: () => string): string | null => {
 };
 
 export const loadProofInputs = async (deps: ProofSourceDeps): Promise<ProofInputs> => {
-  const pilot = readPilot(deps.pilotDir);
-  const v2 = readV2(deps.evalDir);
-  let entries: RunLogEntry[] = [];
-  try {
-    entries = readRunLog(deps.evalDir);
-  } catch (error) {
-    console.error("[signal] proof report: run log unreadable", error);
-  }
+  const locks = deps.locks();
+  const store = deps.store();
   const promptVersion = tryPromptVersion(deps.promptVersion);
-  const { labels } = pilot;
 
-  const [metrics, scores] = await Promise.all([
+  const [pilot, v2, metrics] = await Promise.all([
+    readPilot(locks.pilot, store),
+    readV2(locks.v2, store, promptVersion),
     safely("pilot metrics", deps.pilotMetrics),
-    labels ? safely("Answer Key scoring", () => deps.answerKeyScores(labels)) : null,
   ]);
+  const labels = pilot.truth?.labels;
+  const scores =
+    store && labels
+      ? await safely("Answer Key scoring", () => store.answerKeyScores(labels))
+      : null;
 
   return {
     answerKeyScores: scores instanceof Error ? null : scores,
@@ -184,32 +267,44 @@ export const loadProofInputs = async (deps: ProofSourceDeps): Promise<ProofInput
     pilotMetrics: metrics instanceof Error ? null : metrics,
     pilotMetricsError: metricsErrorOf(metrics),
     promptVersion,
-    v2LatestReading: toRun(currentV2Reading(entries, v2.lock)),
-    v2Reading: promptVersion
-      ? toRun(
-          currentV2Reading(
-            entries.filter((e) => e.promptVersion === promptVersion),
-            v2.lock,
-          ),
-        )
-      : null,
+    v2LatestReading: v2.latest,
+    v2Reading: v2.reading,
+  };
+};
+
+/** The report's view of the repository; finds the Pilot Workspace without creating it. */
+export const repositoryProofStore = (repo: SignalRepository): ProofStore => {
+  let workspace: Promise<string | null> | undefined;
+  const workspaceId = () => {
+    workspace ??= repo.findWorkspace(PILOT_WORKSPACE.slug).then((row) => row?.id ?? null);
+    return workspace;
+  };
+  return {
+    answerKeyScores: async (labels) => {
+      const id = await workspaceId();
+      if (!id) return null;
+      return await createAnswerKeyScoring({ answerKey: labels, repo, workspaceId: id }).score();
+    },
+    pilotGroundTruth: async () => {
+      const id = await workspaceId();
+      return id ? await repo.pilotGroundTruth(id) : null;
+    },
+    v2Reading: (key) => repo.latestEvalReading({ ...key, setName: V2_LOCK_SET_NAME }),
   };
 };
 
 export const runtimeProofDeps = (): ProofSourceDeps => ({
-  answerKeyScores: async (labels) => {
-    const db = getDb();
-    if (!db) return null;
-    return await createAnswerKeyScoring({ answerKey: labels, repo: createRepository(db) }).score();
-  },
-  evalDir: evalDir(),
+  locks: () => readProofLocks(),
   now: () => new Date(),
-  pilotDir: pilotDir(),
   pilotMetrics: async () => {
     const service = getReviewService(PILOT_ORIGIN);
     return service ? await service.metrics({ origin: PILOT_ORIGIN }) : null;
   },
   promptVersion: () => currentPromptVersion().id,
+  store: () => {
+    const db = getDb();
+    return db ? repositoryProofStore(createRepository(db)) : null;
+  },
 });
 
 /** The Proof Report for this deployment. Callers enforce access (Pilot Key or Operator) first. */

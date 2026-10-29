@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
+import { pilotLockSchema } from "@/lib/signal/proof/locks";
+import type { PilotLock } from "@/lib/signal/proof/locks";
 import type { AnswerKeyLabels } from "@/lib/signal/service/answer-key";
 
 /**
@@ -98,15 +100,7 @@ export const answerKeySchema = z.object({
   feedback: z.array(feedbackNeedSchema),
 });
 
-export const pilotLockSchema = z.object({
-  accounts: z.number().int().min(0),
-  expectedBacklogDuplicateRate: z.number().min(0).max(1),
-  featureRequests: z.number().int().min(0),
-  feedback: z.number().int().min(1),
-  fingerprint: z.string().regex(/^sha256:[0-9a-f]{64}$/u),
-  frozenAt: z.iso.datetime({ offset: true }),
-  sharesNeed: z.number().int().min(0),
-});
+export { pilotLockSchema } from "@/lib/signal/proof/locks";
 
 export type PilotManifest = z.infer<typeof pilotManifestSchema>;
 export type PilotAccount = z.infer<typeof pilotAccountSchema>;
@@ -117,7 +111,7 @@ export type BacklogNeed = z.infer<typeof backlogNeedSchema>;
 export type FeedbackNeed = z.infer<typeof feedbackNeedSchema>;
 export type AnswerKey = z.infer<typeof answerKeySchema>;
 type AnswerKeyEntry = BacklogNeed | FeedbackNeed;
-export type PilotLock = z.infer<typeof pilotLockSchema>;
+export type { PilotLock } from "@/lib/signal/proof/locks";
 
 export interface PilotFiles {
   answerKey: AnswerKey;
