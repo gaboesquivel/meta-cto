@@ -7,18 +7,43 @@ import {
   readPilotLock,
   writePilotLock,
 } from "../lib/pilot-load/files";
-import type { PilotStatus } from "../lib/pilot-load/files";
+import type { PilotFiles, PilotStatus } from "../lib/pilot-load/files";
 import { loadPilot } from "../lib/pilot-load/load";
+import { missingPrivateFiles, privateDataDir } from "../lib/pilot-load/private-dir";
 import { createGatewayEmbedder } from "../lib/signal/agent";
 import { getDb } from "../lib/signal/db";
 import { createRepository } from "../lib/signal/repository";
 
 /**
- * Operator-only pilot data commands (spec 003, task 03); never part of a build.
- *   load    load the Pilot Workspace backlog from data/pilot (idempotent)
+ * Operator-only pilot data commands (spec 003, task 03; spec 004); never part of a build.
+ * Pilot files are read from `$SIGNAL_PRIVATE_DATA_DIR/pilot`, a folder outside the repository;
+ * the lock is read from and written to data/pilot.
+ *   load    load the Pilot Workspace backlog from the private folder (idempotent)
  *   check   report frozen / changed / unconfirmed without touching the database
  *   freeze  write data/pilot/pilot.lock.json once every Answer Key entry is confirmed
  */
+
+const PILOT_DATA_FILES = [
+  PILOT_FILES.manifest,
+  PILOT_FILES.backlog,
+  PILOT_FILES.feedback,
+  PILOT_FILES.answerKey,
+];
+
+/** Reads the filled pilot files from the private folder, or prints why not and returns null. */
+const readPrivatePilotFiles = (): PilotFiles | null => {
+  const dir = privateDataDir();
+  const refusal = dir.ok
+    ? missingPrivateFiles(dir.pilotDir, PILOT_DATA_FILES, "data/pilot")
+    : dir.message;
+  if (!dir.ok || refusal) {
+    console.error(`Refusing: ${refusal}`);
+    process.exitCode = 1;
+    return null;
+  }
+  console.log(`Reading pilot files from ${dir.pilotDir}.`);
+  return readPilotFiles(dir.pilotDir);
+};
 
 const report = (status: PilotStatus) => {
   const { counts } = status;
@@ -30,13 +55,17 @@ const report = (status: PilotStatus) => {
 };
 
 const check = () => {
-  const status = checkPilotReady(readPilotFiles(), readPilotLock());
+  const files = readPrivatePilotFiles();
+  if (!files) return;
+  const status = checkPilotReady(files, readPilotLock());
   report(status);
   if (!status.ready) process.exitCode = 1;
 };
 
 const freeze = () => {
-  const result = freezePilot({ files: readPilotFiles(), lock: readPilotLock(), now: new Date() });
+  const files = readPrivatePilotFiles();
+  if (!files) return;
+  const result = freezePilot({ files, lock: readPilotLock(), now: new Date() });
   if (!result.ok) {
     console.error(result.message);
     process.exitCode = 1;
@@ -44,7 +73,9 @@ const freeze = () => {
   }
   writePilotLock(result.lock);
   console.log(`Froze pilot files: ${result.lock.fingerprint} at ${result.lock.frozenAt}.`);
-  console.log(`Commit data/pilot/${PILOT_FILES.lock} before the run.`);
+  console.log(
+    `Commit data/pilot/${PILOT_FILES.lock} before the run; the pilot files stay in the private folder.`,
+  );
 };
 
 const load = async () => {
@@ -53,6 +84,8 @@ const load = async () => {
     process.exitCode = 1;
     return;
   }
+  const files = readPrivatePilotFiles();
+  if (!files) return;
   const db = getDb();
   if (!db) {
     console.error("signal:pilot:load: DATABASE_URL is not set");
@@ -63,7 +96,7 @@ const load = async () => {
   if (!embedder) console.log("AI_GATEWAY_API_KEY is not set; loading without embeddings");
   const result = await loadPilot({
     embedder,
-    files: readPilotFiles(),
+    files,
     lock: readPilotLock(),
     repo: createRepository(db),
   });

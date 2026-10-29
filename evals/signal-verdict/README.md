@@ -3,11 +3,15 @@
 Eval Set for the Check's Verdicts (spec 001, Testing Decisions → Quality eval; spec 003, Held-Out Set v2).
 
 - `held-out.json`: **Held-Out Set (v1), frozen as of 2026-10-28. Never use it in prompts, few-shot examples or tuning; only for judging.** Changing it resets the kill-criterion reading. It stays the first reading and runs exactly as before.
-- `held-out-v2.json`: **Held-Out Set v2** (decision 0003). Ships empty. People write and confirm its pairs without sight of the judge prompt; never use it for tuning.
-- `held-out-v2.lock.json`: the freeze record (fingerprint, time, counts). Absent until the set is frozen; commit it once written.
+- `held-out-v2.json`: **empty template** for Held-Out Set v2 (decision 0003). It stays empty here (a test fails otherwise). The filled pairs live in the private folder, `$SIGNAL_PRIVATE_DATA_DIR/evals/held-out-v2.json`, outside the repository (spec 004, decision 0004), and are never committed. People write and confirm them without sight of the judge prompt; never use them for tuning.
+- `held-out-v2.lock.json`: the freeze record (fingerprint, time, counts), written here by `freeze`. Absent until the set is frozen; commit it once written. The lock is the only v2 artifact in the repository.
 - `dev.json`: Dev Set, for tuning prompts and retrieval. Its drafts never appear in either Held-Out Set.
 - `runs.jsonl`: append-only run log, one JSON line per run (including refusals and failures). Commit it with the reports.
 - Each pair: a Draft, a `target` seed key from `data/crewday/seed.ts`, the `expected` Verdict for that target, and a `note` on why.
+
+## Held-Out Set v2: private folder
+
+`SIGNAL_PRIVATE_DATA_DIR` names a folder outside the repository (layout and rules in `data/pilot/README.md`). Copy the template to `$SIGNAL_PRIVATE_DATA_DIR/evals/held-out-v2.json` and write the pairs there. `freeze.ts` and `run.ts --set held-out-v2` refuse, with the reason, when the variable is unset, the folder or file is missing, or the folder resolves inside the git working tree. v1 (`held-out.json`) and `dev.json` stay public and are read from this folder as before.
 
 ## Held-Out Set v2 format
 
@@ -37,7 +41,7 @@ Same pair shape as v1, plus a person's confirmation on every pair:
 pnpm exec tsx evals/signal-verdict/freeze.ts
 ```
 
-It refuses an empty set, duplicate ids, unknown targets, Dev Set drafts, unconfirmed pairs, and a set that is already frozen. It writes `held-out-v2.lock.json` with a SHA-256 fingerprint of the pairs (sorted by id, keys sorted, so formatting does not matter). Any later change to a pair, label or confirmation no longer matches the fingerprint: the runner refuses with "changed after freeze: reading reset". To start over, delete the lock deliberately and freeze the new set; earlier readings do not carry over.
+It reads the pairs from the private folder and refuses an empty set, duplicate ids, unknown targets, Dev Set drafts, unconfirmed pairs, and a set that is already frozen. It writes `evals/signal-verdict/held-out-v2.lock.json` (in the repository; the pairs stay private) with a SHA-256 fingerprint of the pairs (sorted by id, keys sorted, so formatting does not matter). Any later change to a pair, label or confirmation no longer matches the fingerprint: the runner refuses with "changed after freeze: reading reset". To start over, delete the lock deliberately and freeze the new set; earlier readings do not carry over.
 
 ## Run (costs tokens, manual only, not in CI)
 
