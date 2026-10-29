@@ -163,10 +163,22 @@ describe("loadProofInputs: pilot data", () => {
     expect(inputs.answerKeyScores?.agentCorrectness.actions).toBe(0);
   });
 
-  it("says 'changed after freeze: reading reset' when the stored fingerprint differs from the lock", async () => {
-    await repo.storePilotGroundTruth(groundTruth(workspaceId, { fingerprint: OTHER_PRINT }));
+  it("says 'changed after freeze: reading reset' when a load after freeze saw other files", async () => {
+    await repo.storePilotGroundTruth(groundTruth(workspaceId));
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-10-31T00:00:00.000Z"),
+      fingerprint: OTHER_PRINT,
+      outcome: "refused",
+      workspaceId,
+    });
     const inputs = await loadProofInputs(deps());
-    expect(inputs.pilotFiles).toMatchObject({ changed: true, loaded: true, ready: false });
+    // The refused load is not loaded data: the stored ground truth is still the frozen one.
+    expect(inputs.pilotFiles).toMatchObject({
+      changed: true,
+      loaded: true,
+      ready: false,
+      refrozen: false,
+    });
     const report = buildProofReport(inputs);
     expect(report.readiness.readingResets.join(" ")).toMatch(
       /changed after freeze: reading reset/u,
@@ -174,6 +186,43 @@ describe("loadProofInputs: pilot data", () => {
     const intake = report.bars.find((bar) => bar.key === "intakeDuplicateRate");
     expect(intake?.verdict).toBe("inconclusive");
     expect(intake?.reasons.join(" ")).toMatch(/reading reset/u);
+  });
+
+  it("clears the change once a later load matches the lock again", async () => {
+    await repo.storePilotGroundTruth(groundTruth(workspaceId));
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-10-31T00:00:00.000Z"),
+      fingerprint: OTHER_PRINT,
+      outcome: "refused",
+      workspaceId,
+    });
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-10-31T01:00:00.000Z"),
+      fingerprint: PILOT_PRINT,
+      outcome: "accepted",
+      workspaceId,
+    });
+    const inputs = await loadProofInputs(deps());
+    expect(inputs.pilotFiles).toMatchObject({ changed: false, refrozen: false });
+  });
+
+  it("says 're-frozen, no reading yet' when the lock changed and the new set is not loaded", async () => {
+    await repo.storePilotGroundTruth(groundTruth(workspaceId, { fingerprint: OTHER_PRINT }));
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-10-30T10:00:00.000Z"),
+      fingerprint: OTHER_PRINT,
+      outcome: "accepted",
+      workspaceId,
+    });
+    // Frozen again after that load, with a new fingerprint.
+    const lock = pilotLock({ frozenAt: "2026-10-31T09:00:00.000Z" });
+    const inputs = await loadProofInputs(deps({ locks: () => locks(lock) }));
+    expect(inputs.pilotFiles).toMatchObject({ changed: false, ready: false, refrozen: true });
+    const report = buildProofReport(inputs);
+    expect(report.readiness.readingResets).toEqual([]);
+    const intake = report.bars.find((bar) => bar.key === "intakeDuplicateRate");
+    expect(intake?.verdict).toBe("inconclusive");
+    expect(intake?.reasons.join(" ")).toMatch(/re-frozen, no reading yet/u);
   });
 
   it("reads Inconclusive with 'pilot data not loaded' before a load, using the lock's counts", async () => {
@@ -242,6 +291,8 @@ describe("loadProofInputs: pilot data", () => {
         store: () => ({
           answerKeyScores: () => Promise.reject(new Error("postgres://secret")),
           pilotGroundTruth: () => Promise.reject(new Error("postgres://secret")),
+          pilotLatestAttempt: () => Promise.reject(new Error("postgres://secret")),
+          v2LatestAttempt: () => Promise.reject(new Error("postgres://secret")),
           v2Reading: () => Promise.reject(new Error("postgres://secret")),
         }),
       }),
@@ -274,6 +325,7 @@ describe("loadProofInputs: Held-Out Set v2", () => {
       message: null,
       pairs: 160,
       readable: true,
+      refrozen: false,
       sameNeedPositives: 70,
     });
     expect(inputs.v2Reading).toEqual({
@@ -331,10 +383,52 @@ describe("loadProofInputs: Held-Out Set v2", () => {
     expect(sameNeed?.reasons.join(" ")).toMatch(/reading reset/u);
   });
 
+  it("resets the reading when a refused run after freeze saw another fingerprint", async () => {
+    await repo.recordEvalRun(evalRun());
+    await repo.recordEvalRun(
+      evalRun({
+        completed: 0,
+        createdAt: new Date("2026-11-01T00:00:00.000Z"),
+        fingerprint: OTHER_PRINT,
+        readings: null,
+        results: [],
+        status: "refused",
+      }),
+    );
+    const inputs = await loadProofInputs(deps());
+    expect(inputs.heldOutV2).toMatchObject({ changed: true, refrozen: false });
+    expect(inputs.heldOutV2.readable && inputs.heldOutV2.message).toMatch(
+      /changed after freeze: reading reset/u,
+    );
+    const report = buildProofReport(inputs);
+    expect(report.readiness.readingResets.join(" ")).toMatch(/Held-Out Set v2 changed/u);
+    const sameNeed = report.bars.find((bar) => bar.key === "sameNeedPrecision");
+    expect(sameNeed?.verdict).toBe("inconclusive");
+  });
+
+  it("says 're-frozen, no reading yet' when the lock changed after the last run", async () => {
+    await repo.recordEvalRun(evalRun({ fingerprint: OTHER_PRINT }));
+    const lock = v2Lock({ frozenAt: "2026-11-01T00:00:00.000Z" });
+    const inputs = await loadProofInputs(deps({ locks: () => locks(pilotLock(), lock) }));
+    expect(inputs.heldOutV2).toMatchObject({ changed: false, refrozen: true });
+    expect(inputs.heldOutV2.readable && inputs.heldOutV2.message).toMatch(
+      /re-frozen, no reading yet/u,
+    );
+    const report = buildProofReport(inputs);
+    expect(report.readiness.readingResets).toEqual([]);
+    const sameNeed = report.bars.find((bar) => bar.key === "sameNeedPrecision");
+    expect(sameNeed?.reasons.join(" ")).toMatch(/re-frozen, no reading yet/u);
+  });
+
   it("has no reading when the set is not frozen", async () => {
     await repo.recordEvalRun(evalRun());
     const inputs = await loadProofInputs(deps({ locks: () => locks(pilotLock(), null) }));
-    expect(inputs.heldOutV2).toMatchObject({ changed: false, frozen: false, pairs: 0 });
+    expect(inputs.heldOutV2).toMatchObject({
+      changed: false,
+      frozen: false,
+      pairs: 0,
+      refrozen: false,
+    });
     expect(inputs.v2Reading).toBeNull();
     expect(inputs.v2LatestReading).toBeNull();
   });

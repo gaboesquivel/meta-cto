@@ -101,7 +101,9 @@ const storeGroundTruth = async (input: {
  * Operator-run, idempotent pilot load: ensures the Pilot Workspace and inserts missing backlog
  * Accounts and Feature Requests (Origin `seed`) by prefixed seed key, then embeds rows without a
  * vector. Never updates existing rows and never touches another Workspace. Refuses invalid files
- * and files changed after freeze.
+ * and files changed after freeze; a changed set's refusal is recorded (Pilot Workspace, the
+ * fingerprint it saw) so the Proof Report flags it, and every load that runs records an accepted
+ * attempt.
  *
  * Ground truth (spec 004): when the set is frozen, unchanged and fully confirmed, also stores the
  * feedback set, Answer Key and manifest in the Pilot Workspace with the lock's fingerprint. The same
@@ -116,7 +118,16 @@ export const loadPilot = async (input: {
 }): Promise<LoadPilotResult> => {
   const { embedder, files, repo } = input;
   const status = checkPilotReady(files, input.lock);
-  if (status.changed) return { message: status.messages[0] ?? "", ok: false, status };
+  if (status.changed) {
+    // Recorded so the Proof Report sees the edit after freeze; nothing else is written.
+    const { id } = await repo.ensureWorkspace(PILOT_WORKSPACE);
+    await repo.recordPilotLoadAttempt({
+      fingerprint: status.fingerprint,
+      outcome: "refused",
+      workspaceId: id,
+    });
+    return { message: status.messages[0] ?? "", ok: false, status };
+  }
   if (status.problems.length > 0) {
     return {
       message: `Pilot files are invalid: ${status.problems.join("; ")}.`,
@@ -182,6 +193,11 @@ export const loadPilot = async (input: {
   }
 
   const groundTruth = await storeGroundTruth({ accountIds, files, repo, status, workspaceId });
+  await repo.recordPilotLoadAttempt({
+    fingerprint: status.fingerprint,
+    outcome: "accepted",
+    workspaceId,
+  });
 
   return {
     accounts: accountIds.size,

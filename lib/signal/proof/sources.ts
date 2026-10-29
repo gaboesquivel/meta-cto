@@ -6,7 +6,12 @@ import { getDb } from "@/lib/signal/db";
 import { PILOT_ORIGIN, PILOT_WORKSPACE } from "@/lib/signal/pilot";
 import { createRepository } from "@/lib/signal/repository";
 import type { SignalRepository } from "@/lib/signal/repository";
-import type { EvalReading, PilotGroundTruth } from "@/lib/signal/repository-pilot-data";
+import type {
+  EvalAttempt,
+  EvalReading,
+  PilotGroundTruth,
+  PilotLoadAttempt,
+} from "@/lib/signal/repository-pilot-data";
 import { getReviewService } from "@/lib/signal/runtime";
 import { createAnswerKeyScoring } from "@/lib/signal/service/answer-key";
 import type { AnswerKeyLabels, AnswerKeyScores } from "@/lib/signal/service/answer-key";
@@ -29,6 +34,10 @@ export interface ProofStore {
   answerKeyScores: (labels: AnswerKeyLabels) => Promise<AnswerKeyScores | null>;
   /** The Pilot Workspace's stored ground truth; null before a load or without the Workspace. */
   pilotGroundTruth: () => Promise<PilotGroundTruth | null>;
+  /** The latest pilot load attempt (accepted or refused) with the fingerprint it saw. */
+  pilotLatestAttempt: () => Promise<PilotLoadAttempt | null>;
+  /** The latest Held-Out Set v2 run of any status with the fingerprint it saw. */
+  v2LatestAttempt: () => Promise<EvalAttempt | null>;
   /** The latest judged, non-repeat Held-Out Set v2 run, optionally by fingerprint and prompt. */
   v2Reading: (key: { fingerprint?: string; promptVersion?: string }) => Promise<EvalReading | null>;
 }
@@ -66,15 +75,33 @@ const safely = async <T>(label: string, run: () => Promise<T>): Promise<T | Erro
 const countUnconfirmed = (labels: AnswerKeyLabels) =>
   [...labels.featureRequests, ...labels.feedback].filter((label) => !label.confirmed).length;
 
+/**
+ * Whether the latest attempt (a load, refused or not, or an eval run) shows a set changed after
+ * its freeze: it ran after the lock's `frozenAt` and saw another fingerprint. An attempt before
+ * the freeze with another fingerprint means the set was frozen again instead.
+ */
+const changedAfterFreeze = (
+  lock: { fingerprint: string; frozenAt: string },
+  attempt: { at: string; fingerprint: string } | null,
+): boolean =>
+  attempt !== null &&
+  attempt.fingerprint !== lock.fingerprint &&
+  Date.parse(attempt.at) > Date.parse(lock.frozenAt);
+
 const pilotMessages = (
   lock: PilotLock | null,
   truth: PilotGroundTruth | null,
-  changed: boolean,
+  flags: { changed: boolean; refrozen: boolean },
 ): string[] => {
   const messages: string[] = [];
-  if (changed && lock) {
+  if (flags.changed && lock) {
     messages.push(
-      `Pilot data changed after freeze: reading reset. The stored data no longer matches the fingerprint frozen at ${lock.frozenAt}; earlier pilot readings do not apply.`,
+      `Pilot data changed after freeze: reading reset. A load after the freeze at ${lock.frozenAt} saw files that no longer match its fingerprint and was refused; earlier pilot readings do not apply.`,
+    );
+  }
+  if (flags.refrozen && lock) {
+    messages.push(
+      `Pilot data re-frozen, no reading yet: the lock frozen at ${lock.frozenAt} has a new fingerprint and nothing is loaded for it. Run the pilot load against this database.`,
     );
   }
   if (!lock)
@@ -104,9 +131,26 @@ const pilotCounts = (lock: PilotLock | null, truth: PilotGroundTruth | null) => 
   return null;
 };
 
-/** Readiness from the lock and the stored ground truth (null when not loaded). */
-const pilotState = (lock: PilotLock | null, truth: PilotGroundTruth | null): PilotFilesState => {
-  const changed = Boolean(lock && truth && truth.fingerprint !== lock.fingerprint);
+/** Changed after freeze, or frozen again with nothing loaded for the new lock. */
+const pilotFlags = (
+  lock: PilotLock | null,
+  truth: PilotGroundTruth | null,
+  attempt: PilotLoadAttempt | null,
+) => {
+  if (!lock) return { changed: false, refrozen: false };
+  const changed = changedAfterFreeze(lock, attempt);
+  // Loads store only a set equal to the lock at the time: another fingerprint means a new lock.
+  const refrozen = !changed && truth !== null && truth.fingerprint !== lock.fingerprint;
+  return { changed, refrozen };
+};
+
+/** Readiness from the lock, the stored ground truth (null when not loaded) and the latest attempt. */
+const pilotState = (
+  lock: PilotLock | null,
+  truth: PilotGroundTruth | null,
+  attempt: PilotLoadAttempt | null,
+): PilotFilesState => {
+  const { changed, refrozen } = pilotFlags(lock, truth, attempt);
   const unconfirmed = truth ? countUnconfirmed(truth.labels) : 0;
   const counts = pilotCounts(lock, truth);
   return {
@@ -119,9 +163,10 @@ const pilotState = (lock: PilotLock | null, truth: PilotGroundTruth | null): Pil
     frozenFeedback: counts?.feedback ?? null,
     loaded: truth !== null,
     loadedAt: truth?.loadedAt ?? null,
-    messages: pilotMessages(lock, truth, changed),
+    messages: pilotMessages(lock, truth, { changed, refrozen }),
     readable: true,
-    ready: lock !== null && truth !== null && !changed && unconfirmed === 0,
+    ready: lock !== null && truth !== null && !changed && !refrozen && unconfirmed === 0,
+    refrozen,
     unconfirmed,
   };
 };
@@ -133,11 +178,16 @@ const readPilot = async (
   if (!read.ok) {
     return { state: { message: lockReason("pilot", read.error), readable: false }, truth: null };
   }
-  const truth = store ? await safely("pilot ground truth", store.pilotGroundTruth) : null;
-  if (truth instanceof Error) {
+  const fetched = store
+    ? await safely("pilot ground truth", () =>
+        Promise.all([store.pilotGroundTruth(), store.pilotLatestAttempt()]),
+      )
+    : null;
+  if (fetched instanceof Error) {
     return { state: { message: STORE_FAILED, readable: false }, truth: null };
   }
-  return { state: pilotState(read.lock, truth), truth };
+  const [truth, attempt] = fetched ?? [null, null];
+  return { state: pilotState(read.lock, truth, attempt), truth };
 };
 
 const precisionSchema = z.object({ predicted: z.number(), truePositives: z.number() });
@@ -175,7 +225,10 @@ interface V2Sources {
 }
 
 const V2_CHANGED_MESSAGE =
-  "Held-Out Set v2 changed after freeze: reading reset. The latest stored reading is from another fingerprint than the committed lock's; earlier v2 readings do not apply.";
+  "Held-Out Set v2 changed after freeze: reading reset. The latest run after the freeze (refused or failed included) saw another fingerprint than the committed lock's; earlier v2 readings do not apply.";
+
+const V2_REFROZEN_MESSAGE =
+  "Held-Out Set v2 re-frozen, no reading yet: the committed lock has a new fingerprint and no run exists for it. Run Held-Out Set v2 once against this database.";
 
 const V2_NOT_FROZEN =
   "Held-Out Set v2 is not frozen. Run the freeze command and commit the lock file.";
@@ -184,7 +237,7 @@ const fetchReadings = (store: ProofStore, lock: HeldOutV2Lock, promptVersion: st
   Promise.all([
     promptVersion ? store.v2Reading({ fingerprint: lock.fingerprint, promptVersion }) : null,
     store.v2Reading({ fingerprint: lock.fingerprint }),
-    store.v2Reading({}),
+    store.v2LatestAttempt(),
   ]);
 
 const readV2 = async (
@@ -208,7 +261,7 @@ const readV2 = async (
     return {
       latest: null,
       reading: null,
-      state: { ...base, changed: false, message: V2_NOT_FROZEN },
+      state: { ...base, changed: false, message: V2_NOT_FROZEN, refrozen: false },
     };
   }
   const fetched = store
@@ -217,13 +270,18 @@ const readV2 = async (
   if (fetched instanceof Error) {
     return { latest: null, reading: null, state: { message: STORE_FAILED, readable: false } };
   }
-  const [current, latest, latestAny] = fetched ?? [null, null, null];
-  // The latest reading on the set is from another fingerprint: the set changed after freeze.
-  const changed = latestAny !== null && latestAny.fingerprint !== lock.fingerprint;
+  const [current, latest, attempt] = fetched ?? [null, null, null];
+  const changed = changedAfterFreeze(lock, attempt);
+  // Runs before the freeze saw another set, and none has run since: frozen again.
+  const refrozen =
+    !changed && latest === null && attempt !== null && attempt.fingerprint !== lock.fingerprint;
+  let message: string | null = null;
+  if (changed) message = V2_CHANGED_MESSAGE;
+  else if (refrozen) message = V2_REFROZEN_MESSAGE;
   return {
     latest: toRun(latest),
     reading: toRun(current),
-    state: { ...base, changed, message: changed ? V2_CHANGED_MESSAGE : null },
+    state: { ...base, changed, message, refrozen },
   };
 };
 
@@ -289,6 +347,11 @@ export const repositoryProofStore = (repo: SignalRepository): ProofStore => {
       const id = await workspaceId();
       return id ? await repo.pilotGroundTruth(id) : null;
     },
+    pilotLatestAttempt: async () => {
+      const id = await workspaceId();
+      return id ? await repo.latestPilotLoadAttempt(id) : null;
+    },
+    v2LatestAttempt: () => repo.latestEvalAttempt(V2_LOCK_SET_NAME),
     v2Reading: (key) => repo.latestEvalReading({ ...key, setName: V2_LOCK_SET_NAME }),
   };
 };

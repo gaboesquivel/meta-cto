@@ -45,7 +45,7 @@ export type PilotFilesState =
   | { message: string; readable: false }
   | {
       backlogRequests: number;
-      /** The stored fingerprint differs from the lock's: reading reset. */
+      /** A load after the freeze saw files that differ from the lock: reading reset. */
       changed: boolean;
       /** Stated before the run (the lock's when frozen, else the manifest's). */
       expectedBacklogDuplicateRate: number | null;
@@ -60,6 +60,8 @@ export type PilotFilesState =
       messages: string[];
       readable: true;
       ready: boolean;
+      /** The lock changed after the stored load and nothing is loaded for it yet. */
+      refrozen: boolean;
       unconfirmed: number;
     };
 
@@ -67,7 +69,7 @@ export type PilotFilesState =
 export type HeldOutV2State =
   | { message: string; readable: false }
   | {
-      /** The latest stored reading is from another fingerprint than the lock's: reading reset. */
+      /** The latest run after the freeze (refused or failed included) saw another fingerprint. */
       changed: boolean;
       frozen: boolean;
       frozenAt: string | null;
@@ -75,6 +77,8 @@ export type HeldOutV2State =
       message: string | null;
       pairs: number;
       readable: true;
+      /** The lock changed after the latest run and no run exists for it yet. */
+      refrozen: boolean;
       sameNeedPositives: number;
     };
 
@@ -153,6 +157,27 @@ export interface ProofBar {
 
 type WithInterval<T> = T & { interval: Interval | null };
 
+/** Supporting scores, which change as agents act: Operator access only during the pilot. */
+export interface ProofSupporting {
+  agentCorrectness: WithInterval<AgentCorrectness> | null;
+  notes: string[];
+  pmAgreement: { blind: WithInterval<PmAgreement>; nonBlind: WithInterval<PmAgreement> } | null;
+  suggestionAcceptance: {
+    checks: number;
+    checksWithSameNeed: number;
+    createsAfterSameNeed: number;
+    evidence: false;
+    note: string;
+    rate: number | null;
+  } | null;
+}
+
+/** What Pilot Key callers get in place of the supporting scores. */
+export interface WithheldSupporting {
+  note: string;
+  withheld: true;
+}
+
 export interface ProofReport {
   bars: ProofBar[];
   /** Plain statements of what the bars mean for the product. */
@@ -170,19 +195,7 @@ export interface ProofReport {
     readingResets: string[];
   };
   slice3: "may_start" | "not_yet";
-  supporting: {
-    agentCorrectness: WithInterval<AgentCorrectness> | null;
-    notes: string[];
-    pmAgreement: { blind: WithInterval<PmAgreement>; nonBlind: WithInterval<PmAgreement> } | null;
-    suggestionAcceptance: {
-      checks: number;
-      checksWithSameNeed: number;
-      createsAfterSameNeed: number;
-      evidence: false;
-      note: string;
-      rate: number | null;
-    } | null;
-  };
+  supporting: ProofSupporting;
   /** Pass when every bar passes, fail when any fails, else inconclusive. */
   verdict: BarVerdict;
 }
@@ -192,6 +205,10 @@ const range = (interval: Interval) => `${pct(interval.lower)}–${pct(interval.u
 
 const PILOT_CHANGED = "Pilot data changed after freeze: reading reset.";
 const V2_CHANGED = "Held-Out Set v2 changed after freeze: reading reset.";
+const PILOT_REFROZEN =
+  "Pilot data re-frozen, no reading yet: load the pilot files for the new lock into this database.";
+const V2_REFROZEN =
+  "Held-Out Set v2 re-frozen, no reading yet: run it once for the new lock against this database.";
 
 const CONSEQUENCES = {
   intakeDuplicateRate:
@@ -233,6 +250,7 @@ const metricsReasons = (input: ProofInputs): string[] => {
 const pilotFilesReasons = (files: PilotFilesState): string[] => {
   if (!files.readable) return [`Pilot data could not be read: ${files.message}`];
   if (files.changed) return [PILOT_CHANGED];
+  if (files.refrozen) return [PILOT_REFROZEN];
   const reasons: string[] = [];
   if (!files.frozen)
     reasons.push(
@@ -351,6 +369,7 @@ const coverageBar = (input: ProofInputs): ProofBar => {
 const v2SetReasons = (set: HeldOutV2State): string[] => {
   if (!set.readable) return [`Held-Out Set v2 could not be read: ${set.message}`];
   if (set.changed) return [V2_CHANGED];
+  if (set.refrozen) return [V2_REFROZEN];
   if (!set.frozen) return ["Held-Out Set v2 is not frozen: freeze it before its first run."];
   return [];
 };
@@ -463,7 +482,7 @@ const withAgreementInterval = (group: PmAgreement): WithInterval<PmAgreement> =>
   interval: wilsonInterval(group.agree, group.agree + group.disagree),
 });
 
-const supportingOf = (input: ProofInputs): ProofReport["supporting"] => {
+const supportingOf = (input: ProofInputs): ProofSupporting => {
   const notes: string[] = [];
   const scores = input.answerKeyScores;
   const files = input.pilotFiles;
@@ -471,7 +490,11 @@ const supportingOf = (input: ProofInputs): ProofReport["supporting"] => {
     notes.push("Answer Key scores are unavailable (no database, or pilot data not loaded).");
   if (files.readable && files.changed) {
     notes.push(
-      "Answer Key changed after freeze: reading reset; these scores read the changed key.",
+      "Pilot files changed after freeze: reading reset; these scores read the Answer Key as last loaded.",
+    );
+  } else if (files.readable && files.refrozen) {
+    notes.push(
+      "Pilot data re-frozen, no reading yet: these scores read the Answer Key loaded before the new lock.",
     );
   } else if (files.readable && files.unconfirmed > 0) {
     notes.push(
@@ -540,3 +563,24 @@ export const buildProofReport = (input: ProofInputs): ProofReport => {
     verdict,
   };
 };
+
+export const SUPPORTING_WITHHELD_NOTE =
+  "Operator only during the pilot: these scores change as agents act, so they are withheld from Pilot Key callers.";
+
+/** The Proof Report as a Pilot Key caller reads it: bars and readiness, supporting withheld. */
+export type PilotKeyProofReport = Omit<ProofReport, "supporting"> & {
+  supporting: WithheldSupporting;
+};
+
+/**
+ * The report for the caller's access (review F2): Operator access gets it whole; a Pilot Key
+ * caller (an agent) gets the bars and readiness but not the supporting scores, since re-reading
+ * them after each action would reveal whether that action matched the Answer Key.
+ */
+export const proofReportFor = (
+  report: ProofReport,
+  via: "operator" | "pilot",
+): PilotKeyProofReport | ProofReport =>
+  via === "operator"
+    ? report
+    : { ...report, supporting: { note: SUPPORTING_WITHHELD_NOTE, withheld: true } };

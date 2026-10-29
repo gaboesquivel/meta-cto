@@ -299,4 +299,94 @@ describe("eval runs", () => {
     const [row] = await db.select().from(evalRuns).where(eq(evalRuns.id, older.id));
     assert.deepEqual(row?.readings, { sameNeed: { predicted: 1, truePositives: 1 } });
   });
+
+  it("reads the latest attempt on a set, refusals and failures included, for the change check", async () => {
+    assert.equal(await repo.latestEvalAttempt("held-out-v2"), null);
+    await repo.recordEvalRun(run({ createdAt: new Date("2026-11-01T00:00:00.000Z") }));
+    await repo.recordEvalRun(
+      run({
+        completed: 0,
+        createdAt: new Date("2026-11-02T00:00:00.000Z"),
+        fingerprint: "sha256:edited",
+        readings: null,
+        results: [],
+        status: "refused",
+      }),
+    );
+    await repo.recordEvalRun(
+      run({ createdAt: new Date("2026-11-03T00:00:00.000Z"), fingerprint: null, status: "failed" }),
+    );
+    await repo.recordEvalRun(
+      run({ createdAt: new Date("2026-11-04T00:00:00.000Z"), setName: "held-out" }),
+    );
+    const attempt = await repo.latestEvalAttempt("held-out-v2");
+    assert.deepEqual(attempt, {
+      at: "2026-11-02T00:00:00.000Z",
+      fingerprint: "sha256:edited",
+      status: "refused",
+    });
+  });
+
+  it("reads a reading without the per-pair results or failure details", async () => {
+    await repo.recordEvalRun(run({ failureDetails: [{ error: "boom", id: "v2-002" }] }));
+    const reading = await repo.latestEvalReading({ setName: "held-out-v2" });
+    assert.ok(reading);
+    assert.equal("results" in reading, false);
+    assert.equal("failureDetails" in reading, false);
+  });
+});
+
+describe("pilot load attempts", () => {
+  let db: SignalDb;
+  let repo: SignalRepository;
+  let workspaceId: string;
+
+  beforeEach(async () => {
+    db = await createTestDb();
+    repo = createRepository(db);
+    ({ id: workspaceId } = await repo.ensureWorkspace(PILOT_WORKSPACE));
+  });
+
+  it("records accepted and refused attempts and reads the latest by Workspace", async () => {
+    assert.equal(await repo.latestPilotLoadAttempt(workspaceId), null);
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-11-01T00:00:00.000Z"),
+      fingerprint: "sha256:one",
+      outcome: "accepted",
+      workspaceId,
+    });
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-11-02T00:00:00.000Z"),
+      fingerprint: "sha256:edited",
+      outcome: "refused",
+      workspaceId,
+    });
+    const { id: otherId } = await repo.ensureWorkspace({ name: "Other", slug: "other" });
+    await repo.recordPilotLoadAttempt({
+      at: new Date("2026-11-03T00:00:00.000Z"),
+      fingerprint: "sha256:other",
+      outcome: "accepted",
+      workspaceId: otherId,
+    });
+    assert.deepEqual(await repo.latestPilotLoadAttempt(workspaceId), {
+      at: "2026-11-02T00:00:00.000Z",
+      fingerprint: "sha256:edited",
+      outcome: "refused",
+    });
+  });
+
+  it("never treats a refused attempt as loaded data", async () => {
+    await repo.storePilotGroundTruth(groundTruth(workspaceId));
+    await repo.recordPilotLoadAttempt({
+      fingerprint: "sha256:edited",
+      outcome: "refused",
+      workspaceId,
+    });
+    const truth = await repo.pilotGroundTruth(workspaceId);
+    assert.equal(truth?.fingerprint, "sha256:one");
+    const history = await repo.pilotLoadHistory(workspaceId);
+    assert.equal(history.length, 1);
+    const loads = await db.select().from(pilotLoads);
+    assert.equal(loads.length, 1);
+  });
 });
