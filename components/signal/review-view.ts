@@ -1,6 +1,7 @@
 import type {
   CommentView,
   DecideInput,
+  DuplicateEvidence,
   EvidenceVia,
   Metrics,
   ReviewDecision,
@@ -174,28 +175,46 @@ export const reviewActionState = (input: {
 
 export interface AccountEvidence {
   account: SupportView["account"];
+  /** Confirmed duplicates filed on behalf of this Account: their original words count here. */
+  origins: DuplicateEvidence[];
   supports: SupportView[];
   /** Duplicates this Account's Supports came from, each once, in first-seen order. */
   vias: EvidenceVia[];
 }
 
-/** Groups Supports by Account so each Account appears (and counts) once, noting provenance. */
-export const groupEvidenceByAccount = (supports: SupportView[]): AccountEvidence[] => {
+/**
+ * Groups Supports, and duplicates' originating evidence, by Account so each Account appears (and
+ * counts) once, noting provenance. Duplicates filed without an Account are not grouped.
+ */
+export const groupEvidenceByAccount = (
+  supports: SupportView[],
+  duplicates: DuplicateEvidence[] = [],
+): AccountEvidence[] => {
   const groups = new Map<string, AccountEvidence>();
+  const groupFor = (account: SupportView["account"]) => {
+    const existing = groups.get(account.name);
+    if (existing) return existing;
+    const group: AccountEvidence = { account, origins: [], supports: [], vias: [] };
+    groups.set(account.name, group);
+    return group;
+  };
   for (const support of supports) {
-    let group = groups.get(support.account.name);
-    if (!group) {
-      group = { account: support.account, supports: [], vias: [] };
-      groups.set(support.account.name, group);
-    }
+    const group = groupFor(support.account);
     group.supports.push(support);
     const { via } = support;
     if (via && !group.vias.some((item) => item.featureRequestId === via.featureRequestId)) {
       group.vias.push(via);
     }
   }
+  for (const duplicate of duplicates) {
+    if (duplicate.account) groupFor(duplicate.account).origins.push(duplicate);
+  }
   return [...groups.values()];
 };
+
+/** Provenance label for a duplicate's own originating evidence shown on its canonical. */
+export const duplicateOriginLabel = (duplicate: Pick<DuplicateEvidence, "title">): string =>
+  `Filed as ${duplicate.title} · via duplicate`;
 
 /** How many Comments were recorded here and how many on confirmed duplicates. */
 export const splitCommentsByVia = (

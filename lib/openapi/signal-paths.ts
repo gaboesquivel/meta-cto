@@ -88,6 +88,28 @@ const featureRequestRef = {
   type: "object",
 };
 
+const accountView = {
+  properties: { name: str, plan: nullableStr, segment: nullableStr, size: nullableStr },
+  required: ["name"],
+  type: "object",
+};
+
+const duplicateEvidence = {
+  description:
+    "A confirmed duplicate with its originating evidence: the customer's original words, Account and requester",
+  properties: {
+    account: { oneOf: [accountView, { type: "null" }] },
+    createdAt: dateTime,
+    createdBy: ref("SignalActor"),
+    description: { description: "The customer's original words", type: "string" },
+    id: uuid,
+    requester: nullableStr,
+    title: str,
+  },
+  required: ["id", "title", "description", "account", "requester", "createdBy", "createdAt"],
+  type: "object",
+};
+
 const metricsSchema = {
   properties: {
     backlogBaseline: countedRate(
@@ -285,8 +307,8 @@ export const signalSchemas = {
           },
           duplicates: {
             description:
-              "Confirmed duplicates; their Supports and Comments appear here with via, each Account counted once",
-            items: featureRequestRef,
+              "Confirmed duplicates with their original words, Account and requester; their Supports and Comments appear here with via; accountCount counts each Account once across Supports and duplicates' originating Accounts",
+            items: duplicateEvidence,
             type: "array",
           },
           onBehalfOf: {
@@ -314,16 +336,7 @@ export const signalSchemas = {
           supports: {
             items: {
               properties: {
-                account: {
-                  properties: {
-                    name: str,
-                    plan: nullableStr,
-                    segment: nullableStr,
-                    size: nullableStr,
-                  },
-                  required: ["name"],
-                  type: "object",
-                },
+                account: accountView,
                 actor: ref("SignalActor"),
                 createdAt: dateTime,
                 id: uuid,

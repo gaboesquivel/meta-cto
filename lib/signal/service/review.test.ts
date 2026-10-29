@@ -412,8 +412,8 @@ describe("canonical evidence", () => {
       [["Same at Birch", via]],
     );
     assert.deepEqual(
-      detail.duplicates,
-      [via.featureRequestId].map((id) => ({ id, title: via.title })),
+      detail.duplicates?.map((entry) => [entry.id, entry.title]),
+      [[via.featureRequestId, via.title]],
     );
     assert.equal(detail.duplicateOf, null);
     assert.deepEqual(
@@ -428,6 +428,69 @@ describe("canonical evidence", () => {
       page.supports.every((support) => !support.via),
       true,
     );
+  });
+
+  it("shows each duplicate's original words, Account and requester, each Account once", async () => {
+    const harness = await createHarness({});
+    const canonical = await addRequest(harness, "ADP payroll integration", unit(0));
+    const saffron = await harness.repo.upsertAccount({
+      name: "Saffron & Sage",
+      plan: "Pro",
+      segment: "restaurant",
+      size: "3 locations",
+      workspaceId: harness.workspaceId,
+    });
+    const gusto = await harness.repo.insertFeatureRequest({
+      createdByActorName: "Ana",
+      createdByActorType: "staff",
+      description: "We use Gusto. Can Crewday send hours there automatically?",
+      embedding: unit(1),
+      onBehalfOfAccountId: saffron.id,
+      requesterName: "Omar",
+      title: "Gusto integration for hours",
+      underlyingNeed: null,
+      workspaceId: harness.workspaceId,
+    });
+    await markDuplicate(harness, gusto.id, canonical.id);
+
+    const detail = await harness.service.get(canonical.id);
+
+    assert.equal(detail.accountCount, 1);
+    assert.deepEqual(detail.duplicates, [
+      {
+        account: {
+          name: "Saffron & Sage",
+          plan: "Pro",
+          segment: "restaurant",
+          size: "3 locations",
+        },
+        createdAt: gusto.createdAt.toISOString(),
+        createdBy: { name: "Ana", type: "staff" },
+        description: "We use Gusto. Can Crewday send hours there automatically?",
+        id: gusto.id,
+        requester: "Omar",
+        title: "Gusto integration for hours",
+      },
+    ]);
+
+    // The originating Account also supporting the canonical still counts once.
+    await harness.service.support(canonical.id, {
+      actor: staff,
+      onBehalfOf: { account: { name: "Saffron & Sage" } },
+    });
+    await harness.service.support(canonical.id, { actor: staff, onBehalfOf: cedar });
+    const supported = await harness.service.get(canonical.id);
+    assert.equal(supported.accountCount, 2);
+
+    // A duplicate filed without an Account adds none.
+    const bare = await addRequest(harness, "Payroll export", unit(2));
+    await markDuplicate(harness, bare.id, canonical.id);
+    const withBare = await harness.service.get(canonical.id);
+    assert.equal(withBare.accountCount, 2);
+    const bareView = withBare.duplicates?.find((duplicate) => duplicate.id === bare.id);
+    assert.equal(bareView?.account, null);
+    assert.equal(bareView?.requester, null);
+    assert.equal(bareView?.description, "Payroll export description");
   });
 
   it("fills empty review fields on a request never reviewed", async () => {

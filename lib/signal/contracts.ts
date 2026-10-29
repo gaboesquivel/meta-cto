@@ -117,8 +117,15 @@ export interface EvidenceVia {
   title: string;
 }
 
+export interface AccountView {
+  name: string;
+  plan: string | null;
+  segment: string | null;
+  size: string | null;
+}
+
 export interface SupportView {
-  account: { name: string; plan: string | null; segment: string | null; size: string | null };
+  account: AccountView;
   actor: Actor;
   createdAt: string;
   id: string;
@@ -145,6 +152,19 @@ export interface RelatedLinkView {
   title: string;
 }
 
+/**
+ * A confirmed duplicate shown on its canonical, with its own originating evidence: the
+ * customer's original words (`description`), the Account it was filed on behalf of, and the
+ * requester. Its Account counts once in the canonical's `accountCount`.
+ */
+export interface DuplicateEvidence extends FeatureRequestRef {
+  account: AccountView | null;
+  createdAt: string;
+  createdBy: Actor;
+  description: string;
+  requester: string | null;
+}
+
 export interface FeatureRequestDetail extends FeatureRequestSummary {
   comments: CommentView[];
   createdBy: Actor;
@@ -154,13 +174,14 @@ export interface FeatureRequestDetail extends FeatureRequestSummary {
   supports: SupportView[];
   /**
    * Canonical evidence (spec 002). Optional until the review service fills them; then always set.
-   * `duplicates`: confirmed duplicates of this Feature Request; their Supports and Comments
-   * appear in `supports`/`comments` with `via`, each Account counted once in `accountCount`.
+   * `duplicates`: confirmed duplicates of this Feature Request with their original words,
+   * Account and requester; their Supports and Comments appear in `supports`/`comments` with
+   * `via`. `accountCount` counts each Account once across Supports and duplicates' origins.
    * `duplicateOf`: the canonical Feature Request when this one is a confirmed duplicate.
    * `reviewHistory`: Review Decisions involving this Feature Request, undone ones included.
    */
   duplicateOf?: FeatureRequestRef | null;
-  duplicates?: FeatureRequestRef[];
+  duplicates?: DuplicateEvidence[];
   reviewHistory?: ReviewDecision[];
 }
 
