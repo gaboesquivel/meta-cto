@@ -19,6 +19,11 @@ UI copy uses the [glossary](GLOSSARY.md) terms. Pages work at phone width. There
 - Canonical Feature Requests show their duplicates' Supports and Comments labeled "via <title>" in the customer's words, each Account counted once, plus the review history; a duplicate's page links to its canonical one.
 - The AI suggests; the Product Manager decides. Copy never calls a suspicion a duplicate.
 
+## Proof journey (spec 003)
+
+- `/proof`: Operator only. Readiness first (pilot files and Held-Out Set v2: frozen, changed, unconfirmed), then each preset bar with its value, counts, interval and a Pass, Fail or Inconclusive badge in text (never color alone), then what follows: kill criterion, narrowing the three-way verdict, or slice 3 may start. Supporting measures (Agent Correctness, Product Manager agreement blind and not, Suggestion Acceptance) are labeled as not bars; Suggestion Acceptance reads "reported, not evidence".
+- An interval that straddles a bar, or an unmet minimum, reads Inconclusive, never Pass.
+
 ## Constraints carried from the template
 
 - Operator and protected MCP require `OPERATOR_SECRET` (minimum 16 characters) and fail closed when unset.

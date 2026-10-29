@@ -139,7 +139,7 @@ Review Decision that a new Feature Request with no Suspected Duplicates repeats 
 _Avoid_: None, undecided
 
 **Reviewed**:
-A Feature Request whose review is complete as a whole: every Suspected Duplicate on it is decided, or the Product Manager confirmed it has none.
+A Feature Request whose review is complete as a whole: every Suspected Duplicate on it is decided, or the Product Manager confirmed it has none. A Blind Review item is Reviewed once its own blind decision is made.
 _Avoid_: Triaged
 
 ## Measurement context
@@ -180,8 +180,16 @@ _Avoid_: Test tenant, sample data
 The Workspace for the proof run (spec 003): a generated backlog and feedback set with an Answer Key, filed by agents and reviewed by people. Reachable only with a Pilot Key; separate from the Crewday Demo Workspace.
 _Avoid_: Staging, sandbox
 
+**Pilot Key**:
+The secret (`SIGNAL_PILOT_KEY`) an agent or person sends to act in the Pilot Workspace. It authorizes filing and reading; pilot review decisions also need Operator access.
+_Avoid_: API key, token
+
+**Proof Report**:
+The read-only report of every preset bar from decision 0003 with value, counts, interval and Pass, Fail or Inconclusive, and what follows for slice 3.
+_Avoid_: Dashboard, scorecard
+
 **Answer Key**:
-For each pilot feedback item, the existing Feature Request it shares a need with, or none; confirmed by a person and frozen before the run.
+A person-confirmed need cluster (`needId`) for every pilot backlog Feature Request and every pilot feedback item; equal `needId` means the same need. Frozen before the run. A Feature Request filed in the pilot takes its feedback item's `needId`.
 _Avoid_: Ground truth file, labels
 
 **Origin**:
