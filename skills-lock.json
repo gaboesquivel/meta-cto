@@ -47,7 +47,7 @@
       "source": "gaboesquivel/flow-skills",
       "sourceType": "github",
       "skillPath": "skills/flow/SKILL.md",
-      "computedHash": "c0b265005f33f21c559b4291ab9967c85b9f5ebe37e051e4a24066befa05416c"
+      "computedHash": "9ddb757ec37e2965818eacdb2657b2afb83bb35d397a1ff70afdff197711f229"
     },
     "grill": {
       "source": "gaboesquivel/flow-skills",
@@ -113,7 +113,7 @@
       "source": "gaboesquivel/flow-skills",
       "sourceType": "github",
       "skillPath": "skills/start/SKILL.md",
-      "computedHash": "33800cbbcbb51cca8b08a251f5769321db7dee28dabfe6ab3b31465486e1c78e"
+      "computedHash": "2dcfefe55633cc5db0cc863a4e5e18b71bfa8b1330f709f880aaf5aa5a0ac8a6"
     },
     "tldr": {
       "source": "gaboesquivel/flow-skills",

@@ -17,7 +17,7 @@ This skill runs no other skill and authorizes no implementation (decision 0024).
 
 Do not replace a project's product identity with Flow's tagline, mission, principles, or strategic chain.
 
-`flow start` and "start project" are not this skill. The optional `start` skill (decision 0010) is this setup plus a template bootstrap from flow-next or flow-mono (decision 0026), and confirms template, name, and destination before writing. If someone asks to scaffold a repository without `start`, stop and do not create starter trees, instruction-file snippets, or a Flow-branded `PRODUCT.md`.
+`flow start` and "start project" are not this skill. The optional `start` skill (decision 0010) is this setup plus a template bootstrap from flow-next or flow-mono (decision 0026), and confirms template, name, destination, and preset before writing. If someone asks to scaffold a repository without `start`, stop and do not create starter trees, instruction-file snippets, or a Flow-branded `PRODUCT.md`.
 
 ## Invocation
 

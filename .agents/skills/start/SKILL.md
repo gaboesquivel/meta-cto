@@ -21,6 +21,7 @@ Ask only for what is still missing, in one question round:
 3. **Template** — only when not inferred. Recommend **flow-next** for a single Next.js app, **flow-mono** for Turborepo (`apps/web`, `packages/ui`).
 4. **Optional GitHub remote** — only when the user wants a new repository created or linked; never assume push access.
 5. **Delivery** — only when not stated: **local** or **GitHub**, as `build`'s Delivery mode section defines them. Suggest local when no GitHub repository is created, and GitHub when one is; this basis is start-specific because the repository is being created.
+6. **Preset** — `minimal` (default) or `neon`. `resolvePreset` from `lib/preset.mjs` reads an explicit choice, otherwise Neon, Drizzle, or a database in the request selects `neon`, and anything else stays `minimal`. Ask only when `resolvePreset` returns not ok.
 
 If an answer does not arrive, ask again; do not substitute a destination the user did not confirm.
 
@@ -30,7 +31,7 @@ Derive identity with `deriveProjectIdentity` from `lib/identity.mjs`: slug, `pac
 
 ## Confirm before writing
 
-A spoken request can be misheard, so write nothing until the user agrees. State the template, project name (with slug and host), destination, any GitHub repository to create with its visibility, the delivery, the Flow block it will write, and the hand-off to `explore`, then wait for an explicit yes. Anything else is not a yes; correct and restate.
+A spoken request can be misheard, so write nothing until the user agrees. State the template, project name (with slug and host), destination, preset, any GitHub repository to create with its visibility, the delivery, the Flow block it will write, and the hand-off to `explore`, then wait for an explicit yes. Anything else is not a yes; correct and restate. The yes is what authorizes the template to provision when the preset is `neon`.
 
 ## Run two lanes
 
@@ -71,7 +72,7 @@ After renames, identity verification **fails** while stale template identifiers 
 
 ## Dependencies and setup
 
-In the new project root, run the template's `pnpm setup` (installs curated **technical** skills from `.agents`). Do not install flow-skills into the new repo; when the user already installed them at this root, keep them. Do not set `FLOW_SETUP_SKIP_SKILLS` unless the user asks. Never commit secrets; keep `.env.local` and build artifacts out of Git.
+In the new project root, run the template's `pnpm setup` with `FLOW_PRESET` set to the confirmed preset (installs curated **technical** skills from `.agents`). Do not install flow-skills into the new repo; when the user already installed them at this root, keep them. Do not set `FLOW_SETUP_SKIP_SKILLS` unless the user asks. Never commit secrets; keep `.env.local` and build artifacts out of Git. This skill does not provision hosting or a database; the template's setup owns that, and it fails closed when the preset is `neon` and authorization is missing.
 
 ## Baseline product documentation
 
