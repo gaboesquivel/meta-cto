@@ -272,3 +272,13 @@ Skills used: to-spec. Docs changed: (see next entry).
 2026-10-29T02:26:21Z — to-spec result
 Summary: Wrote spec 003 (draft) and decision 0003 (Proposed) on branch 003-prove-the-verdict; not pushed, no issue opened.
 Skills used: to-spec. Docs changed/created: docs/specs/003-prove-the-verdict.md, docs/decisions/0003-proof-before-slice-3.md.
+
+2026-10-29T02:26:45Z — "create tasks and ship it"
+Summary: (in progress) to-tasks for spec 003, then ship.
+Summary: Stopped before recording tasks: spec 003 is a draft with no issue (GitHub mode needs acceptance first; acceptance makes branch and issue public on this public repo). Asked user to accept. Also flagged that ship can land the software but the proof run needs human labeling.
+Skills used: to-tasks. Docs changed: none.
+Question (assistant → user): Accept spec 003 (public branch + issue)? Answer: pending.
+
+2026-10-29T02:30:01Z — "create tasks" (mid-turn) + accept
+Summary: Accepted spec 003 and decision 0003 (PRODUCT.md, GLOSSARY.md updated); pushed branch 003-prove-the-verdict; opened spec issue #22 (accepted); opened 8 task sub-issues #23-#30 with blocked-by links; Tasks checklist in spec.
+Skills used: to-spec, to-tasks. Docs changed: PRODUCT.md, GLOSSARY.md, docs/specs/003-prove-the-verdict.md, docs/decisions/0003-proof-before-slice-3.md.
