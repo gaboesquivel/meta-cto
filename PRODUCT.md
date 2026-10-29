@@ -67,6 +67,7 @@ AI makes judging "same need versus related need" cheap enough to run on every su
 
 - **Main metric: Intake Duplicate Rate.** Among new Feature Requests (created through a Check) that a Product Manager reviewed, the share confirmed Duplicate. Lower is better. Always reported with its counts, **Review Coverage** (reviewed new ÷ new) and a **backlog baseline** (the same rate over reviewed pre-Signal requests), so prevention shows as a comparison and missing review stays visible. Only Review Decisions confirm duplicates ([decision 0002](docs/decisions/0002-fragmentation-and-duplicate-association.md)).
 - **Supporting metrics:** suggestion acceptance (supports or comments instead of creates), Suspected Duplication (open requests with an undecided AI-suspected duplicate; workload, not confirmed duplication), undo rate (Duplicate decisions later undone), and same-need precision and recall on the held-out eval set.
+- **Definitions are executable:** each metric above has a worked example in `lib/signal/service/metric-definitions.test.ts`, which fails when this section drops a name it covers. A spec that changes a metric names the definition here it follows and updates its example.
 - **Later-slice signals (measured, not targets yet):** time from a new request to a reviewed state, and how often PMs edit or reject an extracted underlying need.
 - **Kill criterion:** same-need precision below **85%** on the frozen held-out Crewday eval set after a few prompt and retrieval iterations → drop suggest-before-submit and fall back to PM-only grouping.
 
