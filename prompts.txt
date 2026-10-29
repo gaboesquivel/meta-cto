@@ -314,3 +314,7 @@ Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick), AR
 2026-10-29T03:39:41Z — build: task 08
 Summary: Aligned ARCHITECTURE/DESIGN/GLOSSARY; verified preview d6bb4a1 via vercel curl (fail-closed pilot, demo unchanged, origin isolation, /proof gated); recorded Verification; spec 003 implemented. Human-labeled steps pending.
 Skills used: build. Docs changed: ARCHITECTURE.md, DESIGN.md, GLOSSARY.md, docs/specs/003-prove-the-verdict.md.
+
+2026-10-29T03:54:41Z — ship: review fix round 1
+Summary: Independent review (4 per-axis workers + verifier) posted on PR #31 with 7 blocking findings (B1-B7). Fix round 1: 3 parallel workers (A: /review pilot workspace, review_metrics MCP tool, origin dedupe; B: eval reading rules, bars consolidated; C: blind skipReason, PM agreement, scoring queries) plus orchestrator doc fixes, pilot title links, and staged-lint hook fix for lint-ignored files. qa 847 tests, build green.
+Skills used: ship, review, build. Docs changed: README.md, ARCHITECTURE.md, GLOSSARY.md, evals/signal-verdict/README.md.
