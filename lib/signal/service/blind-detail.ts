@@ -1,4 +1,4 @@
-import type { FeatureRequestDetail } from "../contracts";
+import type { FeatureRequestDetail, FeatureRequestSummary } from "../contracts";
 import type { FeatureRequestRow } from "../repository";
 import type { ServiceContext } from "./context";
 import { isBlind } from "./review-context";
@@ -10,9 +10,12 @@ const hasOwnActiveDecision = (
   decisions: { featureRequestId: string; undoneAt: Date | string | null }[],
 ) => decisions.some((decision) => decision.featureRequestId === id && !decision.undoneAt);
 
-/** Of `ids`, the new Feature Requests chosen for Blind Review that have no decision of their own. */
-const pendingBlind = async (context: BlindScope, ids: string[]): Promise<Set<string>> => {
-  const rows = await context.repo.getFeatureRequests([...new Set(ids)]);
+/** Of `rows`, the new Feature Requests chosen for Blind Review that have no decision of their own. */
+const pendingBlindOf = async (
+  context: BlindScope,
+  rows: Pick<FeatureRequestRow, "createdViaCheck" | "id">[],
+): Promise<Set<string>> => {
+  if (!(context.blindShare > 0)) return new Set();
   const blind = rows.filter((row) => isBlind(context, row)).map((row) => row.id);
   if (blind.length === 0) return new Set();
   const decisions = await context.repo.listReviewDecisions({
@@ -20,6 +23,24 @@ const pendingBlind = async (context: BlindScope, ids: string[]): Promise<Set<str
     featureRequestIds: blind,
   });
   return new Set(blind.filter((id) => !hasOwnActiveDecision(id, decisions)));
+};
+
+const pendingBlind = async (context: BlindScope, ids: string[]) =>
+  await pendingBlindOf(context, await context.repo.getFeatureRequests([...new Set(ids)]));
+
+/**
+ * Search results (spec 003): a blind new Feature Request with no decision of its own shows no
+ * restated need, as in its detail and the Review Queue.
+ */
+export const withholdBlindNeeds = async <T extends FeatureRequestSummary>(
+  context: BlindScope,
+  rows: Pick<FeatureRequestRow, "createdViaCheck" | "id">[],
+  items: T[],
+): Promise<T[]> => {
+  const hidden = await pendingBlindOf(context, rows);
+  return hidden.size === 0
+    ? items
+    : items.map((item) => (hidden.has(item.id) ? { ...item, underlyingNeed: null } : item));
 };
 
 /**

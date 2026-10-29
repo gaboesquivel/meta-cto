@@ -278,6 +278,20 @@ describe("blind request detail (get_feature_request, REST detail, detail page)",
     assert.equal(other.relatedLinks[0]?.featureRequestId, fresh.id);
   });
 
+  it("withholds the restated need from search results until the blind decision", async () => {
+    const { backlog, fresh, harness } = await withAiLink(1);
+
+    const hidden = await harness.service.search({});
+    const needs = new Map(hidden.items.map((item) => [item.id, item.underlyingNeed]));
+    assert.equal(needs.get(fresh.id), null);
+    assert.equal(needs.get(backlog.id), "Approvals");
+
+    await harness.review.decide({ decision: "none", featureRequestId: fresh.id }, staff);
+    const shown = await harness.service.search({});
+    const after = shown.items.find((item) => item.id === fresh.id);
+    assert.equal(after?.underlyingNeed, "AI restated need");
+  });
+
   it("keeps the detail unchanged when nothing is blind (the Crewday demo)", async () => {
     const { backlog, fresh, harness } = await withAiLink(0);
 
@@ -285,5 +299,10 @@ describe("blind request detail (get_feature_request, REST detail, detail page)",
 
     assert.equal(detail.underlyingNeed, "AI restated need");
     assert.equal(detail.relatedLinks[0]?.featureRequestId, backlog.id);
+    const page = await harness.service.search({});
+    assert.equal(
+      page.items.find((item) => item.id === fresh.id)?.underlyingNeed,
+      "AI restated need",
+    );
   });
 });

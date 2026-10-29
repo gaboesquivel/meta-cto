@@ -156,66 +156,94 @@ describe("Review Coverage under Blind Review: a blind request is reviewed by its
 });
 
 describe("Agent correctness: agent Supports, Comments and creates scored against the Answer Key", () => {
-  const answerKey = [
-    { confirmed: true, feedback: "fb-swap", sharesNeedWith: "fr-swap" },
-    { confirmed: true, feedback: "fb-payroll", sharesNeedWith: null },
-    { confirmed: false, feedback: "fb-draft", sharesNeedWith: "fr-swap" },
-  ];
+  /**
+   * Need clusters, each label confirmed by a person: backlog fr-swap and feedback fb-swap share
+   * "swap"; fb-export and fb-export2 share "export", which no backlog request has; fb-draft is
+   * not confirmed yet.
+   */
+  const answerKey = {
+    featureRequests: [
+      { confirmed: true, key: "fr-swap", needId: "swap" },
+      { confirmed: true, key: "fr-clock", needId: "clock" },
+    ],
+    feedback: [
+      { confirmed: true, key: "fb-swap", needId: "swap" },
+      { confirmed: true, key: "fb-export", needId: "export" },
+      { confirmed: true, key: "fb-export2", needId: "export" },
+      { confirmed: false, key: "fb-draft", needId: "swap" },
+    ],
+  };
+  const backlog = [{ backlog: "fr-swap" }, { backlog: "fr-clock" }];
 
-  it("counts a Support on a different need as harm and a needless create as a miss", () => {
+  it("counts a Support on a different need as harm and a create of an existing need as a miss", () => {
     const score = scoreAgentCorrectness(
       [
-        // Correct: Support on the request the Answer Key names.
-        { feedbackItemId: "fb-swap", kind: "support", targetKey: "fr-swap" },
-        // Harm: Support on a request the Answer Key says is a different need.
-        { feedbackItemId: "fb-swap", kind: "support", targetKey: "fr-clock" },
-        // Miss: create when the Answer Key names an existing request.
-        { feedbackItemId: "fb-swap", kind: "create", targetKey: null },
-        // Correct: create when the Answer Key says no request shares the need.
-        { feedbackItemId: "fb-payroll", kind: "create", targetKey: null },
+        // Correct: Support on a request with the same needId.
+        { feedbackItemId: "fb-swap", kind: "support", target: { backlog: "fr-swap" } },
+        // Harm: Support on a request with a different needId.
+        { feedbackItemId: "fb-swap", kind: "support", target: { backlog: "fr-clock" } },
+        // Miss: create while a request of the same need existed (fr-swap).
+        { existing: backlog, feedbackItemId: "fb-swap", kind: "create" },
+        // Correct: create when no request of the need existed yet.
+        { existing: backlog, feedbackItemId: "fb-export", kind: "create" },
+        // Correct: Support on the request filed earlier in the pilot for the same need.
+        { feedbackItemId: "fb-export2", kind: "support", target: { filedFor: "fb-export" } },
         // Excluded and counted: the entry is not confirmed by a person.
-        { feedbackItemId: "fb-draft", kind: "support", targetKey: "fr-swap" },
+        { feedbackItemId: "fb-draft", kind: "support", target: { backlog: "fr-swap" } },
         // Counted, not scored: no Answer Key entry.
-        { feedbackItemId: "fb-unknown", kind: "create", targetKey: null },
+        { existing: backlog, feedbackItemId: "fb-unknown", kind: "create" },
       ],
       answerKey,
     );
 
-    // 2 correct ÷ 4 scored (2 correct + 1 harm + 1 miss) = 50%.
+    // 3 correct ÷ 5 scored (3 correct + 1 harm + 1 miss) = 60%.
     assert.deepEqual(score, {
-      actions: 6,
-      correct: 2,
+      actions: 7,
+      correct: 3,
       excludedUnconfirmed: 1,
       harm: 1,
       miss: 1,
-      rate: 0.5,
-      scored: 4,
+      rate: 0.6,
+      scored: 5,
       unlinked: 0,
       unmatched: 1,
+      unresolved: 0,
     });
   });
 
   it("reports Product Manager agreement with the Answer Key, blind and non-blind apart", () => {
     const score = scorePmAgreement(
       [
-        // Non-blind agree: Duplicate of the keyed request.
+        // Non-blind agree: Duplicate of a request with the same needId.
         {
           blind: false,
           feedbackItemId: "fb-swap",
-          verdict: { duplicateOfKey: "fr-swap", kind: "duplicate" },
+          verdict: { kind: "duplicate", other: { backlog: "fr-swap" } },
         },
-        // Non-blind disagree: Related (not Duplicate) when the key names a request.
-        { blind: false, feedbackItemId: "fb-swap", verdict: { kind: "not_duplicate" } },
-        // Blind agree: no duplicate when the key says none.
-        { blind: true, feedbackItemId: "fb-payroll", verdict: { kind: "not_duplicate" } },
-        // Blind disagree: Duplicate when the key says none.
+        // Non-blind disagree: Related, though an earlier request has the same needId.
+        {
+          blind: false,
+          feedbackItemId: "fb-swap",
+          verdict: { earlier: backlog, kind: "not_duplicate" },
+        },
+        // Blind agree: no duplicate, and no earlier request has the export need.
         {
           blind: true,
-          feedbackItemId: "fb-payroll",
-          verdict: { duplicateOfKey: "fr-swap", kind: "duplicate" },
+          feedbackItemId: "fb-export",
+          verdict: { earlier: backlog, kind: "not_duplicate" },
+        },
+        // Blind disagree: Duplicate of a request with a different needId.
+        {
+          blind: true,
+          feedbackItemId: "fb-export2",
+          verdict: { kind: "duplicate", other: { backlog: "fr-swap" } },
         },
         // Blind, excluded: unconfirmed entry.
-        { blind: true, feedbackItemId: "fb-draft", verdict: { kind: "not_duplicate" } },
+        {
+          blind: true,
+          feedbackItemId: "fb-draft",
+          verdict: { earlier: backlog, kind: "not_duplicate" },
+        },
       ],
       answerKey,
     );

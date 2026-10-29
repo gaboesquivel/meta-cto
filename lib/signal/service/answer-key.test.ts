@@ -5,145 +5,162 @@ import type { Actor, JudgeOutput } from "../contracts";
 import { PILOT_WORKSPACE } from "../pilot";
 import { createRepository } from "../repository";
 import { createTestDb } from "../test-db";
-import type { AgentAction, AnswerKeyLabel, PmJudgement } from "./answer-key";
+import type {
+  AgentAction,
+  AnswerKeyLabels,
+  NeedLabel,
+  PmJudgement,
+  RequestRef,
+} from "./answer-key";
 import { createAnswerKeyScoring, scoreAgentCorrectness, scorePmAgreement } from "./answer-key";
 import { createReviewService, createSignalService } from "./index";
 import { agent, cedar, fakeEmbedder, fakeJudge, payloadOf, staff, unit } from "./test-fixtures";
 
-const label = (
-  feedback: string,
-  sharesNeedWith: string | null,
-  confirmed = true,
-): AnswerKeyLabel => ({ confirmed, feedback, sharesNeedWith });
+const need = (key: string, needId: string, confirmed = true): NeedLabel => ({
+  confirmed,
+  key,
+  needId,
+});
 
-const KEY: AnswerKeyLabel[] = [
-  label("fb-swap", "fr-swap"),
-  label("fb-payroll", null),
-  label("fb-draft", "fr-swap", false),
-];
+/** Need clusters: swap (fr-swap, fb-swap, fb-swap2), clock (fr-clock), export (fb-new, fb-new2). */
+const KEY: AnswerKeyLabels = {
+  featureRequests: [need("fr-swap", "swap"), need("fr-clock", "clock")],
+  feedback: [
+    need("fb-swap", "swap"),
+    need("fb-swap2", "swap"),
+    need("fb-new", "export"),
+    need("fb-new2", "export"),
+    need("fb-draft", "swap", false),
+  ],
+};
+
+const backlog = (key: string): RequestRef => ({ backlog: key });
+const filed = (feedbackItemId: string | null): RequestRef => ({ filedFor: feedbackItemId });
+const BACKLOG = [backlog("fr-swap"), backlog("fr-clock")];
 
 const engage = (
   kind: "comment" | "support",
   feedbackItemId: string | null,
-  targetKey: string | null,
-): AgentAction => ({ feedbackItemId, kind, targetKey });
-const create = (feedbackItemId: string | null): AgentAction => ({
+  target: RequestRef,
+): AgentAction => ({ feedbackItemId, kind, target });
+const create = (feedbackItemId: string | null, existing: RequestRef[] = BACKLOG): AgentAction => ({
+  existing,
   feedbackItemId,
   kind: "create",
-  targetKey: null,
 });
 
 describe("scoreAgentCorrectness", () => {
-  it("scores each agent action against the Answer Key entry of its feedback item", () => {
+  it("scores each agent action by need cluster against the Answer Key", () => {
     const score = scoreAgentCorrectness(
       [
-        // correct
-        engage("support", "fb-swap", "fr-swap"),
-        // correct
-        engage("comment", "fb-swap", "fr-swap"),
-        // harm: a different need
-        engage("support", "fb-swap", "fr-other"),
-        // harm: not the keyed request
-        engage("comment", "fb-swap", null),
-        // harm: the key says no request shares it
-        engage("support", "fb-payroll", "fr-swap"),
-        // miss: the key names an existing request
+        // Correct: Support on a backlog request of the same need.
+        engage("support", "fb-swap", backlog("fr-swap")),
+        // Harm: Comment on a backlog request of a different need.
+        engage("comment", "fb-swap", backlog("fr-clock")),
+        // Correct: Support on a request filed earlier in the pilot for the same need.
+        engage("support", "fb-new2", filed("fb-new")),
+        // Harm: Support on a pilot request of a different need.
+        engage("support", "fb-new", filed("fb-swap2")),
+        // Unresolved: the target was filed without a feedback item, so its need is unknown.
+        engage("support", "fb-swap", filed(null)),
+        // Miss: a backlog request of the same need existed.
         create("fb-swap"),
-        // correct: nothing shares the need
-        create("fb-payroll"),
-        // unmatched: no Answer Key entry
+        // Correct: no request of the need existed yet.
+        create("fb-new"),
+        // Miss: a request of the same need was filed earlier in the pilot.
+        create("fb-new2", [...BACKLOG, filed("fb-new")]),
+        // Unmatched: no Answer Key entry.
         create("fb-unknown"),
-        // unlinked: no feedback item on its Check
+        // Unlinked: no feedback item on its Check.
         create(null),
-        // excluded: unconfirmed entry
-        engage("support", "fb-draft", "fr-swap"),
+        // Excluded: unconfirmed entry.
+        engage("support", "fb-draft", backlog("fr-swap")),
       ],
       KEY,
     );
 
     assert.deepEqual(score, {
-      actions: 10,
+      actions: 11,
       correct: 3,
       excludedUnconfirmed: 1,
-      harm: 3,
-      miss: 1,
+      harm: 2,
+      miss: 2,
       rate: 3 / 7,
       scored: 7,
       unlinked: 1,
       unmatched: 1,
+      unresolved: 1,
     });
   });
 
-  it("reports a null rate with zero counts when nothing is scored", () => {
-    const score = scoreAgentCorrectness([create(null)], KEY);
+  it("treats an unconfirmed backlog label as an unresolved target", () => {
+    const key: AnswerKeyLabels = { ...KEY, featureRequests: [need("fr-swap", "swap", false)] };
+    const score = scoreAgentCorrectness([engage("support", "fb-swap", backlog("fr-swap"))], key);
+    assert.equal(score.unresolved, 1);
     assert.equal(score.rate, null);
-    assert.equal(score.scored, 0);
-    assert.equal(score.unlinked, 1);
   });
 });
 
 const judged = (
   feedbackItemId: string | null,
-  duplicateOfKey: string | null | undefined,
+  verdict: PmJudgement["verdict"],
   blind = false,
-): PmJudgement => ({
-  blind,
-  feedbackItemId,
-  verdict:
-    duplicateOfKey === undefined
-      ? { kind: "not_duplicate" }
-      : { duplicateOfKey, kind: "duplicate" },
+): PmJudgement => ({ blind, feedbackItemId, verdict });
+const duplicateOf = (other: RequestRef): PmJudgement["verdict"] => ({ kind: "duplicate", other });
+const notDuplicate = (earlier: RequestRef[] = BACKLOG): PmJudgement["verdict"] => ({
+  earlier,
+  kind: "not_duplicate",
 });
 
 describe("scorePmAgreement", () => {
-  it("compares each decided new request with the Answer Key, blind and non-blind apart", () => {
+  it("compares each decided new request with its need cluster, blind and non-blind apart", () => {
     const score = scorePmAgreement(
       [
-        // agree: Duplicate of the keyed request
-        judged("fb-swap", "fr-swap"),
-        // disagree: Duplicate of another request
-        judged("fb-swap", "fr-other"),
-        // disagree: Related, Distinct or no duplicates
-        judged("fb-swap", undefined),
-        // agree: nothing shares the need
-        judged("fb-payroll", undefined),
-        // disagree: Duplicate when the key says none
-        judged("fb-payroll", "fr-swap", true),
-        // agree
-        judged("fb-swap", "fr-swap", true),
-        // excluded: unconfirmed
-        judged("fb-draft", "fr-swap", true),
-        // unmatched
-        judged("fb-unknown", undefined),
-        // unlinked
-        judged(null, undefined, true),
+        // Agree: Duplicate of a backlog request of the same need.
+        judged("fb-swap", duplicateOf(backlog("fr-swap"))),
+        // Agree: Duplicate of an earlier pilot request of the same need.
+        judged("fb-new2", duplicateOf(filed("fb-new"))),
+        // Disagree: Duplicate of a request of a different need.
+        judged("fb-swap", duplicateOf(backlog("fr-clock"))),
+        // Disagree: not a duplicate, though an earlier request shares the need.
+        judged("fb-swap", notDuplicate()),
+        // Agree: not a duplicate, and no earlier request shares the need.
+        judged("fb-new", notDuplicate()),
+        // Unresolved: the other side's need is unknown.
+        judged("fb-new", duplicateOf(filed(null))),
+        // Blind disagree: an earlier pilot request shares the need.
+        judged("fb-new2", notDuplicate([...BACKLOG, filed("fb-new")]), true),
+        // Blind disagree: Duplicate of a different need.
+        judged("fb-new", duplicateOf(backlog("fr-swap")), true),
+        // Blind agree.
+        judged("fb-swap2", duplicateOf(backlog("fr-swap")), true),
+        judged("fb-draft", notDuplicate(), true),
+        judged("fb-unknown", notDuplicate(), true),
+        judged(null, notDuplicate(), true),
       ],
       KEY,
     );
 
     assert.deepEqual(score.nonBlind, {
-      agree: 2,
-      decided: 5,
+      agree: 3,
+      decided: 6,
       disagree: 2,
       excludedUnconfirmed: 0,
-      rate: 0.5,
+      rate: 0.6,
       unlinked: 0,
-      unmatched: 1,
+      unmatched: 0,
+      unresolved: 1,
     });
     assert.deepEqual(score.blind, {
       agree: 1,
-      decided: 4,
-      disagree: 1,
+      decided: 6,
+      disagree: 2,
       excludedUnconfirmed: 1,
-      rate: 0.5,
+      rate: 1 / 3,
       unlinked: 1,
-      unmatched: 0,
+      unmatched: 1,
+      unresolved: 0,
     });
-  });
-
-  it("does not count a Duplicate whose other side resolves to no keyed request as agreement", () => {
-    const score = scorePmAgreement([judged("fb-payroll", null)], KEY);
-    assert.equal(score.nonBlind.disagree, 1);
   });
 });
 
@@ -152,7 +169,7 @@ const pilotHarness = async (options: { blindShare?: number } = {}) => {
   const db = await createTestDb();
   const repo = createRepository(db);
   const { id: workspaceId } = await repo.ensureWorkspace(PILOT_WORKSPACE);
-  const backlog = async (key: string, title: string, index: number) =>
+  const loadBacklog = async (key: string, title: string, index: number) =>
     await repo.upsertSeedFeatureRequest({
       createdByActorName: "Sam (CSM)",
       createdByActorType: "staff",
@@ -163,8 +180,8 @@ const pilotHarness = async (options: { blindShare?: number } = {}) => {
       underlyingNeed: null,
       workspaceId,
     });
-  const swap = await backlog("fr-swap", "Shift swaps in the app", 0);
-  const other = await backlog("fr-other", "Payroll export", 1);
+  const swap = await loadBacklog("fr-swap", "Shift swaps in the app", 0);
+  const other = await loadBacklog("fr-other", "Payroll export", 1);
   const judge = fakeJudge({
     build: (): JudgeOutput => ({ judgments: [], underlyingNeed: "need" }),
     kind: "output",
@@ -216,14 +233,18 @@ const createFor = async (pilot: Pilot, feedbackItemId: string | undefined) => {
   });
 };
 
-const PILOT_KEY: AnswerKeyLabel[] = [
-  label("fb-1", "fr-swap"),
-  label("fb-2", "fr-swap"),
-  label("fb-3", null),
-  label("fb-4", "fr-swap"),
-  label("fb-5", null),
-  label("fb-6", "fr-swap", false),
-];
+const PILOT_KEY: AnswerKeyLabels = {
+  featureRequests: [need("fr-swap", "swap"), need("fr-other", "payroll")],
+  feedback: [
+    need("fb-1", "swap"),
+    need("fb-2", "swap"),
+    need("fb-3", "export"),
+    need("fb-4", "swap"),
+    need("fb-5", "export"),
+    need("fb-6", "swap", false),
+    need("fb-7", "timeclock"),
+  ],
+};
 
 describe("feedback item link on a Check", () => {
   it("records the optional feedbackItemId on the draft_checked event", async () => {
@@ -237,22 +258,25 @@ describe("feedback item link on a Check", () => {
   });
 });
 
+const score = async (pilot: Pilot) =>
+  await createAnswerKeyScoring({ answerKey: PILOT_KEY, repo: pilot.repo }).score();
+
 describe("createAnswerKeyScoring (Pilot Workspace)", () => {
   it("scores pilot agent actions linked through their Check, ignoring staff and other Origins", async () => {
     const pilot = await pilotHarness();
-    // correct
+    // Correct.
     await supportFor(pilot, "fb-1", pilot.swap.id);
-    // harm
+    // Harm.
     await supportFor(pilot, "fb-2", pilot.other.id);
-    // miss
+    // Miss: fr-swap shares fb-4's need.
     await createFor(pilot, "fb-4");
-    // correct
+    // Correct: nothing shares fb-3's need yet.
     await createFor(pilot, "fb-3");
-    // excluded: unconfirmed
+    // Excluded: unconfirmed.
     await createFor(pilot, "fb-6");
-    // unlinked
+    // Unlinked.
     await createFor(pilot, undefined);
-    // unmatched
+    // Unmatched.
     await createFor(pilot, "fb-99");
     // A staff Comment is not an agent action.
     const staffCheck = await check(pilot, "fb-2", staff);
@@ -283,9 +307,9 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
       onBehalfOf: { account: { name: "Demo Account" } },
     });
 
-    const scores = await createAnswerKeyScoring({ answerKey: PILOT_KEY, repo: pilot.repo }).score();
+    const { agentCorrectness } = await score(pilot);
 
-    assert.deepEqual(scores.agentCorrectness, {
+    assert.deepEqual(agentCorrectness, {
       actions: 7,
       correct: 2,
       excludedUnconfirmed: 1,
@@ -295,26 +319,27 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
       scored: 4,
       unlinked: 1,
       unmatched: 1,
+      unresolved: 0,
     });
   });
 
-  it("resolves a Support on a request filed in the pilot through that request's own feedback item", async () => {
+  it("counts a Support onto a request filed earlier in the pilot for the same need as correct", async () => {
     const pilot = await pilotHarness();
-    // miss: fr-swap existed
-    const filed = await createFor(pilot, "fb-4");
-    // correct: fb-4's request shares fr-swap's need
-    await supportFor(pilot, "fb-1", filed.id);
-    // harm: fb-5 shares no request
-    await supportFor(pilot, "fb-5", filed.id, "Other Account");
+    // Correct: the first filing of the export need.
+    const first = await createFor(pilot, "fb-3");
+    // Correct: the intake duplicate the pilot measures, supported instead of created.
+    await supportFor(pilot, "fb-5", first.id);
+    // Harm: fb-1 is the swap need.
+    await supportFor(pilot, "fb-1", first.id, "Other Account");
+    // Miss: the export request already exists.
+    await createFor(pilot, "fb-5");
 
-    const { agentCorrectness } = await createAnswerKeyScoring({
-      answerKey: PILOT_KEY,
-      repo: pilot.repo,
-    }).score();
+    const { agentCorrectness } = await score(pilot);
 
-    assert.equal(agentCorrectness.correct, 1);
-    assert.equal(agentCorrectness.harm, 1);
-    assert.equal(agentCorrectness.miss, 1);
+    assert.deepEqual(
+      [agentCorrectness.correct, agentCorrectness.harm, agentCorrectness.miss],
+      [2, 1, 1],
+    );
   });
 
   it("scores Review Decisions on new pilot requests, blind and non-blind apart", async () => {
@@ -322,6 +347,7 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
     const blindDup = await createFor(blindPilot, "fb-1");
     const blindNone = await createFor(blindPilot, "fb-2");
     const undecided = await createFor(blindPilot, "fb-4");
+    // Blind agree: same need as fr-swap.
     await blindPilot.review.decide(
       {
         canonicalId: blindPilot.swap.id,
@@ -330,15 +356,11 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
         otherId: blindPilot.swap.id,
       },
       staff,
-      // blind agree
     );
-    // blind disagree
+    // Blind disagree: fr-swap existed with the same need.
     await blindPilot.review.decide({ decision: "none", featureRequestId: blindNone.id }, staff);
 
-    const blindScores = await createAnswerKeyScoring({
-      answerKey: PILOT_KEY,
-      repo: blindPilot.repo,
-    }).score();
+    const blindScores = await score(blindPilot);
     assert.deepEqual(blindScores.pmAgreement.blind, {
       agree: 1,
       decided: 2,
@@ -347,6 +369,7 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
       rate: 0.5,
       unlinked: 0,
       unmatched: 0,
+      unresolved: 0,
     });
     assert.equal(blindScores.pmAgreement.nonBlind.decided, 0);
     assert.ok(undecided.id);
@@ -354,8 +377,10 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
     const pilot = await pilotHarness();
     const related = await createFor(pilot, "fb-1");
     const distinct = await createFor(pilot, "fb-3");
-    const wrongDup = await createFor(pilot, "fb-5");
+    const intake = await createFor(pilot, "fb-5");
+    const wrongDup = await createFor(pilot, "fb-7");
     const undone = await createFor(pilot, "fb-2");
+    // Disagree: fr-swap shares fb-1's need.
     await pilot.review.decide(
       {
         decision: "related",
@@ -364,14 +389,23 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
         sharedDimension: "shifts",
       },
       staff,
-      // disagree: key names fr-swap
     );
+    // Agree: nothing earlier shares fb-3's need.
     await pilot.review.decide(
       { decision: "distinct", featureRequestId: distinct.id, otherId: pilot.swap.id },
       staff,
-      // agree: key says none
     );
-    // Canonical kept on the new side: still a Duplicate pair with fr-other, against a key of none.
+    // Agree: Duplicate of the earlier pilot request of the same need.
+    await pilot.review.decide(
+      {
+        canonicalId: distinct.id,
+        decision: "duplicate",
+        featureRequestId: intake.id,
+        otherId: distinct.id,
+      },
+      staff,
+    );
+    // Disagree: canonical kept on the new side, paired with a different need.
     await pilot.review.decide(
       {
         canonicalId: wrongDup.id,
@@ -380,24 +414,26 @@ describe("createAnswerKeyScoring (Pilot Workspace)", () => {
         otherId: pilot.other.id,
       },
       staff,
-      // disagree
     );
+    // Undone: not decided.
     const withdrawn = await pilot.review.decide(
       { decision: "none", featureRequestId: undone.id },
       staff,
     );
-    // undone: not decided
     await pilot.review.undo(withdrawn.id, staff);
 
-    const scores = await createAnswerKeyScoring({ answerKey: PILOT_KEY, repo: pilot.repo }).score();
+    const scores = await score(pilot);
+    // `distinct` is now also on the intake Duplicate pair: both sides share the export need, so
+    // it still agrees; each request counts once.
     assert.deepEqual(scores.pmAgreement.nonBlind, {
-      agree: 1,
-      decided: 3,
+      agree: 2,
+      decided: 4,
       disagree: 2,
       excludedUnconfirmed: 0,
-      rate: 1 / 3,
+      rate: 0.5,
       unlinked: 0,
       unmatched: 0,
+      unresolved: 0,
     });
     assert.equal(scores.pmAgreement.blind.decided, 0);
   });
