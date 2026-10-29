@@ -219,3 +219,9 @@ Skills used: retro. Docs changed/created: none.
 2026-10-29T04:45:00Z — "Do 2 and 3" (retro candidates)
 Summary: (2) Added lib/signal/service/metric-definitions.test.ts: worked examples of each PRODUCT.md metric (Intake Duplicate Rate counts only Review Decisions, Related is reviewed-not-duplicate, backlog stays out of intake, Undo drops it; Review Coverage; undo rate ignores Related/Distinct) plus a guard that fails when PRODUCT.md drops a covered metric name; mutation-checked. PRODUCT.md points to it. (3) Added `pnpm verify:prod [sha]` (scripts/verify-prod.ts + tested pure core): GitHub check runs, production deployment (Vercel API fallback since GitHub has no deployment records), unauthenticated GETs of four pages; gh/vercel via argument arrays, no shell. Verified f0c75c2 → live. Suite 48 files/501 tests, lint, types, build green (build needed .next/cache cleared: the known WasmHash cache crash). Committed on local branch chore/retro-metric-tests-verify-prod; not pushed (awaiting approval).
 Skills used: build. Docs changed/created: PRODUCT.md, ARCHITECTURE.md.
+
+[2026-10-28T20:06:00-06:00] Prompt: "update skills"
+Summary: Ran `pnpm skills:update` (.agents lock: 10 skills updated) and `skills update -p -y` at root (flow-skills lock: flow and start updated). Repaired 13 broken symlinks in .agents/skills/ to the corrected ../.agents/skills/<name> target and removed a stray .agents/.claude/ dir the updater created. Skills used: none. Docs changed: none.
+
+[2026-10-28T20:15:00-06:00] Prompt: "ship it", then interrupted with "push to main, no test"
+Summary: Started ship (preflight only), then per the user's instruction skipped review/tests and fast-forwarded main to chore/retro-metric-tests-verify-prod and pushed origin main. Skills used: ship (preflight only). Docs changed: none.
