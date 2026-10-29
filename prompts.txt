@@ -340,3 +340,5 @@ Skills used: to-spec. Docs changed/created: docs/specs/004-private-pilot-data.md
 2026-10-29T04:15:16Z — "Accept and ship" (spec 004)
 Summary: Accepted spec 004 + decision 0004 (spec 003 amended); issue #32; tasks #33-#36 (linear). Starting build.
 Skills used: to-spec, to-tasks, ship, build. Docs changed: docs/specs/003-prove-the-verdict.md, docs/specs/004-private-pilot-data.md, docs/decisions/0004-private-pilot-data-in-the-database.md.
+
+2026-10-29T04:20:16Z — build 004: integrated task 01 (#33) at e365f96.
