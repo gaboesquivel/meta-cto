@@ -1,12 +1,13 @@
 ---
-status: proposed
+status: accepted
 category: product
 date: 2026-10-29
+accepted: 2026-10-29
 ---
 
 # Measure prevention with confirmed duplicates; duplicates as reversible associations
 
-Status: Proposed. Amends `PRODUCT.md` (main metric, journey 3) and `GLOSSARY.md` (Fragmentation Rate, Review Coverage, Merge, Split). The 85% same-need precision kill criterion is unchanged.
+Status: Accepted (2026-10-29). Amends `PRODUCT.md` (main metric, journey 3) and `GLOSSARY.md` (Fragmentation Rate, Review Coverage, Merge, Split). The 85% same-need precision kill criterion is unchanged.
 
 **Context.** Signal's goal is to stop fragmentation before a Feature Request is created (`PRODUCT.md`). Its main metric, "the share of new Feature Requests later marked as duplicates", has the right intent but a fragile definition: its denominator includes requests nobody reviewed, and it doesn't separate AI suspicion from human confirmation. A first draft of this decision moved the main metric to unresolved backlog duplication. That measures review workload, not prevention, so it drifted from the product goal.
 

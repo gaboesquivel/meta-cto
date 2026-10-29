@@ -1,6 +1,6 @@
 # 001 — Check before create
 
-Status: implemented (2026-10-28) · Issue: [#1](https://github.com/gaboesquivel/meta-cto/issues/1)
+Status: implemented (2026-10-28) · Issue: [#1](https://github.com/gaboesquivel/meta-cto/issues/1) · Amended by [0002](../decisions/0002-fragmentation-and-duplicate-association.md) (metrics: Intake Duplicate Rate replaces fragmentation rate; Mark Duplicate and Undo replace Merge and Split)
 Slice: MVP slice 1, Capture → Connect ([PRODUCT.md](../../PRODUCT.md#mvp-slices)), plus a minimal internal UI pulled forward from slice 2
 Decisions: [0001 Postgres with pgvector on Neon, via Drizzle](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 Time box: one 3-hour reviewed build (2026-10-28)
