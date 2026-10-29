@@ -109,6 +109,18 @@ const load = async () => {
   console.log(
     `Loaded Pilot Workspace: ${result.accounts} accounts, ${result.featureRequests} backlog requests, ${result.embedded} embeddings computed.`,
   );
+  const { groundTruth } = result;
+  if (groundTruth.outcome === "skipped") console.warn(groundTruth.reason);
+  else {
+    const said = {
+      loaded: "Stored",
+      reset: "Replaced (reset: changed after freeze, reading reset)",
+      unchanged: "Unchanged",
+    }[groundTruth.outcome];
+    console.log(
+      `${said} pilot ground truth (feedback set, Answer Key, manifest) at ${groundTruth.fingerprint}.`,
+    );
+  }
   if (result.drifted.length > 0) {
     console.warn(
       `Loaded rows differ from the files and were not overwritten: ${result.drifted.join(", ")}.`,

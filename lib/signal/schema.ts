@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  doublePrecision,
+  integer,
   check,
   index,
   jsonb,
@@ -288,5 +290,126 @@ export const reviewDecisions = pgTable(
       "review_decisions_related_has_dimension",
       sql`(${table.decision} = 'related') = (${table.sharedDimension} is not null)`,
     ),
+  ],
+);
+
+/**
+ * Pilot ground truth (spec 004, decision 0004): one record per load of frozen pilot files into the
+ * Pilot Workspace. The feedback set and Answer Key below belong to a load; the latest completed
+ * load (`loaded_at` set) is current. A load with a new fingerprint replaces the stored ground truth
+ * and is recorded as a reset; earlier load records stay as history. Never served item by item.
+ */
+export const pilotLoads = pgTable(
+  "pilot_loads",
+  {
+    accounts: integer("accounts").notNull(),
+    answerKeyEntries: integer("answer_key_entries").notNull(),
+    createdAt: createdAt(),
+    expectedBacklogDuplicateRate: doublePrecision("expected_backlog_duplicate_rate"),
+    featureRequests: integer("feature_requests").notNull(),
+    feedback: integer("feedback").notNull(),
+    /** The pilot files' fingerprint, equal to the committed lock's when loaded. */
+    fingerprint: text("fingerprint").notNull(),
+    id: id(),
+    /** Set once every ground-truth row is written; null means the load did not finish. */
+    loadedAt: timestamp("loaded_at", { withTimezone: true }),
+    manifest: jsonb("manifest").notNull(),
+    /** The fingerprint this load replaced; null on the first load. */
+    previousFingerprint: text("previous_fingerprint"),
+    /** Replaced ground truth loaded from a different fingerprint: earlier readings reset. */
+    reset: boolean("reset").notNull().default(false),
+    sharesNeed: integer("shares_need").notNull(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [index("pilot_loads_workspace_loaded").on(table.workspaceId, table.loadedAt)],
+);
+
+/** A pilot feedback item an agent files through a Check; never a Feature Request. */
+export const pilotFeedback = pgTable(
+  "pilot_feedback",
+  {
+    accountId: uuid("account_id").references(() => accounts.id),
+    accountKey: text("account_key").notNull(),
+    customerName: text("customer_name").notNull(),
+    customerRole: text("customer_role").notNull(),
+    description: text("description").notNull(),
+    id: id(),
+    key: text("key").notNull(),
+    loadId: uuid("load_id")
+      .notNull()
+      .references(() => pilotLoads.id),
+    title: text("title").notNull(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [uniqueIndex("pilot_feedback_load_key").on(table.loadId, table.key)],
+);
+
+/** One Answer Key need-cluster label: a backlog Feature Request key or a feedback item key. */
+export const pilotAnswerKey = pgTable(
+  "pilot_answer_key",
+  {
+    /** As written in the file (date or datetime), so it round-trips into the fingerprint. */
+    confirmedAt: text("confirmed_at"),
+    confirmedBy: text("confirmed_by"),
+    id: id(),
+    key: text("key").notNull(),
+    kind: text("kind").$type<"feature_request" | "feedback">().notNull(),
+    loadId: uuid("load_id")
+      .notNull()
+      .references(() => pilotLoads.id),
+    needId: text("need_id").notNull(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [
+    uniqueIndex("pilot_answer_key_load_kind_key").on(table.loadId, table.kind, table.key),
+    check("pilot_answer_key_kind", sql`${table.kind} in ('feature_request', 'feedback')`),
+  ],
+);
+
+/**
+ * One eval run (spec 004): every Held-Out Set v2 run, refusals and failures included, replacing
+ * the committed run log. `judged_pairs` is false when no pair reached the judge; `repeat` when an
+ * earlier judged run used the same set, fingerprint and prompt version. Origin is always `eval`.
+ */
+export const evalRuns = pgTable(
+  "eval_runs",
+  {
+    completed: integer("completed").notNull(),
+    createdAt: createdAt(),
+    /** Failed pairs: ids and errors only. */
+    failureDetails: jsonb("failure_details").notNull(),
+    failures: integer("failures").notNull(),
+    /** SHA-256 of the set as run; null when the set could not be read. */
+    fingerprint: text("fingerprint"),
+    id: id(),
+    judgedPairs: boolean("judged_pairs").notNull(),
+    message: text("message"),
+    model: text("model").notNull(),
+    origin: origin(),
+    pairs: integer("pairs").notNull(),
+    promptVersion: text("prompt_version").notNull(),
+    /** The v2 precision readings (counts, intervals, verdicts); null for refusals and v1 sets. */
+    readings: jsonb("readings"),
+    repeat: boolean("repeat").notNull().default(false),
+    /** Per-pair expected and predicted Verdicts by pair id. */
+    results: jsonb("results").notNull(),
+    sameNeedPositives: integer("same_need_positives").notNull(),
+    setName: text("set_name").notNull(),
+    status: text("status").$type<"completed" | "failed" | "refused">().notNull(),
+  },
+  (table) => [
+    index("eval_runs_set_fingerprint_prompt").on(
+      table.setName,
+      table.fingerprint,
+      table.promptVersion,
+    ),
+    check("eval_runs_status", sql`${table.status} in ('completed', 'failed', 'refused')`),
+    check("eval_runs_origin", sql`${table.origin} = 'eval'`),
   ],
 );
