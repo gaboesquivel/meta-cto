@@ -229,3 +229,13 @@ Summary: Started ship (preflight only), then per the user's instruction skipped 
 2026-10-29T05:00:00Z — "continue, build it"
 Summary: Found the work already delivered: another session (user's "push to main, no test") fast-forwarded main to chore/retro-metric-tests-verify-prod, added the skills update (710339a) and pushed origin/main at f8e30ab, deleting the branch locally. No PR needed. Ran `pnpm verify:prod origin/main` (read-only) to check production.
 Skills used: build. Docs changed/created: none.
+
+2026-10-29T02:11:03Z — /align (command not installed in this session). Told the user it is not available and asked whether they meant /tldr (session alignment check), /flow (align PRODUCT/DESIGN/GLOSSARY/ARCHITECTURE docs) or /review (check work against spec). Skills used: none. Docs changed: none.
+
+2026-10-29T02:12:58Z — "Show me architecture, features, journeys; are we aligned with vision/problems/metrics/roadmap; working/missing/focus" (visual, critical)
+Summary: Read PRODUCT, ARCHITECTURE, DESIGN, README, specs 001/002, decision 0002, eval report; fetched live /api/metrics and CI run events. Rendered architecture diagram and journeys/metrics scorecard. Findings: journeys 1-3 built, 4 minimal, 5 not started; main metric has no production data (0 reviewed, backlog scan 0/41 flagged); same-need precision 100% on only 10 positives, related precision 62.5%; CI still dispatch-only; README still template boilerplate; riskiest assumptions (submitter behavior, PMs using the queue) are untested with real users. Recommended focus: get real evidence (run scan and seed reviews, larger held-out set, a pilot) before slice 3.
+Skills used: tldr. Docs changed: none.
+
+2026-10-29T02:13:44Z — "update readme with first diagram"
+Summary: Added an Architecture section to README.md with the Signal architecture diagram as Mermaid (actors → check/review service → AI judge, Postgres, held-out eval). Committed; not pushed.
+Skills used: none. Docs changed: README.md.

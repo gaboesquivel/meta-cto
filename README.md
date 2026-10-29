@@ -2,6 +2,34 @@
 
 Single-app agentic Next.js template: public Assistant, protected Operator, Eve, OpenUI Lang GenUI, MCP Streamable HTTP, and MCP Apps.
 
+## Architecture
+
+Signal ([PRODUCT.md](./PRODUCT.md)): one service, three ways in. Details in [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+```mermaid
+flowchart TB
+  staff["Staff submitter<br/>Internal UI"]
+  agent["Agent submitter<br/>Public MCP, REST"]
+  pm["Product manager<br/>/review, Operator MCP"]
+
+  subgraph service["Signal service (one contract, three transports)"]
+    check["Check before create<br/>Same / related / different"]
+    review["Review and metrics<br/>Duplicate, related, distinct; undo"]
+  end
+
+  judge["AI judge<br/>Embed, then judge"]
+  db[("Postgres + pgvector<br/>Events, evidence")]
+  evals["Held-out eval<br/>25 frozen pairs"]
+
+  staff --> check
+  agent --> check
+  pm --> review
+  check --> judge
+  check --> db
+  review --> db
+  judge -.-> evals
+```
+
 ## Quick start
 
 ```bash
