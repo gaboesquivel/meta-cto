@@ -35,6 +35,7 @@ describe("signal repository", () => {
       createdByActorType: "staff",
       description: `${title} description`,
       embedding,
+      origin: "demo",
       title,
       underlyingNeed: null,
       workspaceId,
@@ -80,6 +81,31 @@ describe("signal repository", () => {
     assert.equal(second.created, false);
     assert.equal(second.support.id, first.support.id);
     assert.equal(first.support.originalFeatureRequestId, request.id);
+  });
+
+  it("finds an existing workspace again by slug", async () => {
+    const again = await repo.ensureWorkspace({ name: "Crewday Demo", slug: "crewday" });
+
+    assert.equal(again.id, workspaceId);
+  });
+
+  it("lists feature request keys oldest first, without embeddings or text", async () => {
+    const first = await addRequest("Shift swaps don't sync", unit(0));
+    const second = await addRequest("Payroll export", unit(1));
+
+    const rows = await repo.listFeatureRequestKeys(workspaceId);
+
+    assert.deepEqual(
+      rows.map((row) => row.id),
+      [first.id, second.id],
+    );
+    assert.deepEqual(Object.keys(rows[0] ?? {}).toSorted(), [
+      "checkId",
+      "createdAt",
+      "createdViaCheck",
+      "id",
+      "seedKey",
+    ]);
   });
 
   it("upserts accounts by name within a workspace", async () => {

@@ -3,6 +3,7 @@ import type {
   DecideInput,
   DuplicateEvidence,
   EvidenceVia,
+  FeatureRequestRef,
   ReviewDecision,
   ReviewDecisionKind,
   ReviewMetrics,
@@ -158,6 +159,26 @@ export const buildDecisionBody = (input: {
   return { body: { ...decide, actor: { name, type: "staff" } }, ok: true };
 };
 
+/** Blind Review matches shown at once; the Product Manager narrows by typing. */
+export const BLIND_CHOICE_LIMIT = 8;
+
+/**
+ * Blind Review: Feature Requests whose title contains the typed text, in title order (no AI
+ * ranking), without the request under review. Empty until something is typed.
+ */
+export const filterBlindChoices = (
+  choices: FeatureRequestRef[],
+  query: string,
+  selfId: string,
+  limit = BLIND_CHOICE_LIMIT,
+): FeatureRequestRef[] => {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  return choices
+    .filter((choice) => choice.id !== selfId && choice.title.toLowerCase().includes(needle))
+    .slice(0, limit);
+};
+
 export type ReviewActionBlock = "name" | "pending" | "sign_in";
 
 /** Whether review actions can run, and why not: Operator sign-in, then a name, then pending. */
@@ -252,4 +273,46 @@ export const DECISION_LABELS: Record<ReviewDecisionKind, string> = {
   duplicate: "Duplicate",
   none: "No duplicates",
   related: "Related",
+};
+
+/** The Workspace an Operator works in `/review` (spec 003). The demo is everyone's default. */
+export type ReviewWorkspace = "demo" | "pilot";
+
+/**
+ * Adds the Workspace selector to a review API path. Only the selector travels: the server checks
+ * the Operator session and resolves the Pilot Workspace itself, so the browser never holds the
+ * Pilot Key.
+ */
+export const withWorkspace = (path: string, workspace: ReviewWorkspace): string =>
+  workspace === "pilot" ? `${path}${path.includes("?") ? "&" : "?"}workspace=pilot` : path;
+
+export interface ReviewWorkspaceOption {
+  available: boolean;
+  label: string;
+  note: string;
+  value: ReviewWorkspace;
+}
+
+/** The Workspace switch: shown only with an Operator session; the Pilot greys out when off. */
+export const reviewWorkspaceOptions = (input: {
+  operator: boolean;
+  pilotAvailable: boolean;
+}): ReviewWorkspaceOption[] | null => {
+  if (!input.operator) return null;
+  return [
+    {
+      available: true,
+      label: "Crewday demo",
+      note: "The seeded Crewday Demo Workspace.",
+      value: "demo",
+    },
+    {
+      available: input.pilotAvailable,
+      label: "Pilot",
+      note: input.pilotAvailable
+        ? "The Pilot Workspace of the proof run; some items are under Blind Review."
+        : "Unavailable: no Pilot Key (SIGNAL_PILOT_KEY) is configured on this deployment.",
+      value: "pilot",
+    },
+  ];
 };

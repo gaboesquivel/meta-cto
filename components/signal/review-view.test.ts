@@ -13,11 +13,14 @@ import {
   canonicalIdFor,
   describeDecision,
   duplicateOriginLabel,
+  filterBlindChoices,
   formatRate,
   groupEvidenceByAccount,
   metricCards,
   reviewActionState,
+  reviewWorkspaceOptions,
   splitCommentsByVia,
+  withWorkspace,
 } from "./review-view";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -30,6 +33,7 @@ const reviewMetrics = (overrides: Partial<ReviewMetrics> = {}): ReviewMetrics =>
   checksWithSameNeed: 4,
   createsAfterSameNeed: 1,
   intakeDuplicateRate: { duplicates: 1, rate: 0.1, reviewed: 10 },
+  origin: "demo",
   reviewCoverage: { rate: 0.5, reviewed: 10, total: 20 },
   suggestionAcceptance: 0.75,
   suspectedDuplication: { open: 2, rate: 2 / 30, total: 30 },
@@ -52,6 +56,7 @@ const support = (
 });
 
 const decision = (overrides: Partial<ReviewDecision> = {}): ReviewDecision => ({
+  blind: false,
   actor: { name: "Priya", type: "staff" },
   canonicalId: null,
   createdAt: "2026-10-28T00:00:00.000Z",
@@ -359,5 +364,59 @@ describe("describeDecision", () => {
     expect(describeDecision(decision(), new Map())).toBe(
       "Distinct: “a Feature Request” and “a Feature Request”",
     );
+  });
+});
+
+describe("filterBlindChoices", () => {
+  const choices = [
+    { id: A, title: "Approve shift trades" },
+    { id: B, title: "Manager approval for swaps" },
+    { id: S, title: "Zeta export" },
+  ];
+
+  it("shows nothing until the Product Manager types", () => {
+    expect(filterBlindChoices(choices, "  ", A)).toEqual([]);
+  });
+
+  it("matches titles case-insensitively, keeps title order and excludes the request itself", () => {
+    expect(filterBlindChoices(choices, "APPRO", A)).toEqual([choices[1]]);
+    expect(filterBlindChoices(choices, "a", S).map((choice) => choice.id)).toEqual([A, B]);
+  });
+
+  it("caps the matches", () => {
+    expect(filterBlindChoices(choices, "e", "none", 2)).toHaveLength(2);
+  });
+});
+
+describe("withWorkspace", () => {
+  it("leaves demo paths unchanged", () => {
+    expect(withWorkspace("/api/review/queue", "demo")).toBe("/api/review/queue");
+  });
+
+  it("adds the pilot selector, never the Pilot Key", () => {
+    expect(withWorkspace("/api/review/queue", "pilot")).toBe("/api/review/queue?workspace=pilot");
+    expect(withWorkspace("/api/metrics?origin=pilot", "pilot")).toBe(
+      "/api/metrics?origin=pilot&workspace=pilot",
+    );
+  });
+});
+
+describe("reviewWorkspaceOptions", () => {
+  it("offers no switch without an Operator session", () => {
+    expect(reviewWorkspaceOptions({ operator: false, pilotAvailable: true })).toBeNull();
+  });
+
+  it("offers the Crewday demo and the Pilot to an Operator", () => {
+    const options = reviewWorkspaceOptions({ operator: true, pilotAvailable: true });
+    expect(options?.map((option) => [option.value, option.available])).toEqual([
+      ["demo", true],
+      ["pilot", true],
+    ]);
+  });
+
+  it("shows the Pilot as unavailable when no Pilot Key is configured", () => {
+    const pilot = reviewWorkspaceOptions({ operator: true, pilotAvailable: false })?.[1];
+    expect(pilot?.available).toBe(false);
+    expect(pilot?.note).toMatch(/SIGNAL_PILOT_KEY/u);
   });
 });

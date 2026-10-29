@@ -1,3 +1,4 @@
+import { proofMcpTools, proofPaths, proofSchemas } from "@/lib/openapi/proof-paths";
 import {
   signalMcpTools,
   signalPaths,
@@ -29,6 +30,7 @@ const toolPaths = {
     summary: "List registered GenUI components",
   },
   ...signalMcpTools,
+  ...proofMcpTools,
 } as const;
 
 const mcpToolSchemaName = (name: string) => `McpTool_${name.replaceAll("-", "_")}`;
@@ -149,6 +151,7 @@ const openApiComponents = {
     },
     ...mcpToolComponents,
     ...signalSchemas,
+    ...proofSchemas,
   },
   securitySchemes: signalSecuritySchemes,
 };
@@ -275,6 +278,7 @@ export const buildOpenApiDocument = (origin: string) => {
     "/api/genui/compose": { post: genuiOperation },
     "/api/mcp": { post: mcpOperation },
     ...signalPaths,
+    ...proofPaths,
     "/v1/api/chat": {
       post: { ...chatOperation, operationId: "starterChatV1" },
     },

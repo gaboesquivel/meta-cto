@@ -137,14 +137,18 @@ export const runCheck = async (context: ServiceContext, raw: CheckInput): Promis
     draftHash: draftHash(input.draft),
     expiresAt,
     id: checkId,
+    origin: context.origin,
     result,
     workspaceId: context.workspaceId,
   });
   await context.repo.insertEvent({
+    origin: context.origin,
     payload: {
       actor: input.actor,
       checkId,
       degraded: judged.degraded,
+      // The pilot feedback item this Check files, when the agent harness names it (spec 003).
+      ...(input.feedbackItemId ? { feedbackItemId: input.feedbackItemId } : {}),
       relatedNeed: countVerdict(judged.candidates, "related_need"),
       sameNeed: countVerdict(judged.candidates, "same_need"),
     },

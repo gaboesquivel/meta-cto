@@ -1,6 +1,7 @@
 import type { SignalService } from "../contracts";
 import { requireFeatureRequest, toContext } from "./context";
 import type { SignalServiceDeps } from "./context";
+import { withholdForBlindReview } from "./blind-detail";
 import { runCheck } from "./check";
 import { runCreate } from "./create";
 import { runComment, runSupport } from "./engagement";
@@ -18,7 +19,10 @@ export const createSignalService = (deps: SignalServiceDeps): SignalService => {
     check: async (input) => await runCheck(context, input),
     comment: async (id, input) => await runComment(context, id, input),
     create: async (input) => await runCreate(context, input),
-    get: async (id) => await buildDetail(context, await requireFeatureRequest(context, id)),
+    get: async (id) => {
+      const row = await requireFeatureRequest(context, id);
+      return await withholdForBlindReview(context, row, await buildDetail(context, row));
+    },
     search: async (input) => await runSearch(context, input),
     support: async (id, input) => await runSupport(context, id, input),
   };

@@ -1,5 +1,6 @@
 import { registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/server";
+import type { PilotAccess } from "@/lib/auth/pilot-access";
 
 import {
   GENUI_PREVIEW_RESOURCE_URI,
@@ -7,10 +8,12 @@ import {
   readGenuiPreviewHtml,
 } from "./genui-preview-resource";
 import { registerOperatorMcpTools } from "./register-operator-tools";
-import { registerReviewMcpTools } from "./register-review-tools";
+import { registerProofMcpTool } from "./register-proof-tools";
+import { registerReviewMcpTools, registerReviewMetricsMcpTool } from "./register-review-tools";
 import { registerStarterMcpTools } from "./register-tools";
 
-export const createOperatorMcpServer = () => {
+/** `access` from the Pilot Key header binds the review tools to the Pilot Workspace (demo by default). */
+export const createOperatorMcpServer = ({ access }: { access?: PilotAccess } = {}) => {
   const server = new McpServer({
     name: "meta-cto-operator",
     version: "1.0.0",
@@ -36,6 +39,9 @@ export const createOperatorMcpServer = () => {
 
   registerStarterMcpTools(server);
   registerOperatorMcpTools(server);
-  registerReviewMcpTools(server);
+  registerReviewMcpTools(server, { access });
+  registerReviewMetricsMcpTool(server, access);
+  // The route verified Operator access; the Proof Report needs nothing more.
+  registerProofMcpTool(server, () => ({ ok: true, via: "operator" }));
   return server;
 };

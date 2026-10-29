@@ -23,6 +23,7 @@ export const runSupport = async (context: ServiceContext, id: string, raw: Suppo
   });
   if (inserted.created) {
     await context.repo.insertEvent({
+      origin: context.origin,
       payload: {
         accountId: account.id,
         actor: input.actor,
@@ -55,6 +56,7 @@ export const runComment = async (
     isDemo: context.markDemo,
   });
   await context.repo.insertEvent({
+    origin: context.origin,
     payload: {
       accountId: account?.id ?? null,
       actor: input.actor,

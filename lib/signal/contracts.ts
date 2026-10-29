@@ -9,6 +9,19 @@ export const MAX_SAME_NEED = 3;
 export const MAX_RELATED_NEED = 2;
 export const CANDIDATE_POOL = 10;
 
+/**
+ * Origin: where a Check or event came from (decision 0003). Recorded at the source; a metric
+ * reads one Origin at a time. `pilot` is the Pilot Workspace (spec 003 task 02).
+ */
+export const ORIGINS = ["pilot", "demo", "seed", "eval"] as const;
+export type Origin = (typeof ORIGINS)[number];
+export const originSchema = z.enum(ORIGINS);
+/** The Origin of the Crewday demo caller, the default for REST, MCP and `/review`. */
+export const DEMO_ORIGIN: Origin = "demo";
+
+export const metricsInputSchema = z.object({ origin: originSchema.optional() });
+export type MetricsInput = z.infer<typeof metricsInputSchema>;
+
 export const actorSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(["agent", "staff"]),
@@ -32,13 +45,34 @@ export const draftSchema = z.object({
   title: z.string().trim().min(3).max(MAX_TITLE),
 });
 
-export const checkInputSchema = z.object({
+const draftInputSchema = z.object({
   actor: actorSchema,
   draft: draftSchema,
   onBehalfOf: onBehalfOfSchema.optional(),
 });
 
-export const createInputSchema = checkInputSchema.extend({
+/** Longest feedback item id an agent harness may pass on a Check. */
+export const MAX_FEEDBACK_ITEM_ID = 120;
+
+export const checkInputSchema = draftInputSchema.extend({
+  /**
+   * Pilot agent harness only (spec 003): the key of the pilot feedback item this Check files
+   * (`feedback.json` `key`). Recorded on the `draft_checked` event; the Support, Comment or create
+   * that passes this Check's `checkId` is scored against that item's Answer Key entry. Optional:
+   * omitted, nothing changes.
+   */
+  feedbackItemId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_FEEDBACK_ITEM_ID)
+    .optional()
+    .describe(
+      "Pilot agent harness only: the pilot feedback item key this Check files. Pass this Check's checkId on the Support, Comment or create so it is scored against the Answer Key.",
+    ),
+});
+
+export const createInputSchema = draftInputSchema.extend({
   /** Optional in the schema so a missing Check returns `check_required`, not `invalid_input`. */
   checkId: z.string().uuid().optional(),
   skipReason: z.string().trim().min(3).max(500).optional(),
@@ -203,6 +237,11 @@ export interface SuggestionMetrics {
 
 /** Spec 002 metrics: the shape of `GET /api/metrics`. */
 export interface ReviewMetrics extends SuggestionMetrics {
+  /**
+   * The intake Origin: Checks, events and Feature Requests created through a Check count only
+   * from it. The pre-Signal backlog (baseline, its suspicions) is the Workspace's, for any Origin.
+   */
+  origin: Origin;
   /** Reviewed pre-Signal Feature Requests confirmed Duplicate ÷ reviewed pre-Signal Feature Requests. */
   backlogBaseline: { duplicates: number; rate: number | null; reviewed: number };
   /**
@@ -242,6 +281,8 @@ export interface SuspectedDuplicate {
 
 export interface ReviewDecision {
   actor: Actor;
+  /** Blind Review (spec 003): decided without the AI's suggestion or Reason in view. */
+  blind: boolean;
   /** Duplicate only: the canonical Feature Request, one of `featureRequestId` and `otherId`. */
   canonicalId: string | null;
   createdAt: string;
@@ -316,6 +357,12 @@ export interface ReviewSuspicionView {
 }
 
 export interface ReviewQueueItem {
+  /**
+   * Chosen for Blind Review (spec 003): `suspicions` is empty and `underlyingNeed` null so the
+   * AI's suggestion, Reason and restated need are withheld; pick the other side from
+   * `ReviewQueue.blindChoices`. The decision records `blind: true`.
+   */
+  blind: boolean;
   featureRequest: FeatureRequestSummary;
   /** Created through a Check (spec 001); otherwise a pre-Signal backlog Feature Request. */
   isNew: boolean;
@@ -323,6 +370,11 @@ export interface ReviewQueueItem {
 }
 
 export interface ReviewQueue {
+  /**
+   * Present only when an item is blind: every open Feature Request in the Workspace, by title,
+   * with no AI ranking, so a blind reviewer can choose the other side (and canonical) of a decision.
+   */
+  blindChoices?: FeatureRequestRef[];
   counts: { backlog: number; new: number };
   items: ReviewQueueItem[];
 }
@@ -345,6 +397,7 @@ export type SignalErrorCode =
   | "invalid_input"
   | "not_found"
   | "operator_required"
+  | "pilot_key_required"
   | "service_unavailable"
   | "skip_reason_required";
 
@@ -413,8 +466,11 @@ export interface SignalService {
 /** Review port (spec 002). Writes need Operator access, checked by REST and MCP before calling. */
 export interface ReviewService {
   decide: (input: DecideInput, actor: Actor) => Promise<ReviewDecision>;
-  /** Review metrics plus Suggestion Acceptance; needs only the database. */
-  metrics: () => Promise<ReviewMetrics>;
+  /**
+   * Review metrics plus Suggestion Acceptance for one Origin, the caller's own when omitted;
+   * needs only the database.
+   */
+  metrics: (input?: MetricsInput) => Promise<ReviewMetrics>;
   queue: () => Promise<ReviewQueue>;
   scan: (options?: ScanOptions) => Promise<ScanResult>;
   undo: (decisionId: string, actor: Actor) => Promise<ReviewDecision>;

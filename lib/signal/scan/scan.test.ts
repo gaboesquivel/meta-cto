@@ -29,6 +29,7 @@ const setup = async (): Promise<Context> => {
       createdByActorType: "staff",
       description: `${title} description`,
       embedding,
+      origin: "demo",
       title,
       underlyingNeed: null,
       workspaceId,

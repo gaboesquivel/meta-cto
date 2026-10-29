@@ -86,6 +86,7 @@ export const metrics: ReviewMetrics = {
   checksWithSameNeed: 2,
   createsAfterSameNeed: 1,
   intakeDuplicateRate: { duplicates: 1, rate: 0.25, reviewed: 4 },
+  origin: "demo",
   reviewCoverage: { rate: 0.8, reviewed: 4, total: 5 },
   suggestionAcceptance: 0.5,
   suspectedDuplication: { open: 2, rate: 0.1, total: 20 },
@@ -94,6 +95,7 @@ export const metrics: ReviewMetrics = {
 
 export const reviewDecision: ReviewDecision = {
   actor,
+  blind: false,
   canonicalId: OTHER_FR_ID,
   createdAt: "2026-10-28T13:00:00.000Z",
   decision: "duplicate",
@@ -120,6 +122,7 @@ export const reviewQueue: ReviewQueue = {
   counts: { backlog: 1, new: 0 },
   items: [
     {
+      blind: false,
       featureRequest: summary(FR_ID, draft.title),
       isNew: false,
       suspicions: [
@@ -133,6 +136,23 @@ export const reviewQueue: ReviewQueue = {
           suggestionId: SUGGESTION_ID,
         },
       ],
+    },
+  ],
+};
+
+/** A queue whose only item is under Blind Review: no suspicion, Reason or restated need. */
+export const blindReviewQueue: ReviewQueue = {
+  blindChoices: [
+    { id: FR_ID, title: draft.title },
+    { id: OTHER_FR_ID, title: "Shift swaps don't sync reliably" },
+  ],
+  counts: { backlog: 0, new: 1 },
+  items: [
+    {
+      blind: true,
+      featureRequest: { ...summary(FR_ID, draft.title), underlyingNeed: null },
+      isNew: true,
+      suspicions: [],
     },
   ],
 };

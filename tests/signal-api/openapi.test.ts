@@ -13,6 +13,7 @@ describe("OpenAPI document for Signal routes", () => {
     ["/api/feature-requests/{id}/supports", "post", "supportFeatureRequest"],
     ["/api/feature-requests/{id}/comments", "post", "commentOnFeatureRequest"],
     ["/api/metrics", "get", "getSignalMetrics"],
+    ["/api/proof", "get", "getProofReport"],
   ])("lists %s %s as %s", (path, method, operationId) => {
     const item = (doc.paths as Record<string, Record<string, { operationId: string }>>)[path];
     expect(item?.[method]?.operationId).toBe(operationId);
@@ -34,11 +35,84 @@ describe("OpenAPI document for Signal routes", () => {
     "comment_on_feature_request",
     "search_feature_requests",
     "get_feature_request",
+    "proof_report",
+    "review_metrics",
   ])("catalogs MCP tool %s with x-mcp-tool and a description", (tool) => {
     const schemas = doc.components.schemas as Record<string, Record<string, unknown>>;
     const schema = schemas[`McpTool_${tool}`];
     expect(schema?.["x-mcp-tool"]).toBe(tool);
     expect(schema?.description).toEqual(expect.any(String));
     expect(schema?.type).toBe("object");
+  });
+
+  it("documents the Pilot Key on every Signal operation", () => {
+    const schemes = doc.components.securitySchemes as Record<string, { name?: string }>;
+    expect(schemes.pilotKey?.name).toBe("X-Signal-Pilot-Key");
+    const paths = doc.paths as unknown as Record<
+      string,
+      Record<string, { responses: Record<string, { description: string }>; security?: unknown[] }>
+    >;
+    for (const path of ["/api/checks", "/api/feature-requests/{id}", "/api/review/scan"]) {
+      for (const operation of Object.values(paths[path] ?? {})) {
+        expect(operation.responses["401"]?.description).toMatch(/pilot_key_required/u);
+      }
+    }
+    expect(paths["/api/checks"]?.post?.security).toContainEqual({});
+    expect(paths["/api/checks"]?.post?.security).toContainEqual({ pilotKey: [] });
+    // A pilot review write needs Operator access together with the Pilot Key, never the key alone.
+    const scan = paths["/api/review/scan"]?.post?.security;
+    expect(scan).toContainEqual({ operatorBearer: [], pilotKey: [] });
+    expect(scan).not.toContainEqual({ pilotKey: [] });
+  });
+
+  it("documents the Proof Report: Pilot Key or Operator access, never open", () => {
+    const paths = doc.paths as unknown as Record<
+      string,
+      Record<
+        string,
+        {
+          responses: Record<string, { description: string; content?: unknown }>;
+          security?: unknown[];
+        }
+      >
+    >;
+    const proof = paths["/api/proof"]?.get;
+    expect(proof?.security).toEqual(
+      expect.arrayContaining([{ pilotKey: [] }, { operatorBearer: [] }, { operatorSession: [] }]),
+    );
+    expect(proof?.security).not.toContainEqual({});
+    expect(proof?.responses["401"]?.description).toMatch(/pilot_key_required/u);
+    expect(proof?.responses["503"]?.description).toMatch(/pilot_key_required/u);
+    const schemas = doc.components.schemas as Record<string, { required?: string[] }>;
+    expect(schemas.ProofReport?.required).toEqual(
+      expect.arrayContaining(["bars", "verdict", "consequences", "killCriterionTriggered"]),
+    );
+    expect(schemas.ProofBar?.required).toEqual(
+      expect.arrayContaining(["value", "counts", "interval", "verdict", "reasons"]),
+    );
+  });
+
+  it("documents the Operator's workspace selector on the review routes", () => {
+    const paths = doc.paths as unknown as Record<
+      string,
+      Record<string, { parameters?: { in: string; name: string }[] }>
+    >;
+    for (const [path, method] of [
+      ["/api/review/queue", "get"],
+      ["/api/metrics", "get"],
+      ["/api/review/decisions", "post"],
+      ["/api/review/decisions/{id}/undo", "post"],
+      ["/api/review/scan", "post"],
+    ] as const) {
+      const names = (paths[path]?.[method]?.parameters ?? []).map((parameter) => parameter.name);
+      expect(names, `${method} ${path}`).toContain("workspace");
+    }
+  });
+
+  it("tells clients to branch on the pilot_key_required reason", () => {
+    const schemes = doc.components.securitySchemes as Record<string, { description?: string }>;
+    expect(schemes.pilotKey?.description).toMatch(/missing.*invalid.*disabled/su);
+    const schemas = doc.components.schemas as Record<string, { description?: string }>;
+    expect(schemas.McpTool_review_metrics?.description).toMatch(/details\.reason/u);
   });
 });

@@ -2,27 +2,37 @@ import { createHash } from "node:crypto";
 
 import type { z } from "zod";
 
-import type { Actor, Draft, Embedder, Judge, OnBehalfOf } from "../contracts";
-import { SignalError } from "../contracts";
+import type { Actor, Draft, Embedder, Judge, OnBehalfOf, Origin } from "../contracts";
+import { DEMO_ORIGIN, SignalError } from "../contracts";
 import type { SignalRepository } from "../repository";
 
 export interface SignalServiceDeps {
+  /**
+   * Share of new Feature Requests chosen for Blind Review (spec 003), as the review service uses;
+   * 0 by default (the Crewday demo). Reads withhold the AI's suggestions on a blind request until
+   * its own decision is made.
+   */
+  blindShare?: number;
   embedder: Embedder;
   judge: Judge;
   judgeTimeoutMs?: number;
   /** Marks every row the service writes as demo data; the MVP has only the demo Workspace. */
   markDemo?: boolean;
   now?: () => Date;
+  /** The caller's Origin, recorded on every Check, Feature Request and event; defaults to demo. */
+  origin?: Origin;
   repo: SignalRepository;
   workspaceId: string;
 }
 
 export interface ServiceContext {
+  blindShare: number;
   embedder: Embedder;
   judge: Judge;
   judgeTimeoutMs: number;
   markDemo: boolean;
   now: () => Date;
+  origin: Origin;
   repo: SignalRepository;
   workspaceId: string;
 }
@@ -30,11 +40,13 @@ export interface ServiceContext {
 export const DEFAULT_JUDGE_TIMEOUT_MS = 20_000;
 
 export const toContext = (deps: SignalServiceDeps): ServiceContext => ({
+  blindShare: deps.blindShare ?? 0,
   embedder: deps.embedder,
   judge: deps.judge,
   judgeTimeoutMs: deps.judgeTimeoutMs ?? DEFAULT_JUDGE_TIMEOUT_MS,
   markDemo: deps.markDemo ?? true,
   now: deps.now ?? (() => new Date()),
+  origin: deps.origin ?? DEMO_ORIGIN,
   repo: deps.repo,
   workspaceId: deps.workspaceId,
 });

@@ -81,7 +81,7 @@ _Avoid_: Metadata, customer data, enrichment
 ## People and tenancy
 
 **Workspace**:
-One product team's Signal space and the boundary of all its Feature Requests. In the MVP there is one: the Crewday Demo Workspace.
+One product team's Signal space and the boundary of all its Feature Requests. In the MVP: the Crewday Demo Workspace and a Pilot Workspace ([decision 0003](docs/decisions/0003-proof-before-slice-3.md)).
 _Avoid_: Tenant, organization, project
 
 **Account**:
@@ -139,7 +139,7 @@ Review Decision that a new Feature Request with no Suspected Duplicates repeats 
 _Avoid_: None, undecided
 
 **Reviewed**:
-A Feature Request whose review is complete as a whole: every Suspected Duplicate on it is decided, or the Product Manager confirmed it has none.
+A Feature Request whose review is complete as a whole: every Suspected Duplicate on it is decided, or the Product Manager confirmed it has none. A Blind Review item is Reviewed once its own blind decision is made.
 _Avoid_: Triaged
 
 ## Measurement context
@@ -175,6 +175,38 @@ _Avoid_: Accuracy
 **Crewday Demo Workspace**:
 The seeded Workspace for Crewday, a fictional workforce-scheduling SaaS, used for the demo, the replay and the Eval Set. Demo data, not Signal's target market.
 _Avoid_: Test tenant, sample data
+
+**Pilot Workspace**:
+The Workspace for the proof run (spec 003): a generated backlog and feedback set with an Answer Key, filed by agents and reviewed by people. Reachable only with a Pilot Key; separate from the Crewday Demo Workspace.
+_Avoid_: Staging, sandbox
+
+**Pilot Key**:
+The secret (`SIGNAL_PILOT_KEY`) an agent or person sends to act in the Pilot Workspace. It authorizes filing and reading; pilot review decisions also need Operator access.
+_Avoid_: API key, token
+
+**Proof Report**:
+The read-only report of every preset bar from decision 0003 with value, counts, interval and Pass, Fail or Inconclusive, and what follows for slice 3.
+_Avoid_: Dashboard, scorecard
+
+**Answer Key**:
+A person-confirmed need cluster (`needId`) for every pilot backlog Feature Request and every pilot feedback item; equal `needId` means the same need. Frozen before the run. A Feature Request filed in the pilot takes its feedback item's `needId`.
+_Avoid_: Ground truth file, labels
+
+**Origin**:
+Where a Check, domain event or Feature Request came from: `pilot`, `demo`, `seed` or `eval`. Recorded at the source. Intake metrics read the caller's Origin only; backlog measures read the Workspace's pre-Signal backlog.
+_Avoid_: Source, environment
+
+**Held-Out Set v2**:
+The second frozen Held-Out Set: person-confirmed labels, at least 60 same-need positives, written without sight of the current prompt. The first (v1, 25 pairs) stays frozen as the first reading.
+_Avoid_: New eval, test set
+
+**Agent Correctness**:
+The share of agent Supports, Comments and creates in the Pilot Workspace that match the Answer Key. A Support or Comment on a different need counts as harm; a create when the need already exists counts as a miss.
+_Avoid_: Agent accuracy, acceptance
+
+**Blind Review**:
+A new pilot Feature Request chosen (reproducibly, by share) to be reviewed without the AI's suggestion, Reason or Underlying Need, and the decision made on it, recorded as blind. Measures Product Manager agreement with the Answer Key free of anchoring.
+_Avoid_: Unassisted review
 
 ## Platform (template)
 

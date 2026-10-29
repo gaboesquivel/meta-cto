@@ -225,3 +225,96 @@ Summary: Ran `pnpm skills:update` (.agents lock: 10 skills updated) and `skills 
 
 [2026-10-28T20:15:00-06:00] Prompt: "ship it", then interrupted with "push to main, no test"
 Summary: Started ship (preflight only), then per the user's instruction skipped review/tests and fast-forwarded main to chore/retro-metric-tests-verify-prod and pushed origin main. Skills used: ship (preflight only). Docs changed: none.
+
+2026-10-29T05:00:00Z — "continue, build it"
+Summary: Found the work already delivered: another session (user's "push to main, no test") fast-forwarded main to chore/retro-metric-tests-verify-prod, added the skills update (710339a) and pushed origin/main at f8e30ab, deleting the branch locally. No PR needed. Ran `pnpm verify:prod origin/main` (read-only) to check production.
+Skills used: build. Docs changed/created: none.
+
+2026-10-29T02:11:03Z — /align (command not installed in this session). Told the user it is not available and asked whether they meant /tldr (session alignment check), /flow (align PRODUCT/DESIGN/GLOSSARY/ARCHITECTURE docs) or /review (check work against spec). Skills used: none. Docs changed: none.
+
+2026-10-29T02:12:58Z — "Show me architecture, features, journeys; are we aligned with vision/problems/metrics/roadmap; working/missing/focus" (visual, critical)
+Summary: Read PRODUCT, ARCHITECTURE, DESIGN, README, specs 001/002, decision 0002, eval report; fetched live /api/metrics and CI run events. Rendered architecture diagram and journeys/metrics scorecard. Findings: journeys 1-3 built, 4 minimal, 5 not started; main metric has no production data (0 reviewed, backlog scan 0/41 flagged); same-need precision 100% on only 10 positives, related precision 62.5%; CI still dispatch-only; README still template boilerplate; riskiest assumptions (submitter behavior, PMs using the queue) are untested with real users. Recommended focus: get real evidence (run scan and seed reviews, larger held-out set, a pilot) before slice 3.
+Skills used: tldr. Docs changed: none.
+
+2026-10-29T02:13:44Z — "update readme with first diagram"
+Summary: Added an Architecture section to README.md with the Signal architecture diagram as Mermaid (actors → check/review service → AI judge, Postgres, held-out eval). Committed; not pushed.
+Skills used: none. Docs changed: README.md.
+
+2026-10-29T02:13:59Z — "Not yet"
+Question (assistant → user): Push to origin/main? Answer: Not yet. Left 9ee8291 unpushed.
+Skills used: none. Docs changed: none.
+
+2026-10-29T02:14:25Z — "lets continue, thanks for the summary"
+Question (assistant → user): What should we continue with next (proof slice, slice 3, hygiene)? Answer: Proof slice (explore then spec real evidence before slice 3).
+Summary: Started exploring the proof slice.
+Skills used: explore. Docs changed: none (in progress).
+
+2026-10-29T02:16:04Z — "primarily agents and a couple people"
+Question (assistant → user): Who would the pilot users be? Answer: primarily agents and a couple of people.
+Skills used: explore (interview). Docs changed: none.
+
+2026-10-29T02:19:24Z — "1", then "Both hold"
+Question (assistant → user): What will agents file (real or generated feedback)? Answer: "1" — real evidence = real agent behavior + real human review, not real customers. Follow-up question: do the answer key and a separate pilot workspace hold? Answer: both hold.
+Skills used: explore (interview). Docs changed: none.
+
+2026-10-29T02:20:08Z — "yes" (confirmed proof-slice intent)
+Summary: Intent confirmed: proof slice before slice 3 — agents over MCP + 1-2 PM reviewers, separate pilot workspace, generated feedback with answer key, larger human-confirmed frozen held-out set, pilot vs demo separation. Starting grill + pre-mortem.
+Skills used: explore, grill. Docs changed: none.
+
+2026-10-29T02:23:20Z — grill answers
+Questions (assistant → user) and answers: ground truth → human-confirmed labels, feedback from a different model family than the judge; agent evidence → correctness vs answer key (acceptance not evidence); success bar → halve the baseline, coverage >=80%, ~200 filings, preset; related need → preset 75% precision threshold, else two-way for submitters (direction change then). Pre-mortem folded in: reviewer anchoring (blind subset), baseline built in advance by someone else, >=60 same-need positives, tag origin at source.
+Skills used: explore, grill. Docs changed: none.
+
+2026-10-29T02:24:50Z — "to spec"
+Summary: Moved to to-spec for the proof slice (PRODUCT.md diff not written separately; carried into the spec).
+Skills used: to-spec. Docs changed: (see next entry).
+
+2026-10-29T02:26:21Z — to-spec result
+Summary: Wrote spec 003 (draft) and decision 0003 (Proposed) on branch 003-prove-the-verdict; not pushed, no issue opened.
+Skills used: to-spec. Docs changed/created: docs/specs/003-prove-the-verdict.md, docs/decisions/0003-proof-before-slice-3.md.
+
+2026-10-29T02:26:45Z — "create tasks and ship it"
+Summary: (in progress) to-tasks for spec 003, then ship.
+Summary: Stopped before recording tasks: spec 003 is a draft with no issue (GitHub mode needs acceptance first; acceptance makes branch and issue public on this public repo). Asked user to accept. Also flagged that ship can land the software but the proof run needs human labeling.
+Skills used: to-tasks. Docs changed: none.
+Question (assistant → user): Accept spec 003 (public branch + issue)? Answer: pending.
+
+2026-10-29T02:30:01Z — "create tasks" (mid-turn) + accept
+Summary: Accepted spec 003 and decision 0003 (PRODUCT.md, GLOSSARY.md updated); pushed branch 003-prove-the-verdict; opened spec issue #22 (accepted); opened 8 task sub-issues #23-#30 with blocked-by links; Tasks checklist in spec.
+Skills used: to-spec, to-tasks. Docs changed: PRODUCT.md, GLOSSARY.md, docs/specs/003-prove-the-verdict.md, docs/decisions/0003-proof-before-slice-3.md.
+
+2026-10-29T02:31:19Z — "Accept, then ship" (ship → build)
+Summary: Ship preflight passed (#22 accepted). Build orchestrating spec 003 task set; baseline pnpm qa green on 3f458b9; task 01 (#23) worker started in ../meta-cto-003-t01.
+Skills used: ship, build. Docs changed: none yet.
+
+2026-10-29T02:43:18Z — "continue, is there any pending work?"
+Question (user → assistant): any pending work? Answer: yes — tasks 02 and 06 running; 03,04,05,07,08 waiting; then review, checks, merge, verify; human labeling after ship.
+Skills used: build. Docs changed: none.
+
+2026-10-29T02:52:58Z — build progress
+Summary: Integrated 003 tasks 06 (#28) and 02 (#24, after fix round: pilot review writes need Operator access); fixed off-by-one task issue titles; started 03 and 04.
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (ticks).
+
+2026-10-29T02:58:44Z — build progress
+Summary: Integrated 003 task 03 (#25) at d82f793; noted resetDemo would delete pilot backlog (fix assigned to task 05).
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick).
+
+2026-10-29T03:01:50Z — build progress
+Summary: Integrated 003 task 04 (#26) at bc39a6c; folded blind-detail leak and resetDemo scoping into task 05.
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick), DESIGN.md (worker).
+
+2026-10-29T03:18:45Z — build progress
+Summary: Integrated 003 task 05 (#27) at 9d8278f after fix round (Answer Key as need clusters; search hides blind restated need); started task 07.
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick).
+
+2026-10-29T03:34:20Z — build progress
+Summary: Integrated 003 task 07 (#29) at 40ed8eb after fix round (next build failed: import.meta.dirname undefined in webpack; dirs now resolve from cwd at call time). qa 793 tests green, build green.
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick), ARCHITECTURE.md, docs/INTEROP.md (worker).
+
+2026-10-29T03:39:41Z — build: task 08
+Summary: Aligned ARCHITECTURE/DESIGN/GLOSSARY; verified preview d6bb4a1 via vercel curl (fail-closed pilot, demo unchanged, origin isolation, /proof gated); recorded Verification; spec 003 implemented. Human-labeled steps pending.
+Skills used: build. Docs changed: ARCHITECTURE.md, DESIGN.md, GLOSSARY.md, docs/specs/003-prove-the-verdict.md.
+
+2026-10-29T03:54:41Z — ship: review fix round 1
+Summary: Independent review (4 per-axis workers + verifier) posted on PR #31 with 7 blocking findings (B1-B7). Fix round 1: 3 parallel workers (A: /review pilot workspace, review_metrics MCP tool, origin dedupe; B: eval reading rules, bars consolidated; C: blind skipReason, PM agreement, scoring queries) plus orchestrator doc fixes, pilot title links, and staged-lint hook fix for lint-ignored files. qa 847 tests, build green.
+Skills used: ship, review, build. Docs changed: README.md, ARCHITECTURE.md, GLOSSARY.md, evals/signal-verdict/README.md.

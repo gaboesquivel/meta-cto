@@ -16,6 +16,7 @@ import type { SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import type {
+  Origin,
   ReviewDecision,
   ReviewDecisionKind,
   SuspectedDuplicate,
@@ -55,6 +56,8 @@ export interface NewFeatureRequest {
   embedding: number[] | null;
   isDemo?: boolean;
   onBehalfOfAccountId?: string | null;
+  /** Recorded at the source: the creating Check's Origin, or `seed` for seeded backlog. */
+  origin: Origin;
   requesterName?: string | null;
   requesterRole?: string | null;
   seedKey?: string | null;
@@ -101,6 +104,7 @@ export interface NewSuspectedDuplicate {
 export interface NewReviewDecision {
   actorName: string;
   actorType: ActorType;
+  blind?: boolean;
   canonicalId?: string | null;
   decision: ReviewDecisionKind;
   featureRequestId: string;
@@ -124,6 +128,7 @@ export const toSuspectedDuplicate = (row: SuspectedDuplicateRow): SuspectedDupli
 
 export const toReviewDecision = (row: ReviewDecisionRow): ReviewDecision => ({
   actor: { name: row.actorName, type: row.actorType as ActorType },
+  blind: row.blind,
   canonicalId: row.canonicalId,
   createdAt: row.createdAt.toISOString(),
   decision: row.decision as ReviewDecisionKind,
@@ -165,13 +170,21 @@ const hasSuspicion = (id: AnyPgColumn) => sql`exists (
   select 1 from ${suspectedDuplicates}
   where ${suspectedDuplicates.featureRequestAId} = ${id} or ${suspectedDuplicates.featureRequestBId} = ${id})`;
 
+/** An active Blind Review decision recorded on this Feature Request itself. */
+const hasOwnActiveBlindDecision = (id: AnyPgColumn) => sql`exists (
+  select 1 from ${reviewDecisions}
+  where ${reviewDecisions.undoneAt} is null and ${reviewDecisions.blind}
+    and ${reviewDecisions.featureRequestId} = ${id})`;
+
 /**
  * Reviewed: a decision covers it as a whole and no Suspected Duplicate on it is undecided. Covered
  * means an active decision on the request itself, or an active decision on each of its suspected
  * pairs. Being named as `otherId` on someone else's pair does not cover a request with no
- * suspicions: the Product Manager never looked at it for its own duplicates.
+ * suspicions: the Product Manager never looked at it for its own duplicates. A Blind Review
+ * decision (spec 003) covers its request alone: the blind reviewer never saw its suspicions, so
+ * they stay for the other side to decide.
  */
-const isReviewed: SQL = sql`(not ${hasUndecidedSuspicion(featureRequests.id)} and (${hasOwnActiveDecision(featureRequests.id)} or ${hasSuspicion(featureRequests.id)}))`;
+const isReviewed: SQL = sql`(${hasOwnActiveBlindDecision(featureRequests.id)} or (not ${hasUndecidedSuspicion(featureRequests.id)} and (${hasOwnActiveDecision(featureRequests.id)} or ${hasSuspicion(featureRequests.id)})))`;
 
 /** On either side of an active Duplicate decision, canonical or not. */
 const onActiveDuplicate = (id: AnyPgColumn) => sql`exists (
@@ -241,27 +254,37 @@ export const createRepository = (db: SignalDb) => ({
     return { comments: commentRows, supports: supportRows };
   },
 
+  /** Reads first: the insert runs only the first time a slug is seen. */
   async ensureWorkspace(input: { name: string; slug: string }) {
+    const bySlug = async () => {
+      const [row] = await db.select().from(workspaces).where(eq(workspaces.slug, input.slug));
+      return row;
+    };
+    const existing = await bySlug();
+    if (existing) return existing;
     await db.insert(workspaces).values(input).onConflictDoNothing({ target: workspaces.slug });
-    const [row] = await db.select().from(workspaces).where(eq(workspaces.slug, input.slug));
+    const row = await bySlug();
     if (!row) throw new Error(`workspace ${input.slug} missing after upsert`);
     return row;
   },
 
-  async eventCounts(workspaceId: string) {
+  /** Event counts by type for one Origin: counts never mix Origins. */
+  async eventCounts(workspaceId: string, origin: Origin) {
     const rows = await db
       .select({ type: events.type, value: count() })
       .from(events)
-      .where(eq(events.workspaceId, workspaceId))
+      .where(and(eq(events.workspaceId, workspaceId), eq(events.origin, origin)))
       .groupBy(events.type);
     return Object.fromEntries(rows.map((row) => [row.type, row.value])) as Record<string, number>;
   },
 
-  async eventsOfType(workspaceId: string, type: string) {
+  async eventsOfType(workspaceId: string, type: string, origin: Origin) {
     return await db
       .select()
       .from(events)
-      .where(and(eq(events.workspaceId, workspaceId), eq(events.type, type)));
+      .where(
+        and(eq(events.workspaceId, workspaceId), eq(events.origin, origin), eq(events.type, type)),
+      );
   },
 
   async getAccounts(ids: string[]) {
@@ -390,6 +413,21 @@ export const createRepository = (db: SignalDb) => ({
       .orderBy(asc(featureRequests.createdAt));
   },
 
+  /** Every Feature Request in the Workspace, oldest first: keys only, no text or embedding. */
+  async listFeatureRequestKeys(workspaceId: string) {
+    return await db
+      .select({
+        checkId: featureRequests.checkId,
+        createdAt: featureRequests.createdAt,
+        createdViaCheck: featureRequests.createdViaCheck,
+        id: featureRequests.id,
+        seedKey: featureRequests.seedKey,
+      })
+      .from(featureRequests)
+      .where(eq(featureRequests.workspaceId, workspaceId))
+      .orderBy(asc(featureRequests.createdAt), asc(featureRequests.id));
+  },
+
   async listFeatureRequests(input: { limit: number; offset: number; workspaceId: string }) {
     return await db
       .select()
@@ -398,6 +436,16 @@ export const createRepository = (db: SignalDb) => ({
       .orderBy(desc(featureRequests.createdAt), asc(featureRequests.title))
       .limit(input.limit)
       .offset(input.offset);
+  },
+
+  /** Open Feature Requests by id and title only (the Blind Review choices). */
+  async listOpenFeatureRequestTitles(workspaceId: string) {
+    return await db
+      .select({ id: featureRequests.id, title: featureRequests.title })
+      .from(featureRequests)
+      .where(
+        and(eq(featureRequests.workspaceId, workspaceId), isNull(featureRequests.duplicateOfId)),
+      );
   },
 
   /** Open: not a confirmed duplicate. */
@@ -546,8 +594,18 @@ export const createRepository = (db: SignalDb) => ({
       .limit(input.limit);
   },
 
-  /** Raw counts behind Intake Duplicate Rate, backlog baseline, Review Coverage, Suspected Duplication and undo rate. */
-  async reviewMetricCounts(workspaceId: string) {
+  /**
+   * Raw counts behind Intake Duplicate Rate, backlog baseline, Review Coverage, Suspected
+   * Duplication and undo rate. Origin separates activity; the Workspace separates the backlog:
+   * the pre-Signal backlog (not created through a Check) counts for every caller of this
+   * Workspace, while intake (created through a Check) counts only for `origin`. A Review Decision
+   * counts when the Feature Request it was made on is in that scope.
+   */
+  async reviewMetricCounts(workspaceId: string, origin: Origin) {
+    const inScope = or(
+      eq(featureRequests.createdViaCheck, false),
+      eq(featureRequests.origin, origin),
+    );
     const open = isNull(featureRequests.duplicateOfId);
     const rows = await db
       .select({
@@ -559,7 +617,7 @@ export const createRepository = (db: SignalDb) => ({
         total: count(),
       })
       .from(featureRequests)
-      .where(eq(featureRequests.workspaceId, workspaceId))
+      .where(and(eq(featureRequests.workspaceId, workspaceId), inScope))
       .groupBy(featureRequests.createdViaCheck);
     const [decisions] = await db
       .select({
@@ -567,10 +625,12 @@ export const createRepository = (db: SignalDb) => ({
         undone: countWhere(sql`${reviewDecisions.undoneAt} is not null`),
       })
       .from(reviewDecisions)
+      .innerJoin(featureRequests, eq(featureRequests.id, reviewDecisions.featureRequestId))
       .where(
         and(
           eq(reviewDecisions.workspaceId, workspaceId),
           eq(reviewDecisions.decision, "duplicate"),
+          inScope,
         ),
       );
     const group = (createdViaCheck: boolean) => {
@@ -658,10 +718,10 @@ export const createRepository = (db: SignalDb) => ({
       .onConflictDoNothing({ target: comments.seedKey });
   },
 
-  async upsertSeedFeatureRequest(input: NewFeatureRequest & { seedKey: string }) {
+  async upsertSeedFeatureRequest(input: Omit<NewFeatureRequest, "origin"> & { seedKey: string }) {
     await db
       .insert(featureRequests)
-      .values({ ...input, isDemo: true })
+      .values({ ...input, isDemo: true, origin: "seed" })
       .onConflictDoNothing({ target: featureRequests.seedKey });
     const [row] = await db
       .select()

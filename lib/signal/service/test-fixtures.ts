@@ -4,11 +4,13 @@ import type {
   Embedder,
   Judge,
   JudgeOutput,
+  Origin,
   ReviewService,
   ScanOptions,
   ScanResult,
   SignalService,
 } from "../contracts";
+import type { SignalDb } from "../db";
 import { createRepository } from "../repository";
 import type { SignalRepository } from "../repository";
 import { EMBEDDING_DIMENSIONS } from "../schema";
@@ -66,8 +68,10 @@ export const fakeJudge = (initial: JudgeBehavior) => {
 
 export interface Harness {
   clock: { now: Date };
+  db: SignalDb;
   embedder: ReturnType<typeof fakeEmbedder>;
   judge: ReturnType<typeof fakeJudge>;
+  origin: Origin;
   repo: SignalRepository;
   review: ReviewService;
   service: SignalService;
@@ -75,8 +79,12 @@ export interface Harness {
 }
 
 export const createHarness = async (input: {
+  /** Share of new Feature Requests chosen for Blind Review (0 by default, as in the demo). */
+  blindShare?: number;
   judge?: JudgeBehavior;
   judgeTimeoutMs?: number;
+  /** The caller's Origin for both services; demo when omitted. */
+  origin?: Origin;
   /** Repository overrides for the review service only, to simulate storage failures. */
   reviewRepo?: (repo: SignalRepository) => SignalRepository;
   scan?: (options?: ScanOptions) => Promise<ScanResult>;
@@ -90,21 +98,36 @@ export const createHarness = async (input: {
     input.judge ?? { build: () => ({ judgments: [], underlyingNeed: "need" }), kind: "output" },
   );
   const clock = { now: new Date("2026-10-28T12:00:00.000Z") };
+  const origin = input.origin ?? "demo";
   const service = createSignalService({
+    blindShare: input.blindShare,
     embedder: embedder.embedder,
     judge: judge.judge,
     judgeTimeoutMs: input.judgeTimeoutMs,
     now: () => clock.now,
+    origin,
     repo,
     workspaceId: workspace.id,
   });
   const review = createReviewService({
+    blindShare: input.blindShare,
     now: () => clock.now,
+    origin,
     repo: input.reviewRepo ? input.reviewRepo(repo) : repo,
     scan: input.scan,
     workspaceId: workspace.id,
   });
-  return { clock, embedder, judge, repo, review, service, workspaceId: workspace.id };
+  return {
+    clock,
+    db,
+    embedder,
+    judge,
+    origin,
+    repo,
+    review,
+    service,
+    workspaceId: workspace.id,
+  };
 };
 
 export const addRequest = async (
@@ -118,6 +141,7 @@ export const addRequest = async (
     createdByActorType: "staff",
     description: `${title} description`,
     embedding,
+    origin: harness.origin,
     title,
     underlyingNeed,
     workspaceId: harness.workspaceId,
@@ -131,6 +155,7 @@ export const addNewRequest = async (harness: Harness, title: string, embedding: 
     createdViaCheck: true,
     description: `${title} description`,
     embedding,
+    origin: harness.origin,
     title,
     underlyingNeed: null,
     workspaceId: harness.workspaceId,

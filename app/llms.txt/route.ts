@@ -30,7 +30,8 @@ Use when you need a web UI that generates declarative compositions from natural 
 Always check a Draft before creating a Feature Request: Signal returns its Underlying Need and a Same Need / Related Need verdict with a Reason for each similar request.
 
 - REST: POST ${origin}/api/checks, GET|POST ${origin}/api/feature-requests, GET ${origin}/api/feature-requests/{id}, POST ${origin}/api/feature-requests/{id}/supports, POST ${origin}/api/feature-requests/{id}/comments, GET ${origin}/api/metrics
-- UI: ${origin}/requests
+- UI: ${origin}/requests, ${origin}/review (Review Queue; an Operator can switch to the Pilot Workspace there)
+- Pilot Workspace: send the Pilot Key in the X-Signal-Pilot-Key header (REST and ${origin}/api/mcp). A refused key returns pilot_key_required; branch on its reason (REST body \`reason\`, MCP \`error.details.reason\`): missing, invalid or disabled.
 
 ## Tools (MCP)
 
@@ -40,6 +41,8 @@ support_feature_request — support an existing Feature Request on behalf of an 
 comment_on_feature_request — comment on a Feature Request.
 search_feature_requests — semantic search over Feature Requests.
 get_feature_request — a Feature Request with Supports by Account, Comments and Related Links.
+review_metrics — the same metrics as GET /api/metrics, for one origin (optional); demo by default, the Pilot Workspace with the Pilot Key.
+proof_report — the Proof Report's preset bars and verdicts; needs the Pilot Key.
 compose_ui — generate a validated OpenUI composition from a natural-language UI request (synthetic data).
 list_component_catalog — introspect registered GenUI components.
 health — liveness for protocol clients.

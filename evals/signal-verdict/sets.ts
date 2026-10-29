@@ -4,6 +4,8 @@ import { z } from "zod";
 
 import { draftSchema } from "@/lib/signal/contracts";
 
+import { evalDir } from "./paths";
+
 export const evalPairSchema = z.object({
   draft: draftSchema,
   expected: z.enum(["same_need", "related_need", "different"]),
@@ -16,6 +18,6 @@ export type EvalPair = z.infer<typeof evalPairSchema>;
 export type EvalSetName = "dev" | "held-out";
 
 export const loadEvalSet = (name: EvalSetName): EvalPair[] => {
-  const file = path.join(import.meta.dirname, `${name}.json`);
+  const file = path.join(evalDir(), `${name}.json`);
   return z.array(evalPairSchema).parse(JSON.parse(readFileSync(file, "utf-8")));
 };

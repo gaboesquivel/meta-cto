@@ -145,6 +145,7 @@ describe("review service metrics", () => {
       checksWithSameNeed: 0,
       createsAfterSameNeed: 0,
       intakeDuplicateRate: { duplicates: 0, rate: null, reviewed: 0 },
+      origin: "demo",
       reviewCoverage: { rate: null, reviewed: 0, total: 0 },
       suggestionAcceptance: null,
       suspectedDuplication: { open: 0, rate: null, total: 0 },

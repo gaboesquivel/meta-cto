@@ -22,7 +22,7 @@ const other = paths.filter(
 );
 
 if (code.length > 0) {
-  const lint = spawnSync("pnpm", ["exec", "oxlint", ...code], {
+  const lint = spawnSync("pnpm", ["exec", "oxlint", "--no-error-on-unmatched-pattern", ...code], {
     cwd: repoRoot,
     stdio: "inherit",
   });

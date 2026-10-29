@@ -4,9 +4,12 @@ import { afterEach, describe, it, vi } from "vitest";
 import type { Embedder, Judge } from "@/lib/signal/contracts";
 import { createTestDb } from "@/lib/signal/test-db";
 
+import { PILOT_WORKSPACE } from "@/lib/signal/pilot";
+import { featureRequests, workspaces } from "@/lib/signal/schema";
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
 import {
+  blindShareFor,
   createRuntimeReviewService,
   createRuntimeService,
   getSignalService,
@@ -79,6 +82,133 @@ describe("signal runtime", () => {
   });
 });
 
+const filing = {
+  actor: { name: "pilot-agent", type: "agent" as const },
+  draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+};
+
+const fileThroughCheck = async (service: ReturnType<typeof createRuntimeService>) => {
+  const check = await service.check(filing);
+  return await service.create({ ...filing, checkId: check.checkId });
+};
+
+describe("pilot runtime", () => {
+  it("acts on the Pilot Workspace with Origin pilot, not the Crewday demo", async () => {
+    const db = await createTestDb();
+    const pilot = createRuntimeService({ db, embedder, judge, origin: "pilot" });
+    const created = await fileThroughCheck(pilot);
+
+    const rows = await db.select().from(workspaces);
+    const pilotRow = rows.find((row) => row.slug === PILOT_WORKSPACE.slug);
+    assert.ok(pilotRow, "the Pilot Workspace row exists");
+    const [stored] = await db.select().from(featureRequests);
+    assert.equal(stored?.id, created.id);
+    assert.equal(stored?.workspaceId, pilotRow.id);
+    assert.equal(stored?.origin, "pilot");
+    // Pilot rows are not demo data: the demo seed reset never deletes them.
+    assert.equal(stored?.isDemo, false);
+  });
+
+  it("keeps demo and pilot rows apart in both directions", async () => {
+    const db = await createTestDb();
+    const demo = createRuntimeService({ db, embedder, judge });
+    const pilot = createRuntimeService({ db, embedder, judge, origin: "pilot" });
+    const demoRequest = await fileThroughCheck(demo);
+    const pilotRequest = await fileThroughCheck(pilot);
+
+    const demoPage = await demo.search({});
+    const pilotPage = await pilot.search({});
+    assert.deepEqual(
+      demoPage.items.map((item) => item.id),
+      [demoRequest.id],
+    );
+    assert.deepEqual(
+      pilotPage.items.map((item) => item.id),
+      [pilotRequest.id],
+    );
+    await assert.rejects(pilot.get(demoRequest.id), { code: "not_found" });
+    await assert.rejects(demo.get(pilotRequest.id), { code: "not_found" });
+  });
+
+  it("scopes review and metrics to the Pilot Workspace, defaulting to Origin pilot", async () => {
+    const db = await createTestDb();
+    await fileThroughCheck(createRuntimeService({ db, embedder, judge }));
+    await fileThroughCheck(createRuntimeService({ db, embedder, judge, origin: "pilot" }));
+    await createRuntimeService({ db, embedder, judge, origin: "pilot" }).check(filing);
+
+    const demoReview = createRuntimeReviewService({ db });
+    const pilotReview = createRuntimeReviewService({ db, origin: "pilot" });
+    const demoMetrics = await demoReview.metrics();
+    const pilotMetrics = await pilotReview.metrics();
+    assert.equal(demoMetrics.origin, "demo");
+    assert.equal(demoMetrics.checks, 1);
+    assert.equal(pilotMetrics.origin, "pilot");
+    assert.equal(pilotMetrics.checks, 2);
+    // Reading demo Origin inside the Pilot Workspace finds nothing: the Workspace bounds it too.
+    const demoInPilot = await pilotReview.metrics({ origin: "demo" });
+    const pilotInDemo = await demoReview.metrics({ origin: "pilot" });
+    assert.equal(demoInPilot.checks, 0);
+    assert.equal(pilotInDemo.checks, 0);
+
+    const demoQueue = await demoReview.queue();
+    const pilotQueue = await pilotReview.queue();
+    assert.equal(demoQueue.counts.new, 1);
+    assert.equal(pilotQueue.counts.new, 1);
+    assert.notEqual(demoQueue.items[0]?.featureRequest.id, pilotQueue.items[0]?.featureRequest.id);
+  });
+});
+
+describe("blindShareFor", () => {
+  afterEach(() => {
+    delete process.env.SIGNAL_PILOT_BLIND_SHARE;
+    delete process.env.SIGNAL_DEMO_BLIND_SHARE;
+  });
+
+  it("blinds about 30% of pilot requests and none in the demo by default", () => {
+    assert.equal(blindShareFor("pilot"), 0.3);
+    assert.equal(blindShareFor("demo"), 0);
+    assert.equal(blindShareFor("eval"), 0);
+  });
+
+  it("reads each Workspace's share from the environment and ignores invalid values", () => {
+    process.env.SIGNAL_PILOT_BLIND_SHARE = "0.5";
+    process.env.SIGNAL_DEMO_BLIND_SHARE = "1";
+    assert.equal(blindShareFor("pilot"), 0.5);
+    assert.equal(blindShareFor("demo"), 1);
+    process.env.SIGNAL_PILOT_BLIND_SHARE = "2";
+    process.env.SIGNAL_DEMO_BLIND_SHARE = "nope";
+    assert.equal(blindShareFor("pilot"), 0.3);
+    assert.equal(blindShareFor("demo"), 0);
+  });
+
+  it("marks pilot queue items blind with the configured share", async () => {
+    const db = await createTestDb();
+    await fileThroughCheck(createRuntimeService({ db, embedder, judge, origin: "pilot" }));
+    const queue = await createRuntimeReviewService({ blindShare: 1, db, origin: "pilot" }).queue();
+    assert.equal(queue.items[0]?.blind, true);
+    assert.ok(queue.blindChoices);
+  });
+
+  it("withholds a blind pilot request's restated need from its detail until it is decided", async () => {
+    const db = await createTestDb();
+    const pilot = createRuntimeService({ blindShare: 1, db, embedder, judge, origin: "pilot" });
+    await fileThroughCheck(pilot);
+    // The second filing has a candidate to judge, so the judge restates its need.
+    const created = await fileThroughCheck(pilot);
+    assert.equal(created.underlyingNeed, "Reliable shift trades");
+    const hidden = await pilot.get(created.id);
+    assert.equal(hidden.underlyingNeed, null);
+
+    await createRuntimeReviewService({ blindShare: 1, db, origin: "pilot" }).decide(
+      { decision: "none", featureRequestId: created.id },
+      { name: "Ana", type: "staff" },
+    );
+
+    const shown = await pilot.get(created.id);
+    assert.equal(shown.underlyingNeed, "Reliable shift trades");
+  });
+});
+
 describe("judgeTimeoutFromEnv", () => {
   it("reads SIGNAL_JUDGE_TIMEOUT_MS and ignores invalid values", () => {
     process.env.SIGNAL_JUDGE_TIMEOUT_MS = "15000";
@@ -123,6 +253,21 @@ describe("review runtime", () => {
     const metrics = await review.metrics();
     assert.equal(metrics.checks, 1);
     assert.deepEqual(metrics.intakeDuplicateRate, { duplicates: 0, rate: null, reviewed: 0 });
+  });
+
+  it("keeps an eval runtime's Checks out of demo metrics", async () => {
+    const db = await createTestDb();
+    const evalService = createRuntimeService({ db, embedder, judge, origin: "eval" });
+    await evalService.check({
+      actor: { name: "eval", type: "agent" },
+      draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+    });
+
+    const review = createRuntimeReviewService({ db });
+    const demo = await review.metrics();
+    const evalRun = await review.metrics({ origin: "eval" });
+    assert.equal(demo.checks, 0);
+    assert.equal(evalRun.checks, 1);
   });
 
   it("reports the scan unavailable without a judge", async () => {

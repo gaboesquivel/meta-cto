@@ -13,6 +13,7 @@ import { GET as getQueue } from "../../app/api/review/queue/route";
 import { POST as postScan } from "../../app/api/review/scan/route";
 import {
   actor,
+  blindReviewQueue,
   DECISION_ID,
   FR_ID,
   idParams,
@@ -103,14 +104,25 @@ const writes: [string, (auth?: Auth, ip?: string) => Promise<Response>][] = [
 
 describe("GET /api/review/queue", () => {
   it("returns 200 with the Review Queue without credentials", async () => {
-    const response = await getQueue();
+    const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(reviewQueue);
   });
 
+  it("returns a blind item with no AI suggestion, Reason or restated need, plus blindChoices", async () => {
+    review.queue.mockResolvedValueOnce(blindReviewQueue);
+    const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as typeof blindReviewQueue;
+    expect(body.items[0]).toMatchObject({ blind: true, suspicions: [] });
+    expect(body.items[0]?.featureRequest.underlyingNeed).toBeNull();
+    expect(body.blindChoices).toEqual(blindReviewQueue.blindChoices);
+    expect(JSON.stringify(body)).not.toMatch(/reason|suggestionId/u);
+  });
+
   it("returns 503 service_unavailable when the review service is not configured", async () => {
     state.review = null;
-    const response = await getQueue();
+    const response = await getQueue(jsonRequest("/api/review/queue", { method: "GET" }));
     expect(response.status).toBe(503);
     expect(await codeOf(response)).toBe("service_unavailable");
   });
@@ -313,6 +325,18 @@ describe("OpenAPI document for review routes", () => {
     expect(Object.keys(operation?.responses ?? {})).toEqual(expect.arrayContaining(statuses));
   });
 
+  it("documents Blind Review on the queue and the decision", () => {
+    const schemas = doc.components.schemas as Record<
+      string,
+      { properties?: Record<string, unknown>; required?: string[] }
+    >;
+    const queueSchema = JSON.stringify(schemas.SignalReviewQueue);
+    expect(queueSchema).toContain("blindChoices");
+    expect(queueSchema).toContain('"blind"');
+    expect(schemas.SignalReviewDecision?.required).toContain("blind");
+    expect(schemas.SignalReviewDecision?.properties).toHaveProperty("blind");
+  });
+
   it("documents the ReviewMetrics shape on GET /api/metrics", () => {
     const metricsRef = JSON.stringify(paths["/api/metrics"]?.get);
     expect(metricsRef).toContain("#/components/schemas/SignalMetrics");
@@ -373,15 +397,21 @@ describe("OpenAPI document for review routes", () => {
 describe("GET /api/metrics", () => {
   it("returns 200 with the review service's metrics, needing only a database", async () => {
     state.service = null;
-    const response = await getMetrics();
+    const response = await getMetrics(new Request("http://localhost/api/metrics"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(metrics);
-    expect(review.metrics).toHaveBeenCalledOnce();
+    expect(review.metrics).toHaveBeenCalledExactlyOnceWith({});
+  });
+
+  it("passes the requested Origin to the review service", async () => {
+    const response = await getMetrics(new Request("http://localhost/api/metrics?origin=seed"));
+    expect(response.status).toBe(200);
+    expect(review.metrics).toHaveBeenCalledExactlyOnceWith({ origin: "seed" });
   });
 
   it("returns 503 when the review service is not configured", async () => {
     state.review = null;
-    const response = await getMetrics();
+    const response = await getMetrics(new Request("http://localhost/api/metrics"));
     expect(response.status).toBe(503);
     expect(((await response.json()) as { code?: string }).code).toBe("service_unavailable");
   });

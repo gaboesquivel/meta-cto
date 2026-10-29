@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 
 import { Button } from "@/components/button";
 import type {
+  FeatureRequestRef,
   FeatureRequestSummary,
   ReviewDecision,
   ReviewDecisionKind,
@@ -29,6 +30,27 @@ export interface ReviewActions {
 }
 
 const detailHref = (id: string) => `/requests/${encodeURIComponent(id)}`;
+
+/** False in the Pilot Workspace: request pages read the Crewday demo, so pilot titles are not links. */
+export const DetailLinksContext = createContext(true);
+
+const RequestTitle = ({
+  className,
+  request,
+}: {
+  className: string;
+  request: { id: string; title: string };
+}) =>
+  useContext(DetailLinksContext) ? (
+    <Link
+      className={cn(className, "underline-offset-4 hover:underline")}
+      href={detailHref(request.id)}
+    >
+      {request.title}
+    </Link>
+  ) : (
+    <span className={className}>{request.title}</span>
+  );
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
 export const OriginBadge = ({ isNew }: { isNew: boolean }) => (
@@ -53,12 +75,7 @@ const RequestPanel = ({
 }) => (
   <div className="bg-card flex min-w-0 flex-col gap-2 rounded-xl border p-3">
     <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">{label}</div>
-    <Link
-      className="font-semibold text-balance underline-offset-4 hover:underline"
-      href={detailHref(request.id)}
-    >
-      {request.title}
-    </Link>
+    <RequestTitle className="font-semibold text-balance" request={request} />
     {request.underlyingNeed ? (
       <p className="text-sm">
         <span className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
@@ -76,7 +93,7 @@ const RequestPanel = ({
 );
 
 /** Explains why actions are off: sign-in link, missing name, or nothing. */
-const ActionGate = ({
+export const ActionGate = ({
   actions,
   children,
 }: {
@@ -101,22 +118,34 @@ const ActionGate = ({
 
 type Mode = "duplicate" | "related" | null;
 
-const SuspicionActions = ({
+/** One side of a pair; Blind Review choices carry only id and title. */
+export type PairSide = FeatureRequestRef &
+  Partial<Pick<FeatureRequestSummary, "accountCount" | "supportCount">>;
+
+const sideCounts = (side: PairSide) =>
+  side.accountCount === undefined || side.supportCount === undefined
+    ? null
+    : `${plural(side.accountCount, "Account")} · ${plural(side.supportCount, "Support")}`;
+
+/** Duplicate, Related and Distinct on a pair; `suggestionId` when it answers a Suspected Duplicate. */
+export const PairActions = ({
   actions,
-  item,
-  suspicion,
+  formKey,
+  other,
+  self,
+  suggestionId,
 }: {
   actions: ReviewActions;
-  item: ReviewQueueItem;
-  suspicion: ReviewSuspicionView;
+  formKey: string;
+  other: PairSide;
+  self: PairSide;
+  suggestionId?: string;
 }) => {
   const [mode, setMode] = useState<Mode>(null);
   const [canonical, setCanonical] = useState<CanonicalSide | null>(null);
   const [sharedDimension, setSharedDimension] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const self = item.featureRequest;
-  const { other } = suspicion;
 
   const submit = async (decision: ReviewDecisionKind) => {
     const built = buildDecisionBody({
@@ -126,7 +155,7 @@ const SuspicionActions = ({
       featureRequestId: self.id,
       otherId: other.id,
       sharedDimension,
-      suggestionId: suspicion.suggestionId,
+      suggestionId,
     });
     if (!built.ok) {
       setError({ code: "invalid_decision", message: built.message, resolution: null });
@@ -145,7 +174,7 @@ const SuspicionActions = ({
     setMode((current) => (current === next ? null : next));
   };
 
-  const canonicalOptions: { side: CanonicalSide; request: FeatureRequestSummary }[] = [
+  const canonicalOptions: { side: CanonicalSide; request: PairSide }[] = [
     { request: self, side: "this" },
     { request: other, side: "other" },
   ];
@@ -188,17 +217,18 @@ const SuspicionActions = ({
                 <input
                   checked={canonical === option.side}
                   className="mt-1"
-                  name={`canonical-${suspicion.suggestionId}`}
+                  name={`canonical-${formKey}`}
                   onChange={() => setCanonical(option.side)}
                   type="radio"
                   value={option.side}
                 />
                 <span>
                   <span className="font-medium">{option.request.title}</span>
-                  <span className="text-muted-foreground block text-xs">
-                    {plural(option.request.accountCount, "Account")} ·{" "}
-                    {plural(option.request.supportCount, "Support")}
-                  </span>
+                  {sideCounts(option.request) ? (
+                    <span className="text-muted-foreground block text-xs">
+                      {sideCounts(option.request)}
+                    </span>
+                  ) : null}
                 </span>
               </label>
             ))}
@@ -215,7 +245,7 @@ const SuspicionActions = ({
           <div className="bg-muted/40 flex flex-col gap-2 rounded-xl border p-3">
             <TextField
               hint="The part of the need both Feature Requests share. They stay distinct and get a Related Link."
-              id={`shared-dimension-${suspicion.suggestionId}`}
+              id={`shared-dimension-${formKey}`}
               label="Shared Dimension"
               maxLength={MAX_SHARED_DIMENSION}
               onChange={setSharedDimension}
@@ -274,6 +304,11 @@ export const DecisionLine = ({
         >
           {DECISION_LABELS[decision.decision]}
         </span>
+        {decision.blind ? (
+          <span className="bg-muted text-muted-foreground inline-flex h-5 items-center rounded-full px-2 text-[0.65rem] font-semibold tracking-wide uppercase">
+            Blind
+          </span>
+        ) : null}
         <span className={cn("text-sm", undone && "text-muted-foreground")}>{text}</span>
       </div>
       <div className="text-muted-foreground flex flex-wrap items-center gap-3 text-xs">
@@ -338,12 +373,18 @@ const SuspicionPair = ({
         text={describe(suspicion.decision)}
       />
     ) : (
-      <SuspicionActions actions={actions} item={item} suspicion={suspicion} />
+      <PairActions
+        actions={actions}
+        formKey={suspicion.suggestionId}
+        other={suspicion.other}
+        self={item.featureRequest}
+        suggestionId={suspicion.suggestionId}
+      />
     )}
   </li>
 );
 
-const NoDuplicatesAction = ({
+export const NoDuplicatesAction = ({
   actions,
   item,
 }: {
@@ -373,8 +414,9 @@ const NoDuplicatesAction = ({
   return (
     <div className="flex flex-col gap-3">
       <p className="text-muted-foreground text-sm">
-        The AI suspects no duplicate for this new Feature Request. Confirm it to count it as
-        reviewed.
+        {item.blind
+          ? "Or, if no Feature Request matches it, confirm this one has no duplicates."
+          : "The AI suspects no duplicate for this new Feature Request. Confirm it to count it as reviewed."}
       </p>
       <ActionGate actions={actions}>
         <Button className="self-start" disabled={pending} onClick={confirm} variant="outline">
@@ -407,12 +449,7 @@ export const ReviewItem = ({
         </span>
       </div>
       <h3 className="text-lg font-semibold text-balance">
-        <Link
-          className="underline-offset-4 hover:underline"
-          href={detailHref(item.featureRequest.id)}
-        >
-          {item.featureRequest.title}
-        </Link>
+        <RequestTitle className="" request={item.featureRequest} />
       </h3>
     </header>
     {item.suspicions.length === 0 ? (

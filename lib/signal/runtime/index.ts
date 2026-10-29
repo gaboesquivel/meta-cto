@@ -1,37 +1,54 @@
-import { workspace } from "@/data/crewday/seed";
+import { workspace as crewdayWorkspace } from "@/data/crewday/seed";
 import {
   createGatewayEmbedder,
   createLlmJudge,
   judgeModelId,
   resolveJudgeModel,
 } from "@/lib/signal/agent";
-import type { Embedder, Judge, ReviewService, SignalService } from "@/lib/signal/contracts";
+import type { Embedder, Judge, Origin, ReviewService, SignalService } from "@/lib/signal/contracts";
 import { getDb } from "@/lib/signal/db";
 import type { SignalDb } from "@/lib/signal/db";
+import { PILOT_ORIGIN, PILOT_WORKSPACE } from "@/lib/signal/pilot";
 import { createRepository } from "@/lib/signal/repository";
 import { createBacklogScan } from "@/lib/signal/scan";
 import { createReviewService, createSignalService } from "@/lib/signal/service";
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
+import { DEFAULT_PILOT_BLIND_SHARE, blindShareFrom } from "@/lib/signal/service/review-blind";
 
 /**
- * Builds the service for the Crewday Demo Workspace. The workspace row is resolved lazily on
- * first use, so callers get a synchronous handle.
+ * The Workspace an Origin acts on: `pilot` is the Pilot Workspace, every other Origin the Crewday
+ * Demo Workspace. Pilot access is gated by the Pilot Key in the transports, never here.
+ */
+export const workspaceFor = (origin: Origin = "demo") =>
+  origin === PILOT_ORIGIN ? PILOT_WORKSPACE : crewdayWorkspace;
+
+/**
+ * Builds the service for the Origin's Workspace (see `workspaceFor`). The workspace row is
+ * resolved lazily on first use, so callers get a synchronous handle. `origin` is recorded on
+ * everything it writes (demo by default; eval runs pass `eval`, the Pilot Key `pilot`). Pilot rows
+ * are not demo data, so the demo seed reset never deletes them.
  */
 export const createRuntimeService = (deps: {
+  /** Share of new Feature Requests under Blind Review, so reads withhold the AI's suggestions. */
+  blindShare?: number;
   db: SignalDb;
   embedder: Embedder;
   judge: Judge;
   judgeTimeoutMs?: number;
+  origin?: Origin;
 }): SignalService => {
   const repo = createRepository(deps.db);
   let ready: Promise<SignalService> | null = null;
   const load = async () => {
     try {
-      const row = await repo.ensureWorkspace(workspace);
+      const row = await repo.ensureWorkspace(workspaceFor(deps.origin));
       return createSignalService({
+        blindShare: deps.blindShare,
         embedder: deps.embedder,
         judge: deps.judge,
         judgeTimeoutMs: deps.judgeTimeoutMs,
+        markDemo: deps.origin !== PILOT_ORIGIN,
+        origin: deps.origin,
         repo,
         workspaceId: row.id,
       });
@@ -62,42 +79,53 @@ export const judgeTimeoutFromEnv = (): number | undefined => {
   return Number.isFinite(value) && value > 0 ? value : undefined;
 };
 
-let cached: SignalService | null = null;
+const cached = new Map<Origin, SignalService>();
 
-/** Composed Signal service, or null when the database or AI keys are not configured. */
-export const getSignalService = (): SignalService | null => {
-  if (cached) return cached;
+/**
+ * Composed Signal service for one Origin (the demo caller's by default; `pilot` acts on the Pilot
+ * Workspace), or null when the database or AI keys are not configured.
+ */
+export const getSignalService = (origin: Origin = "demo"): SignalService | null => {
+  const existing = cached.get(origin);
+  if (existing) return existing;
   const db = getDb();
   if (!db) return null;
   const embedder = createGatewayEmbedder();
   const model = resolveJudgeModel();
   if (!(embedder && model)) return null;
   const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
-  cached = createRuntimeService({
+  const service = createRuntimeService({
+    blindShare: blindShareFor(origin),
     db,
     embedder,
     // The judge aborts its own model call at the same budget the service waits for.
     judge: createLlmJudge({ model, timeoutMs: judgeTimeoutMs }),
     judgeTimeoutMs,
+    origin,
   });
-  return cached;
+  cached.set(origin, service);
+  return service;
 };
 
 /**
- * Review service for the Crewday Demo Workspace. The backlog scan is available only with a
- * judge; reviewing, undo and metrics need just the database.
+ * Review service for the Origin's Workspace (Crewday demo by default, `pilot` the Pilot
+ * Workspace); review events record that Origin and metrics default to it. The backlog scan is
+ * available only with a judge; reviewing, undo and metrics need just the database.
  */
 export const createRuntimeReviewService = (deps: {
+  /** Share of new Feature Requests chosen for Blind Review; none when omitted. */
+  blindShare?: number;
   db: SignalDb;
   judge?: Judge;
   judgeTimeoutMs?: number;
   model?: string | null;
+  origin?: Origin;
 }): ReviewService => {
   const repo = createRepository(deps.db);
   let ready: Promise<ReviewService> | null = null;
   const load = async () => {
     try {
-      const row = await repo.ensureWorkspace(workspace);
+      const row = await repo.ensureWorkspace(workspaceFor(deps.origin));
       const scan = deps.judge
         ? createBacklogScan({
             judge: deps.judge,
@@ -107,7 +135,13 @@ export const createRuntimeReviewService = (deps: {
             workspaceId: row.id,
           }).scan
         : undefined;
-      return createReviewService({ repo, scan, workspaceId: row.id });
+      return createReviewService({
+        blindShare: deps.blindShare,
+        origin: deps.origin,
+        repo,
+        scan,
+        workspaceId: row.id,
+      });
     } catch (error) {
       ready = null;
       throw error;
@@ -120,27 +154,44 @@ export const createRuntimeReviewService = (deps: {
 
   return {
     decide: (input, actor) => resolve().then((service) => service.decide(input, actor)),
-    metrics: () => resolve().then((service) => service.metrics()),
+    metrics: (input) => resolve().then((service) => service.metrics(input)),
     queue: () => resolve().then((service) => service.queue()),
     scan: (options) => resolve().then((service) => service.scan(options)),
     undo: (decisionId, actor) => resolve().then((service) => service.undo(decisionId, actor)),
   };
 };
 
-let cachedReview: ReviewService | null = null;
+/**
+ * Share of new Feature Requests chosen for Blind Review (spec 003): the Pilot Workspace's from
+ * `SIGNAL_PILOT_BLIND_SHARE` (about 30% by default), the Crewday demo's from
+ * `SIGNAL_DEMO_BLIND_SHARE` (none by default, so the demo behaves as before).
+ */
+export const blindShareFor = (origin: Origin = "demo"): number =>
+  origin === PILOT_ORIGIN
+    ? blindShareFrom(process.env.SIGNAL_PILOT_BLIND_SHARE, DEFAULT_PILOT_BLIND_SHARE)
+    : blindShareFrom(process.env.SIGNAL_DEMO_BLIND_SHARE, 0);
 
-/** Review service for the Crewday Demo Workspace, or null without a database. */
-export const getReviewService = (): ReviewService | null => {
-  if (cachedReview) return cachedReview;
+const cachedReview = new Map<Origin, ReviewService>();
+
+/**
+ * Review service for one Origin's Workspace (the Crewday demo by default, `pilot` the Pilot
+ * Workspace), or null without a database.
+ */
+export const getReviewService = (origin: Origin = "demo"): ReviewService | null => {
+  const existing = cachedReview.get(origin);
+  if (existing) return existing;
   const db = getDb();
   if (!db) return null;
   const model = resolveJudgeModel();
   const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
-  cachedReview = createRuntimeReviewService({
+  const service = createRuntimeReviewService({
+    blindShare: blindShareFor(origin),
     db,
     judge: model ? createLlmJudge({ model, timeoutMs: judgeTimeoutMs }) : undefined,
     judgeTimeoutMs,
     model: model ? judgeModelId() : null,
+    origin,
   });
-  return cachedReview;
+  cachedReview.set(origin, service);
+  return service;
 };
