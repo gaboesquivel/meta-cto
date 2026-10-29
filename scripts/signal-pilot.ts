@@ -9,7 +9,7 @@ import {
 } from "../lib/pilot-load/files";
 import type { PilotFiles, PilotStatus } from "../lib/pilot-load/files";
 import { loadPilot } from "../lib/pilot-load/load";
-import { missingPrivateFiles, privateDataDir } from "../lib/pilot-load/private-dir";
+import { checkPrivateFiles, privateDataDir } from "../lib/pilot-load/private-dir";
 import { createGatewayEmbedder } from "../lib/signal/agent";
 import { getDb } from "../lib/signal/db";
 import { createRepository } from "../lib/signal/repository";
@@ -34,7 +34,7 @@ const PILOT_DATA_FILES = [
 const readPrivatePilotFiles = (): PilotFiles | null => {
   const dir = privateDataDir();
   const refusal = dir.ok
-    ? missingPrivateFiles(dir.pilotDir, PILOT_DATA_FILES, "data/pilot")
+    ? checkPrivateFiles(dir, "pilot", PILOT_DATA_FILES, "data/pilot")
     : dir.message;
   if (!dir.ok || refusal) {
     console.error(`Refusing: ${refusal}`);

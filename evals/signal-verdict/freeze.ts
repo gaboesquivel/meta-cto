@@ -1,6 +1,6 @@
 import { seedFeatureRequests } from "@/data/crewday/seed";
 import { loadRootEnv } from "@/lib/env";
-import { missingPrivateFiles, privateDataDir } from "@/lib/pilot-load/private-dir";
+import { checkPrivateFiles, privateDataDir } from "@/lib/pilot-load/private-dir";
 
 import {
   freezeV2,
@@ -21,7 +21,7 @@ const main = () => {
   loadRootEnv();
   const dir = privateDataDir();
   const refusal = dir.ok
-    ? missingPrivateFiles(dir.evalDir, [V2_SET_FILE], "evals/signal-verdict")
+    ? checkPrivateFiles(dir, "evals", [V2_SET_FILE], "evals/signal-verdict")
     : dir.message;
   if (!dir.ok || refusal) {
     console.error(`Refusing: ${refusal}`);
