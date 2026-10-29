@@ -10,9 +10,12 @@ import { callApi } from "./api";
 import { ErrorNotice } from "./error-notice";
 import { TextField } from "./text-field";
 import { useStaffName } from "./use-staff-name";
+import { buildCommentBody } from "./view";
 import type { ApiError } from "./view";
 
 interface CommentFormProps {
+  /** The Check whose Same Need Verdict led to this Comment, when commenting from a Verdict. */
+  checkId?: string;
   featureRequestId: string;
   initialBody?: string;
   onBehalfOf?: OnBehalfOf;
@@ -22,6 +25,7 @@ interface CommentFormProps {
 
 /** Adds a Comment to a Feature Request as the Staff Actor. */
 export const CommentForm = ({
+  checkId,
   featureRequestId,
   initialBody = "",
   onBehalfOf,
@@ -48,7 +52,7 @@ export const CommentForm = ({
     const result = await callApi<{ comment: CommentView }>(
       `/api/feature-requests/${encodeURIComponent(featureRequestId)}/comments`,
       {
-        body: { actor: { name: staffName.trim(), type: "staff" }, body, onBehalfOf },
+        body: buildCommentBody({ body, checkId, onBehalfOf, staffName }),
         method: "POST",
       },
     );

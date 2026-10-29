@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CheckResult, SupportView } from "@/lib/signal/contracts";
 
 import {
+  buildCommentBody,
   buildOnBehalfOf,
   describeAccount,
   groupSupportsByAccount,
@@ -100,6 +101,22 @@ describe("buildOnBehalfOf", () => {
     expect(
       buildOnBehalfOf({ accountName: "Cedar", requesterName: "Sofia", segment: "", size: "" }),
     ).toEqual({ account: { name: "Cedar" }, requester: { name: "Sofia" } });
+  });
+});
+
+describe("buildCommentBody", () => {
+  it("cites the Check when commenting from a Verdict", () => {
+    const checkId = "33333333-3333-4333-8333-333333333333";
+    expect(buildCommentBody({ body: "Same here", checkId, staffName: " Ana " })).toEqual({
+      actor: { name: "Ana", type: "staff" },
+      body: "Same here",
+      checkId,
+      onBehalfOf: undefined,
+    });
+  });
+
+  it("omits checkId outside a Check", () => {
+    expect(buildCommentBody({ body: "Noted", staffName: "Ana" })).not.toHaveProperty("checkId");
   });
 });
 

@@ -39,7 +39,8 @@ export const checkInputSchema = z.object({
 });
 
 export const createInputSchema = checkInputSchema.extend({
-  checkId: z.string().uuid(),
+  /** Optional in the schema so a missing Check returns `check_required`, not `invalid_input`. */
+  checkId: z.string().uuid().optional(),
   skipReason: z.string().trim().min(3).max(500).optional(),
 });
 
@@ -53,6 +54,8 @@ export const supportInputSchema = z.object({
 export const commentInputSchema = z.object({
   actor: actorSchema,
   body: z.string().trim().min(1).max(2000),
+  /** The Check whose Same Need candidate led to this Comment; counts toward Suggestion Acceptance. */
+  checkId: z.string().uuid().optional(),
   onBehalfOf: onBehalfOfSchema.optional(),
 });
 

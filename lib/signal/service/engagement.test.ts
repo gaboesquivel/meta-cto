@@ -110,6 +110,40 @@ describe("signal service comment", () => {
     assert.equal(events[0]?.subjectId, sofia.id);
   });
 
+  it("records the cited checkId on the comment event, null when absent", async () => {
+    const harness = await createHarness({});
+    const sofia = await addRequest(harness, "Shift swaps don't sync", unit(0));
+
+    await harness.service.comment(sofia.id, {
+      actor: staff,
+      body: "Same here",
+      checkId: "33333333-3333-4333-8333-333333333333",
+    });
+    await harness.service.comment(sofia.id, { actor: staff, body: "Noted" });
+
+    const events = await harness.repo.eventsOfType(harness.workspaceId, "comment_added");
+    assert.deepEqual(
+      events.map((event) => (event.payload as Record<string, unknown>).checkId),
+      ["33333333-3333-4333-8333-333333333333", null],
+    );
+  });
+
+  it("marks supports, comments and accounts as demo data", async () => {
+    const harness = await createHarness({});
+    const sofia = await addRequest(harness, "Shift swaps don't sync", unit(0));
+
+    const supported = await harness.service.support(sofia.id, { actor: staff, onBehalfOf: cedar });
+    await harness.service.comment(sofia.id, { actor: staff, body: "Seen at Cedar too" });
+
+    const [support] = await harness.repo.listSupports(sofia.id);
+    const [comment] = await harness.repo.listComments(sofia.id);
+    const [account] = await harness.repo.getAccounts([support?.accountId ?? ""]);
+    assert.equal(supported.created, true);
+    assert.equal(support?.isDemo, true);
+    assert.equal(comment?.isDemo, true);
+    assert.equal(account?.isDemo, true);
+  });
+
   it("returns not_found for an unknown feature request", async () => {
     const harness = await createHarness({});
 

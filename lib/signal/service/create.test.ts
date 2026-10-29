@@ -47,6 +47,16 @@ const setup = async (withSame: boolean) => {
   return { check, daniel, harness, sofia };
 };
 
+/** The resolution of the SignalError a create rejects with. */
+const resolutionOf = async (pending: Promise<unknown>) => {
+  try {
+    await pending;
+  } catch (error) {
+    return (error as { resolution: string }).resolution;
+  }
+  throw new Error("expected the create to fail");
+};
+
 describe("signal service create", () => {
   it("creates with related links, underlying need and events after a related-only check", async () => {
     const { check, harness, sofia } = await setup(false);
@@ -143,6 +153,60 @@ describe("signal service create", () => {
       code: "check_expired",
       status: 410,
     });
+  });
+
+  it("refuses a create without a checkId with check_required", async () => {
+    const { harness } = await setup(false);
+
+    await assert.rejects(harness.service.create({ actor: staff, draft }), {
+      code: "check_required",
+      status: 409,
+    });
+  });
+
+  it("refuses a second create with the same checkId", async () => {
+    const { check, harness } = await setup(false);
+    await harness.service.create({ actor: staff, checkId: check.checkId, draft });
+
+    await assert.rejects(harness.service.create({ actor: staff, checkId: check.checkId, draft }), {
+      code: "check_required",
+      resolution: "This Check was already used to create a Feature Request; check the Draft again.",
+      status: 409,
+    });
+  });
+
+  it("uses neutral resolutions that name the REST route and the TTL", async () => {
+    const { check, harness } = await setup(false);
+    harness.clock.now = new Date("2026-10-28T12:31:00.000Z");
+
+    const expired = await resolutionOf(
+      harness.service.create({ actor: staff, checkId: check.checkId, draft }),
+    );
+    const missing = await resolutionOf(harness.service.create({ actor: staff, draft }));
+
+    assert.match(expired, /POST \/api\/checks/u);
+    assert.match(expired, /valid for 30 minutes/u);
+    assert.match(missing, /POST \/api\/checks/u);
+    assert.doesNotMatch(missing, /^Call check_feature_request/u);
+  });
+
+  it("marks everything the demo workspace writes as demo data", async () => {
+    const { check, harness, sofia } = await setup(false);
+
+    const created = await harness.service.create({
+      actor: staff,
+      checkId: check.checkId,
+      draft,
+      onBehalfOf: cedar,
+    });
+
+    const row = await harness.repo.getFeatureRequest(created.id);
+    assert.equal(row?.isDemo, true);
+    assert.equal(row?.onBehalfOfAccountId === null, false);
+    const [account] = await harness.repo.getAccounts([row?.onBehalfOfAccountId ?? ""]);
+    assert.equal(account?.isDemo, true);
+    const [link] = await harness.repo.listRelatedLinks(sofia.id);
+    assert.equal(link?.isDemo, true);
   });
 
   it("rejects invalid input", async () => {

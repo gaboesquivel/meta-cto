@@ -149,12 +149,21 @@ describe("POST /api/feature-requests", () => {
     });
   });
 
-  it("returns 400 invalid_input when checkId is missing", async () => {
+  it("passes a create without checkId to the service, which returns 409 check_required", async () => {
+    service.create.mockRejectedValueOnce(
+      new SignalError({
+        code: "check_required",
+        message: "Creating a Feature Request requires a recent Check of the same Draft.",
+        resolution: "Check this Draft again.",
+        status: 409,
+      }),
+    );
     const response = await postFeatureRequest(
       jsonRequest("/api/feature-requests", { body: { actor, draft } }),
     );
-    expect(response.status).toBe(400);
-    expect(await codeOf(response)).toBe("invalid_input");
+    expect(service.create).toHaveBeenCalledWith({ actor, draft });
+    expect(response.status).toBe(409);
+    expect(await codeOf(response)).toBe("check_required");
   });
 });
 

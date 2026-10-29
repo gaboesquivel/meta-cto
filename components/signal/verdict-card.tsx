@@ -87,6 +87,7 @@ const SameNeedActions = ({
       <ErrorNotice error={error} />
       {commenting ? (
         <CommentForm
+          checkId={checkId}
           featureRequestId={candidate.featureRequestId}
           initialBody={draftText}
           onBehalfOf={onBehalfOf}

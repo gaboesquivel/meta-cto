@@ -1,7 +1,7 @@
 import type { FeatureRequestSummary, Metrics, SearchInput } from "../contracts";
 import { searchInputSchema } from "../contracts";
 import type { ServiceContext } from "./context";
-import { parseInput } from "./context";
+import { embedOrUnavailable, parseInput } from "./context";
 import { summarize } from "./views";
 
 const DEFAULT_LIMIT = 20;
@@ -15,7 +15,7 @@ const fetchPage = async (context: ServiceContext, input: SearchInput, take: numb
       workspaceId: context.workspaceId,
     });
   }
-  const embedding = await context.embedder.embed(input.q);
+  const embedding = await embedOrUnavailable(context, input.q);
   const rows = await context.repo.nearestFeatureRequests({
     embedding,
     limit: offset + take,
