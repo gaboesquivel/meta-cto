@@ -258,10 +258,11 @@ describe("backlog scan", () => {
       repo: context.repo,
       workspaceId: context.workspaceId,
     });
-    // Without an embedding a Feature Request can't be scanned, and it still counts as remaining.
-    assert.deepEqual(await scan.scan({ limit: 2 }), { pairsFound: 0, remaining: 4, scanned: 2 });
+    // Without an embedding a Feature Request can't be scanned, so it is not remaining either:
+    // callers loop while remaining > 0 and must reach 0.
+    assert.deepEqual(await scan.scan({ limit: 2 }), { pairsFound: 0, remaining: 3, scanned: 2 });
     assert.equal(judge.state.calls.length, 2);
-    assert.deepEqual(await scan.scan({ limit: 200 }), { pairsFound: 0, remaining: 1, scanned: 3 });
+    assert.deepEqual(await scan.scan({ limit: 200 }), { pairsFound: 0, remaining: 0, scanned: 3 });
   });
 
   it("stops starting new rows once the deadline has passed", async () => {

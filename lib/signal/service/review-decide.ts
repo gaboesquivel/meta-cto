@@ -75,21 +75,28 @@ const insertDecision = async (
   }
 };
 
-/** Mark Duplicate; if storage refuses the association, the decision is withdrawn (compensation). */
-const associate = async (
-  context: ReviewContext,
-  decision: ReviewDecision,
-  duplicateId: string,
-  actor: Actor,
-) => {
+/**
+ * Mark Duplicate. If storage refuses the association, or another decision associated the
+ * duplicate first, the decision is withdrawn: it never took effect, so it leaves no history and
+ * no Undo by the reviewer.
+ */
+const associate = async (context: ReviewContext, decision: ReviewDecision, duplicateId: string) => {
+  let associated: boolean;
   try {
-    await context.repo.setDuplicateOf(duplicateId, decision.canonicalId as string);
+    associated = await context.repo.setDuplicateOf(duplicateId, decision.canonicalId as string);
   } catch (error) {
-    await context.repo.undoReviewDecision({ ...actorColumns(actor), id: decision.id });
+    await context.repo.deleteReviewDecision(decision.id);
     throw invalidDecision(
       "The association was refused: a Duplicate can't point at itself or form a chain.",
       "Mark against the canonical Feature Request, or undo the decisions that form the chain.",
       error instanceof Error ? error.message : undefined,
+    );
+  }
+  if (!associated) {
+    await context.repo.deleteReviewDecision(decision.id);
+    throw invalidDecision(
+      "The Feature Request is already a duplicate of another one.",
+      "Reload its review history; undo that Duplicate first if it was wrong.",
     );
   }
 };
@@ -120,7 +127,7 @@ export const runDecide = async (
     if (refused) throw invalidDecision(refused, "Undo the decision that set it up, then retry.");
   }
   const decision = toReviewDecision(await insertDecision(context, input, actor, suggestionId));
-  if (duplicate) await associate(context, decision, duplicate.id, actor);
+  if (duplicate) await associate(context, decision, duplicate.id);
   await context.repo.insertEvent({
     payload: {
       actor,

@@ -55,8 +55,6 @@ describe("signal runtime", () => {
 
     assert.equal(result.degraded, false);
     assert.equal(result.nextAction, "create");
-    const metrics = await service.metrics();
-    assert.equal(metrics.checks, 1);
   });
 
   it("retries the workspace lookup after a transient database error", async () => {
@@ -75,9 +73,9 @@ describe("signal runtime", () => {
     });
     const service = createRuntimeService({ db: flaky, embedder, judge });
 
-    await assert.rejects(service.metrics(), /connection reset/u);
-    const metrics = await service.metrics();
-    assert.equal(metrics.checks, 0);
+    await assert.rejects(service.search({}), /connection reset/u);
+    const page = await service.search({});
+    assert.deepEqual(page.items, []);
   });
 });
 
@@ -111,6 +109,20 @@ describe("review runtime", () => {
     assert.deepEqual(queue.counts, { backlog: 0, new: 0 });
     const result = await review.scan({ limit: 5 });
     assert.equal(result.scanned, 0);
+  });
+
+  it("reports metrics with only a database", async () => {
+    const db = await createTestDb();
+    const service = createRuntimeService({ db, embedder, judge });
+    await service.check({
+      actor: { name: "Ana", type: "staff" },
+      draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+    });
+
+    const review = createRuntimeReviewService({ db });
+    const metrics = await review.metrics();
+    assert.equal(metrics.checks, 1);
+    assert.deepEqual(metrics.intakeDuplicateRate, { duplicates: 0, rate: null, reviewed: 0 });
   });
 
   it("reports the scan unavailable without a judge", async () => {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "vitest";
 
-import type { ReviewMetrics } from "../contracts";
+import { draftHash } from "./context";
 import type { Harness } from "./test-fixtures";
 import {
   addNewRequest,
@@ -45,8 +45,7 @@ const duplicateOfId = async (harness: Harness, id: string) => {
   return row?.duplicateOfId ?? null;
 };
 
-const reviewMetrics = async (harness: Harness) =>
-  (await harness.service.metrics()) as ReviewMetrics;
+const reviewMetrics = async (harness: Harness) => await harness.review.metrics();
 
 describe("review queue", () => {
   it("lists new unreviewed requests and backlog requests with undecided suspicions", async () => {
@@ -196,13 +195,47 @@ describe("review decide", () => {
       status: 422,
     });
 
-    const [row] = await harness.repo.listReviewDecisions({ featureRequestIds: [duplicate.id] });
-    assert.ok(row?.undoneAt);
-    const active = await harness.repo.listReviewDecisions({
-      activeOnly: true,
-      featureRequestIds: [duplicate.id],
+    // Withdrawn, not undone: no history entry, no Undo by the reviewer, no event.
+    assert.deepEqual(
+      await harness.repo.listReviewDecisions({ featureRequestIds: [duplicate.id] }),
+      [],
+    );
+    const detail = await harness.service.get(duplicate.id);
+    assert.deepEqual(detail.reviewHistory, []);
+    const metrics = await reviewMetrics(harness);
+    assert.deepEqual(metrics.undoRate, { decisions: 0, rate: null, undone: 0 });
+    assert.deepEqual(await harness.repo.eventsOfType(harness.workspaceId, "review_decided"), []);
+  });
+
+  it("refuses and withdraws when the request became a duplicate meanwhile", async () => {
+    const race = { canonical: "", duplicate: "" };
+    const harness = await createHarness({
+      reviewRepo: (repo) => ({
+        ...repo,
+        // A concurrent decision lands between this decision's insert and its association.
+        insertReviewDecision: async (input) => {
+          const row = await repo.insertReviewDecision(input);
+          await repo.setDuplicateOf(race.duplicate, race.canonical);
+          return row;
+        },
+      }),
     });
-    assert.equal(active.length, 0);
+    const canonical = await addRequest(harness, "Canonical", unit(0));
+    const duplicate = await addRequest(harness, "Duplicate", unit(1));
+    const elsewhere = await addRequest(harness, "Elsewhere", unit(2));
+    Object.assign(race, { canonical: elsewhere.id, duplicate: duplicate.id });
+
+    await assert.rejects(markDuplicate(harness, duplicate.id, canonical.id), (error: Error) => {
+      assert.equal((error as Error & { code?: string }).code, "invalid_decision");
+      assert.match(error.message, /already a duplicate/u);
+      return true;
+    });
+
+    assert.equal(await duplicateOfId(harness, duplicate.id), elsewhere.id);
+    assert.deepEqual(
+      await harness.repo.listReviewDecisions({ featureRequestIds: [duplicate.id] }),
+      [],
+    );
   });
 
   it("refuses Related without a Shared Dimension and records it with one", async () => {
@@ -234,6 +267,39 @@ describe("review decide", () => {
     );
     const other = await harness.service.get(duplicate.id);
     assert.equal(other.relatedLinks[0]?.featureRequestId, canonical.id);
+  });
+
+  it("shows the Product Manager's Shared Dimension over a stored Related Link", async () => {
+    const { canonical, duplicate, harness } = await backlogPair();
+    await harness.repo.insertRelatedLink({
+      a: canonical.id,
+      b: duplicate.id,
+      reason: "both about approvals",
+      sharedDimension: "approvals",
+      source: "check",
+    });
+
+    const decision = await harness.review.decide(
+      {
+        decision: "related",
+        featureRequestId: duplicate.id,
+        otherId: canonical.id,
+        sharedDimension: "manager approval",
+      },
+      staff,
+    );
+
+    const linksOf = async () => {
+      const detail = await harness.service.get(canonical.id);
+      return detail.relatedLinks.map((link) => [
+        link.featureRequestId,
+        link.sharedDimension,
+        link.source,
+      ]);
+    };
+    assert.deepEqual(await linksOf(), [[duplicate.id, "manager approval", "review"]]);
+    await harness.review.undo(decision.id, staff);
+    assert.deepEqual(await linksOf(), [[duplicate.id, "approvals", "check"]]);
   });
 
   it("records Distinct without touching the association", async () => {
@@ -509,7 +575,7 @@ describe("review metrics", () => {
   it("reports null rates with zero counts on an empty workspace", async () => {
     const harness = await createHarness({});
 
-    assert.deepEqual(await harness.service.metrics(), {
+    assert.deepEqual(await harness.review.metrics(), {
       backlogBaseline: { duplicates: 0, rate: null, reviewed: 0 },
       checks: 0,
       checksWithSameNeed: 0,
@@ -547,9 +613,72 @@ describe("review metrics", () => {
 
     assert.deepEqual(metrics.intakeDuplicateRate, { duplicates: 1, rate: 0.5, reviewed: 2 });
     assert.deepEqual(metrics.reviewCoverage, { rate: 2 / 3, reviewed: 2, total: 3 });
-    assert.deepEqual(metrics.backlogBaseline, { duplicates: 1, rate: 0.5, reviewed: 2 });
+    // Both reviewed backlog sides of the Duplicate pair count: they are the same need.
+    assert.deepEqual(metrics.backlogBaseline, { duplicates: 2, rate: 1, reviewed: 2 });
     assert.deepEqual(metrics.suspectedDuplication, { open: 0, rate: 0, total: 3 });
     assert.deepEqual(metrics.undoRate, { decisions: 2, rate: 0, undone: 0 });
+  });
+});
+
+describe("review metrics are canonical-independent", () => {
+  it("counts a new request as duplicate when the backlog side is marked its duplicate", async () => {
+    const harness = await createHarness({});
+    const n = await addNewRequest(harness, "New request", unit(0));
+    const o = await addRequest(harness, "Old request", unit(1));
+    // From the new request's side, the PM keeps N as canonical and marks backlog O its duplicate.
+    await harness.review.decide(
+      { canonicalId: n.id, decision: "duplicate", featureRequestId: n.id, otherId: o.id },
+      staff,
+    );
+    assert.equal(await duplicateOfId(harness, o.id), n.id);
+
+    let metrics = await reviewMetrics(harness);
+    assert.deepEqual(metrics.intakeDuplicateRate, { duplicates: 1, rate: 1, reviewed: 1 });
+    // O is only named as the other side, with no suspicion: not reviewed, so no baseline gain.
+    assert.deepEqual(metrics.backlogBaseline, { duplicates: 0, rate: null, reviewed: 0 });
+
+    const p = await addRequest(harness, "Unrelated backlog", unit(2));
+    await harness.review.decide(
+      { decision: "distinct", featureRequestId: o.id, otherId: p.id },
+      staff,
+    );
+    metrics = await reviewMetrics(harness);
+    assert.deepEqual(metrics.backlogBaseline, { duplicates: 1, rate: 1, reviewed: 1 });
+  });
+});
+
+describe("reviewed means covered as a whole", () => {
+  it("does not review a request with no suspicions named only as another pair's other side", async () => {
+    const harness = await createHarness({});
+    const fresh = await addNewRequest(harness, "New request", unit(0));
+    const backlog = await addRequest(harness, "Backlog", unit(1));
+
+    await harness.review.decide(
+      { decision: "distinct", featureRequestId: backlog.id, otherId: fresh.id },
+      staff,
+    );
+
+    const queue = await harness.review.queue();
+    assert.ok(queue.items.some((item) => item.featureRequest.id === fresh.id));
+    const metrics = await reviewMetrics(harness);
+    assert.deepEqual(metrics.reviewCoverage, { rate: 0, reviewed: 0, total: 1 });
+  });
+
+  it("reviews a request once a decision covers each of its suspected pairs", async () => {
+    const harness = await createHarness({});
+    const fresh = await addNewRequest(harness, "New request", unit(0));
+    const backlog = await addRequest(harness, "Backlog", unit(1));
+    await suspect(harness, fresh.id, backlog.id);
+
+    await harness.review.decide(
+      { decision: "distinct", featureRequestId: backlog.id, otherId: fresh.id },
+      staff,
+    );
+
+    const queue = await harness.review.queue();
+    assert.ok(!queue.items.some((item) => item.featureRequest.id === fresh.id));
+    const metrics = await reviewMetrics(harness);
+    assert.deepEqual(metrics.reviewCoverage, { rate: 1, reviewed: 1, total: 1 });
   });
 });
 
@@ -561,6 +690,14 @@ const sameNeed = (ids: string[]) => ({
     verdict: "same_need" as const,
   })),
   underlyingNeed: "Control over schedule changes",
+});
+
+const sameNeedCandidate = (featureRequestId: string, reason: string) => ({
+  featureRequestId,
+  reason,
+  sharedDimension: null,
+  title: "t",
+  verdict: "same_need" as const,
 });
 
 describe("checks and creates respect review", () => {
@@ -609,6 +746,48 @@ describe("checks and creates respect review", () => {
     assert.equal(item?.isNew, true);
     assert.equal(item?.suspicions[0]?.other.id, existing.id);
     assert.equal(item?.suspicions[0]?.source, "check");
+  });
+
+  it("skips Check candidates with a blank reason when recording suspicions", async () => {
+    const harness = await createHarness({ vectors: { Managers: unit(0) } });
+    const kept = await addRequest(harness, "Manager approval", unit(0));
+    const blank = await addRequest(harness, "Approve swaps", unit(1));
+    const checkId = crypto.randomUUID();
+    await harness.repo.insertCheck({
+      actorName: staff.name,
+      actorType: staff.type,
+      createdAt: harness.clock.now,
+      draft,
+      draftHash: draftHash(draft),
+      expiresAt: new Date(harness.clock.now.getTime() + 60_000),
+      id: checkId,
+      result: {
+        candidates: [
+          sameNeedCandidate(kept.id, "same approval flow"),
+          sameNeedCandidate(blank.id, "   "),
+        ],
+        checkId,
+        consideredCount: 2,
+        degraded: false,
+        expiresAt: new Date(harness.clock.now.getTime() + 60_000).toISOString(),
+        nextAction: "support_or_comment",
+        underlyingNeed: null,
+      },
+      workspaceId: harness.workspaceId,
+    });
+
+    const created = await harness.service.create({
+      actor: staff,
+      checkId,
+      draft,
+      skipReason: "Different team owns approvals",
+    });
+
+    const rows = await harness.repo.listSuspectedDuplicates([created.id]);
+    assert.deepEqual(
+      rows.map((row) => [row.featureRequestAId, row.featureRequestBId].toSorted()),
+      [[created.id, kept.id].toSorted()],
+    );
   });
 
   it("records no suspicion when the Check had no Same Need candidate", async () => {

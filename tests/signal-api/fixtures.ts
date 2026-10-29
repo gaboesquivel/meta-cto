@@ -4,8 +4,8 @@ import type {
   CheckResult,
   CommentView,
   FeatureRequestDetail,
-  Metrics,
   ReviewDecision,
+  ReviewMetrics,
   ReviewQueue,
   ReviewService,
   ScanResult,
@@ -50,9 +50,12 @@ export const featureRequest: FeatureRequestDetail = {
   createdAt: "2026-10-28T12:00:00.000Z",
   createdBy: actor,
   description: draft.description,
+  duplicateOf: null,
+  duplicates: [],
   id: FR_ID,
   onBehalfOf: { account: "Cedar Market", requester: null },
   relatedLinks: [],
+  reviewHistory: [],
   skipReason: null,
   supportCount: 1,
   supports: [],
@@ -77,7 +80,7 @@ export const comment: CommentView = {
   id: "44444444-4444-4444-8444-444444444444",
 };
 
-export const metrics: Metrics = {
+export const metrics: ReviewMetrics = {
   backlogBaseline: { duplicates: 3, rate: 0.3, reviewed: 10 },
   checks: 4,
   checksWithSameNeed: 2,
@@ -139,6 +142,7 @@ export const scanResult: ScanResult = { pairsFound: 1, remaining: 3, scanned: 20
 export const makeReviewService = () =>
   ({
     decide: vi.fn(() => Promise.resolve(reviewDecision)),
+    metrics: vi.fn(() => Promise.resolve(metrics)),
     queue: vi.fn(() => Promise.resolve(reviewQueue)),
     scan: vi.fn(() => Promise.resolve(scanResult)),
     undo: vi.fn((_id: string, undoneBy: ReviewDecision["actor"]) =>
@@ -152,7 +156,6 @@ export const makeService = () =>
     comment: vi.fn(() => Promise.resolve(comment)),
     create: vi.fn(() => Promise.resolve(featureRequest)),
     get: vi.fn(() => Promise.resolve(featureRequest)),
-    metrics: vi.fn(() => Promise.resolve(metrics)),
     search: vi.fn(() =>
       Promise.resolve({
         items: [featureRequest],

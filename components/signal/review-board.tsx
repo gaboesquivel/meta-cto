@@ -4,7 +4,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
 import { Button } from "@/components/button";
-import type { Metrics, ReviewDecision, ReviewQueue, ScanResult } from "@/lib/signal/contracts";
+import type {
+  ReviewDecision,
+  ReviewMetrics,
+  ReviewQueue,
+  ScanResult,
+} from "@/lib/signal/contracts";
 
 import { callApi } from "./api";
 import { ErrorNotice } from "./error-notice";
@@ -96,7 +101,7 @@ export const ReviewBoard = ({ operator }: { operator: boolean }) => {
     retry: 1,
   });
   const metrics = useQuery({
-    queryFn: () => fetchJson<Metrics>("/api/metrics"),
+    queryFn: () => fetchJson<ReviewMetrics>("/api/metrics"),
     queryKey: METRICS_KEY,
     retry: 1,
   });

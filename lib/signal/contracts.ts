@@ -145,10 +145,14 @@ export interface CommentView {
   via?: EvidenceVia;
 }
 
+/** Where a Related Link came from: a Check, the demo seed, or a Product Manager's Related decision. */
+export type RelatedLinkSource = "check" | "review" | "seed";
+
 export interface RelatedLinkView {
   featureRequestId: string;
   reason: string;
   sharedDimension: string;
+  source: RelatedLinkSource;
   title: string;
 }
 
@@ -173,23 +177,23 @@ export interface FeatureRequestDetail extends FeatureRequestSummary {
   skipReason: string | null;
   supports: SupportView[];
   /**
-   * Canonical evidence (spec 002). Optional until the review service fills them; then always set.
+   * Canonical evidence (spec 002).
    * `duplicates`: confirmed duplicates of this Feature Request with their original words,
    * Account and requester; their Supports and Comments appear in `supports`/`comments` with
    * `via`. `accountCount` counts each Account once across Supports and duplicates' origins.
    * `duplicateOf`: the canonical Feature Request when this one is a confirmed duplicate.
    * `reviewHistory`: Review Decisions involving this Feature Request, undone ones included.
    */
-  duplicateOf?: FeatureRequestRef | null;
-  duplicates?: DuplicateEvidence[];
-  reviewHistory?: ReviewDecision[];
+  duplicateOf: FeatureRequestRef | null;
+  duplicates: DuplicateEvidence[];
+  reviewHistory: ReviewDecision[];
 }
 
 /** `rate` is null when the denominator is zero; counts are always reported. */
 export const rateOf = (numerator: number, denominator: number): number | null =>
   denominator === 0 ? null : numerator / denominator;
 
-/** Spec 001 metrics, still returned by the spec 001 service until the review service lands. */
+/** Suggestion Acceptance and its counts (spec 001). */
 export interface SuggestionMetrics {
   checks: number;
   checksWithSameNeed: number;
@@ -197,19 +201,15 @@ export interface SuggestionMetrics {
   suggestionAcceptance: number | null;
 }
 
-/**
- * @deprecated Spec 001 placeholder shape; replaced by `ReviewMetrics` once the review service lands.
- */
-export interface Spec001Metrics extends SuggestionMetrics {
-  fragmentationRate: null;
-  reviewCoverage: 0;
-}
-
-/** Spec 002 metrics: the target shape of `GET /api/metrics`. */
+/** Spec 002 metrics: the shape of `GET /api/metrics`. */
 export interface ReviewMetrics extends SuggestionMetrics {
   /** Reviewed pre-Signal Feature Requests confirmed Duplicate ÷ reviewed pre-Signal Feature Requests. */
   backlogBaseline: { duplicates: number; rate: number | null; reviewed: number };
-  /** Main metric: reviewed new Feature Requests confirmed Duplicate ÷ reviewed new Feature Requests. */
+  /**
+   * Main metric: reviewed new Feature Requests confirmed Duplicate ÷ reviewed new Feature Requests.
+   * A request counts as Duplicate when it is on either side of an active Duplicate decision, so
+   * the rate does not depend on which side the Product Manager kept as canonical.
+   */
   intakeDuplicateRate: { duplicates: number; rate: number | null; reviewed: number };
   /** Reviewed new Feature Requests ÷ new Feature Requests. */
   reviewCoverage: { rate: number | null; reviewed: number; total: number };
@@ -218,12 +218,6 @@ export interface ReviewMetrics extends SuggestionMetrics {
   /** Duplicate decisions later undone ÷ Duplicate decisions. */
   undoRate: { decisions: number; rate: number | null; undone: number };
 }
-
-/** Transitional union: narrows to `ReviewMetrics` when the review service replaces spec 001's. */
-export type Metrics = ReviewMetrics | Spec001Metrics;
-
-export const isReviewMetrics = (metrics: Metrics): metrics is ReviewMetrics =>
-  "intakeDuplicateRate" in metrics;
 
 // Review context (spec 002, decision 0002).
 
@@ -335,7 +329,7 @@ export interface ReviewQueue {
 
 export interface ScanResult {
   pairsFound: number;
-  /** Open Feature Requests still not scanned after this call. */
+  /** Open Feature Requests with an embedding still not scanned after this call. */
   remaining: number;
   scanned: number;
 }
@@ -407,8 +401,6 @@ export interface SignalService {
   comment: (featureRequestId: string, input: CommentInput) => Promise<CommentView>;
   create: (input: CreateInput) => Promise<FeatureRequestDetail>;
   get: (featureRequestId: string) => Promise<FeatureRequestDetail>;
-  /** Transitional: the spec 001 service returns `Spec001Metrics` until the review service lands. */
-  metrics: () => Promise<Metrics>;
   search: (
     input: SearchInput,
   ) => Promise<{ items: FeatureRequestSummary[]; nextCursor: number | null }>;
@@ -421,6 +413,8 @@ export interface SignalService {
 /** Review port (spec 002). Writes need Operator access, checked by REST and MCP before calling. */
 export interface ReviewService {
   decide: (input: DecideInput, actor: Actor) => Promise<ReviewDecision>;
+  /** Review metrics plus Suggestion Acceptance; needs only the database. */
+  metrics: () => Promise<ReviewMetrics>;
   queue: () => Promise<ReviewQueue>;
   scan: (options?: ScanOptions) => Promise<ScanResult>;
   undo: (decisionId: string, actor: Actor) => Promise<ReviewDecision>;

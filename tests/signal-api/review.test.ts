@@ -6,6 +6,7 @@ import { SignalError } from "@/lib/signal/contracts";
 import type { ReviewService, SignalService } from "@/lib/signal/contracts";
 import { resetSignalWriteLimit, SIGNAL_WRITE_LIMIT } from "@/lib/signal/http";
 
+import { GET as getMetrics } from "../../app/api/metrics/route";
 import { POST as postUndo } from "../../app/api/review/decisions/[id]/undo/route";
 import { POST as postDecision } from "../../app/api/review/decisions/route";
 import { GET as getQueue } from "../../app/api/review/queue/route";
@@ -18,6 +19,7 @@ import {
   jsonRequest,
   makeReviewService,
   makeService,
+  metrics,
   OTHER_FR_ID,
   reviewDecision,
   reviewQueue,
@@ -365,5 +367,22 @@ describe("OpenAPI document for review routes", () => {
       "requester",
       "title",
     ]);
+  });
+});
+
+describe("GET /api/metrics", () => {
+  it("returns 200 with the review service's metrics, needing only a database", async () => {
+    state.service = null;
+    const response = await getMetrics();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(metrics);
+    expect(review.metrics).toHaveBeenCalledOnce();
+  });
+
+  it("returns 503 when the review service is not configured", async () => {
+    state.review = null;
+    const response = await getMetrics();
+    expect(response.status).toBe(503);
+    expect(((await response.json()) as { code?: string }).code).toBe("service_unavailable");
   });
 });

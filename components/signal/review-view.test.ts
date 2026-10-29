@@ -5,7 +5,6 @@ import type {
   DuplicateEvidence,
   ReviewDecision,
   ReviewMetrics,
-  Spec001Metrics,
   SupportView,
 } from "@/lib/signal/contracts";
 
@@ -123,24 +122,14 @@ describe("metricCards", () => {
     expect(cards[2]?.value).toBe("0%");
   });
 
-  it("shows dashes without counts for the older metrics shape or no data", () => {
-    const older: Spec001Metrics = {
-      checks: 3,
-      checksWithSameNeed: 1,
-      createsAfterSameNeed: 0,
-      fragmentationRate: null,
-      reviewCoverage: 0,
-      suggestionAcceptance: 1,
-    };
-    for (const metrics of [older, null]) {
-      const cards = metricCards(metrics);
-      expect(cards).toHaveLength(3);
-      for (const card of cards) {
-        expect(card.value).toBe("—");
-        expect(card.counts).toBe("No data yet");
-      }
-      expect(cards[0]?.comparison?.value).toBe("—");
+  it("shows dashes without counts while there is no data", () => {
+    const cards = metricCards(null);
+    expect(cards).toHaveLength(3);
+    for (const card of cards) {
+      expect(card.value).toBe("—");
+      expect(card.counts).toBe("No data yet");
     }
+    expect(cards[0]?.comparison?.value).toBe("—");
   });
 });
 

@@ -108,9 +108,14 @@ const addRelatedLinks = async (context: ServiceContext, id: string, result: Chec
   );
 };
 
-/** A skipped Same Need candidate becomes a Suspected Duplicate for the Product Manager to review. */
+/**
+ * A skipped Same Need candidate becomes a Suspected Duplicate for the Product Manager to review.
+ * Like the scan, a candidate without a reason is not recorded: a suspicion must say why.
+ */
 const recordSuspicions = async (context: ServiceContext, id: string, result: CheckResult) => {
-  const sameNeed = result.candidates.filter((candidate) => candidate.verdict === "same_need");
+  const sameNeed = result.candidates.filter(
+    (candidate) => candidate.verdict === "same_need" && Boolean(candidate.reason?.trim()),
+  );
   await Promise.all(
     sameNeed.map(
       async (candidate) =>
@@ -119,7 +124,7 @@ const recordSuspicions = async (context: ServiceContext, id: string, result: Che
           b: candidate.featureRequestId,
           judgedAt: context.now(),
           model: null,
-          reason: candidate.reason ?? "",
+          reason: candidate.reason?.trim() ?? "",
           source: "check",
           workspaceId: context.workspaceId,
         }),

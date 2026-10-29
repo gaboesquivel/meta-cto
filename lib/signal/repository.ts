@@ -156,13 +156,35 @@ const hasUndecidedSuspicion = (id: AnyPgColumn) => sql`exists (
   where (${suspectedDuplicates.featureRequestAId} = ${id} or ${suspectedDuplicates.featureRequestBId} = ${id})
     and not ${pairDecided(suspectedDuplicates.featureRequestAId, suspectedDuplicates.featureRequestBId)})`;
 
-const hasActiveDecision = (id: AnyPgColumn) => sql`exists (
+/** An active decision recorded on this Feature Request itself (it is `featureRequestId`). */
+const hasOwnActiveDecision = (id: AnyPgColumn) => sql`exists (
   select 1 from ${reviewDecisions}
-  where ${reviewDecisions.undoneAt} is null
+  where ${reviewDecisions.undoneAt} is null and ${reviewDecisions.featureRequestId} = ${id})`;
+
+const hasSuspicion = (id: AnyPgColumn) => sql`exists (
+  select 1 from ${suspectedDuplicates}
+  where ${suspectedDuplicates.featureRequestAId} = ${id} or ${suspectedDuplicates.featureRequestBId} = ${id})`;
+
+/**
+ * Reviewed: a decision covers it as a whole and no Suspected Duplicate on it is undecided. Covered
+ * means an active decision on the request itself, or an active decision on each of its suspected
+ * pairs. Being named as `otherId` on someone else's pair does not cover a request with no
+ * suspicions: the Product Manager never looked at it for its own duplicates.
+ */
+const isReviewed: SQL = sql`(not ${hasUndecidedSuspicion(featureRequests.id)} and (${hasOwnActiveDecision(featureRequests.id)} or ${hasSuspicion(featureRequests.id)}))`;
+
+/** On either side of an active Duplicate decision, canonical or not. */
+const onActiveDuplicate = (id: AnyPgColumn) => sql`exists (
+  select 1 from ${reviewDecisions}
+  where ${reviewDecisions.undoneAt} is null and ${reviewDecisions.decision} = 'duplicate'
     and (${reviewDecisions.featureRequestId} = ${id} or ${reviewDecisions.otherId} = ${id}))`;
 
-/** Reviewed: a decision covers it and no Suspected Duplicate on it is undecided. */
-const isReviewed: SQL = sql`(${hasActiveDecision(featureRequests.id)} and not ${hasUndecidedSuspicion(featureRequests.id)})`;
+/**
+ * Confirmed Duplicate for the metrics: both sides of a Duplicate pair are duplicates of the same
+ * need, so a reviewed request counts whichever side the Product Manager kept as canonical. A pair
+ * adds to a rate only through the sides that are themselves Reviewed.
+ */
+const isConfirmedDuplicate: SQL = sql`(${featureRequests.duplicateOfId} is not null or ${onActiveDuplicate(featureRequests.id)})`;
 
 const countWhere = (condition: SQL) => sql<number>`(count(*) filter (where ${condition}))::int`;
 
@@ -180,6 +202,7 @@ export const createRepository = (db: SignalDb) => ({
     return row?.value ?? 0;
   },
 
+  /** Same filter as `listUnscannedFeatureRequests`: requests without an embedding can't be scanned. */
   async countUnscannedFeatureRequests(workspaceId: string) {
     const [row] = await db
       .select({ value: count() })
@@ -189,9 +212,15 @@ export const createRepository = (db: SignalDb) => ({
           eq(featureRequests.workspaceId, workspaceId),
           isNull(featureRequests.duplicateOfId),
           isNull(featureRequests.suspicionScannedAt),
+          isNotNull(featureRequests.embedding),
         ),
       );
     return row?.value ?? 0;
+  },
+
+  /** Withdraws a decision whose effect never applied; it was never in force, so it leaves no history. */
+  async deleteReviewDecision(id: string) {
+    await db.delete(reviewDecisions).where(eq(reviewDecisions.id, id));
   },
 
   /** Supports and Comments recorded on confirmed duplicates of `canonicalId`, with their source. */
@@ -523,7 +552,7 @@ export const createRepository = (db: SignalDb) => ({
     const rows = await db
       .select({
         createdViaCheck: featureRequests.createdViaCheck,
-        duplicates: countWhere(sql`${isReviewed} and ${featureRequests.duplicateOfId} is not null`),
+        duplicates: countWhere(sql`${isReviewed} and ${isConfirmedDuplicate}`),
         open: countWhere(sql`${open}`),
         reviewed: countWhere(isReviewed),
         suspected: countWhere(sql`${open} and ${hasUndecidedSuspicion(featureRequests.id)}`),
@@ -561,12 +590,18 @@ export const createRepository = (db: SignalDb) => ({
     };
   },
 
-  /** Mark Duplicate; the database refuses self-references and chains. */
+  /**
+   * Mark Duplicate only while `id` has no canonical; false when another decision got there first.
+   * The database refuses self-references and chains. Two concurrent Duplicates forming a chain
+   * across different rows are not locked against here; the chain trigger checks each update.
+   */
   async setDuplicateOf(id: string, canonicalId: string) {
-    await db
+    const rows = await db
       .update(featureRequests)
       .set({ duplicateOfId: canonicalId })
-      .where(eq(featureRequests.id, id));
+      .where(and(eq(featureRequests.id, id), isNull(featureRequests.duplicateOfId)))
+      .returning({ id: featureRequests.id });
+    return rows.length > 0;
   },
 
   async setEmbedding(id: string, embedding: number[]) {
