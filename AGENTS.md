@@ -2,7 +2,23 @@
 
 ## Prompt Logging
 
-Every time you receive a new instruction or prompt, append it to prompts.txt in the project root with a timestamp (ISO 8601) and a brief summary of what you did in response. The summary must list which skills were used (if any) and which docs files were changed or created (if any). Also log every question asked during a session — questions you ask the user (e.g. clarifying questions) and questions the user asks you — together with the answer given. Create the file if it doesn't exist. Keep this log updated throughout all sessions.
+When a user request's work is done, append one entry to `prompts.txt`: ISO 8601 timestamp, the prompt, a one-line summary of the result, skills used, docs changed or created, and any question the user answered with that answer.
+
+`prompts.txt` is a shared file for Flow's `build` and `ship`. Commit its entry on the branch of the work it describes, in that work's commit or the next one. Never make a commit that changes only `prompts.txt`; after review, or with no work branch open, leave the entry uncommitted for the next work branch to carry. Worker agents never write it.
+
+## Checks
+
+Run the narrowest check that proves the change while implementing; run the full suite once per head before review and landing.
+
+| Check         | Command                                                                          |
+| ------------- | -------------------------------------------------------------------------------- |
+| One test file | `pnpm exec vitest run <path>` (after one `pnpm test` or `pnpm build:mcp-app`)    |
+| Types         | `pnpm check-types`                                                               |
+| Full suite    | `pnpm security:check && pnpm qa && pnpm eval:offline && pnpm build` (same as CI) |
+
+CI runs on pushes to `main` and pull requests. Dispatch it (`gh workflow run CI --ref <branch>`) only when a head has no CI run. Verify a shipped commit's deployment with `pnpm verify:prod [sha]`; do not poll GitHub Deployments, which this repository does not get.
+
+A task that implements a spec failure case, Exposure rule, or user story adds the test proving it in that task, so review finds missing behavior before landing instead of after.
 
 <!-- BEGIN FLOW -->
 

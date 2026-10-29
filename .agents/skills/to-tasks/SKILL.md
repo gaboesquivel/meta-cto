@@ -8,7 +8,7 @@ disable-model-invocation: false
 
 Break a plan, spec, or conversation into **tasks**: independently verifiable vertical slices, each naming the tasks that **block** it.
 
-Discover how the project already tracks work. A tracker, label vocabulary, or setup skill is not required. Keep a straightforward change as one task; split only when that helps execution or continuity.
+Discover how the project already tracks work. A tracker, label vocabulary, or setup skill is not required. Prefer the fewest tasks that each verify on their own. Keep a straightforward change as one task; split only when slices can proceed in parallel, need separate review, or would not fit one session. A task per layer, file, or step is too fine: every task costs a record, an integration, and a check.
 
 ## Process
 
@@ -18,7 +18,7 @@ Work from the conversation. If the user passes a spec path, issue number, or URL
 
 ### 2. Explore the codebase (optional)
 
-When you have not already explored the codebase, do so to see the current state: one read-only explorer per area the work touches, launched together (fan-out rule: `write-agents` Workers). Task titles and descriptions should use the project glossary and respect decision records in the area you touch.
+When you have not already explored the codebase, read the areas the work touches to see the current state (fan-out rule: `write-agents` Workers). Task titles and descriptions should use the project glossary and respect decision records in the area you touch.
 
 Look for prefactors that make the implementation easier: make the change easy, then make the easy change.
 
@@ -35,7 +35,7 @@ Break the work into vertical-slice tasks.
 
 </vertical-slice-rules>
 
-Give each task an **area**: every package or directory it changes, comma-separated (for example `lib/feedback/connect, app/opportunities`), coarse and never file paths. A vertical slice names every directory it touches, including pages or routes outside its main package, so disjoint areas mean disjoint changes. Overlapping areas need no blocking edge; `build` schedules by area.
+Give each task an **area**: every package or directory it changes, comma-separated (for example `lib/feedback/connect, app/opportunities`), coarse and never file paths. A vertical slice names every directory it touches, including pages or routes outside its main package, so disjoint areas mean disjoint changes. Overlapping areas need no blocking edge; `build` uses areas to keep overlapping edits from landing as if independent.
 
 Give each task its **blocking edges**: other tasks that must finish before it can start. An edge needs a real data or file dependency: one task uses what the other builds, or both must change the same file in order. Topic order is not a reason; prefer a wide frontier, where tasks that share only the spec have no blockers. A task with no blockers can start immediately.
 

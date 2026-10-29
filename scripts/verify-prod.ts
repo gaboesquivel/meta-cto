@@ -4,12 +4,14 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type {
   CheckRun,
+  CommitStatus,
   Deployment,
   DeploymentStatus,
   PageResult,
   VercelDeployment,
 } from "./verify-prod-core";
 import {
+  commitDeploymentStatus,
   latestStatus,
   pickDeployment,
   redirectTarget,
@@ -28,6 +30,8 @@ const PRODUCTION_URL = process.env.SIGNAL_PRODUCTION_URL ?? "https://meta-cto-ap
 const PAGES = ["/", "/review", "/api/metrics", "/api/review/queue"];
 const POLL_MS = 30_000;
 const DEADLINE = Date.now() + 15 * 60_000;
+/** How long to wait for Vercel to post any status after a merge. */
+const MISSING_DEADLINE = Date.now() + 2 * 60_000;
 const TIMEOUT_MS = 15_000;
 
 /** Arguments go to gh as an array: no shell, no word splitting. */
@@ -59,18 +63,48 @@ const readVercel = (sha: string) => {
   })();
   if (!project) return null;
   const query = `projectId=${project.projectId}&teamId=${project.orgId}&target=production&limit=20`;
-  const output = execFileSync("vercel", ["api", `/v6/deployments?${query}`], {
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
+  let output: string;
+  try {
+    output = execFileSync("vercel", ["api", `/v6/deployments?${query}`], {
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return null;
+  }
   return vercelStatus((JSON.parse(output) as { deployments: VercelDeployment[] }).deployments, sha);
 };
+
+const onMain = (sha: string) => {
+  try {
+    git("merge-base", "--is-ancestor", sha, "origin/main");
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const MISSING: { id: null; status: DeploymentStatus } = {
+  id: null,
+  status: { created_at: "", state: "missing" },
+};
+
+/**
+ * Vercel's commit status. It does not say preview or production, so it counts only for
+ * commits on main, which Vercel deploys to production.
+ */
+const readCommitStatus = (sha: string) =>
+  onMain(sha)
+    ? (commitDeploymentStatus(
+        gh<{ statuses: CommitStatus[] }>("api", `repos/${repo}/commits/${sha}/status`).statuses,
+      ) ?? MISSING)
+    : MISSING;
 
 const readDeployment = (sha: string) => {
   const deployment = pickDeployment(
     gh<Deployment[]>("api", `repos/${repo}/deployments?sha=${sha}`),
   );
-  if (!deployment) return readVercel(sha) ?? { id: null, status: latestStatus([]) };
+  if (!deployment) return readVercel(sha) ?? readCommitStatus(sha);
   const statuses = gh<DeploymentStatus[]>(
     "api",
     `repos/${repo}/deployments/${deployment.id}/statuses`,
@@ -83,7 +117,8 @@ const settled = (sha: string) => {
   const deployment = readDeployment(sha);
   const waiting =
     checks.state === "pending" ||
-    ["pending", "queued", "in_progress"].includes(deployment.status.state);
+    ["pending", "queued", "in_progress"].includes(deployment.status.state) ||
+    (deployment.status.state === "missing" && Date.now() < MISSING_DEADLINE);
   return { checks, deployment, waiting };
 };
 

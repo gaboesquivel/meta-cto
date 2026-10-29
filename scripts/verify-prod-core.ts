@@ -74,6 +74,30 @@ export const vercelStatus = (deployments: VercelDeployment[], sha: string) => {
   return { id: match.uid, status };
 };
 
+export interface CommitStatus {
+  context: string;
+  state: string;
+  target_url: string | null;
+  updated_at: string;
+}
+
+/**
+ * The Vercel commit status of a commit, as a GitHub-style deployment status. Vercel's
+ * GitHub app reports here even when it creates no GitHub Deployments.
+ */
+export const commitDeploymentStatus = (statuses: CommitStatus[]) => {
+  const [match] = statuses
+    .filter((row) => row.context === "Vercel")
+    .toSorted((a, b) => b.updated_at.localeCompare(a.updated_at));
+  if (!match) return null;
+  const status: DeploymentStatus = {
+    created_at: match.updated_at,
+    log_url: match.target_url ?? undefined,
+    state: match.state,
+  };
+  return { id: null, status };
+};
+
 /** The next URL of a redirect, refusing anything but https on a trusted host. */
 export const redirectTarget = (from: string, location: string, trusted: Set<string>) => {
   const target = new URL(location, from);
