@@ -20,5 +20,6 @@ export const createLocalEvalService = async (): Promise<SignalService | null> =>
     embedder,
     judge: createLlmJudge({ model }),
     judgeTimeoutMs: judgeTimeoutFromEnv(),
+    origin: "eval",
   });
 };

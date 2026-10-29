@@ -78,7 +78,7 @@ describe("signal service check", () => {
     assert.equal(stored.expiresAt.toISOString(), result.expiresAt);
     assert.match(stored.draftHash, /^[0-9a-f]{64}$/u);
 
-    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "draft_checked");
+    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "draft_checked", "demo");
     assert.equal(event?.subjectId, result.checkId);
     assert.deepEqual(event?.payload, {
       actor: staff,
@@ -201,7 +201,7 @@ describe("signal service check", () => {
       assert.equal(candidate.reason, null);
       assert.equal(candidate.sharedDimension, null);
     }
-    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "draft_checked");
+    const [event] = await harness.repo.eventsOfType(harness.workspaceId, "draft_checked", "demo");
     assert.equal(payloadOf(event).degraded, true);
   });
 

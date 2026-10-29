@@ -16,6 +16,7 @@ import type { SQL } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
 import type {
+  Origin,
   ReviewDecision,
   ReviewDecisionKind,
   SuspectedDuplicate,
@@ -55,6 +56,8 @@ export interface NewFeatureRequest {
   embedding: number[] | null;
   isDemo?: boolean;
   onBehalfOfAccountId?: string | null;
+  /** Recorded at the source: the creating Check's Origin, or `seed` for seeded backlog. */
+  origin: Origin;
   requesterName?: string | null;
   requesterRole?: string | null;
   seedKey?: string | null;
@@ -248,20 +251,23 @@ export const createRepository = (db: SignalDb) => ({
     return row;
   },
 
-  async eventCounts(workspaceId: string) {
+  /** Event counts by type for one Origin: counts never mix Origins. */
+  async eventCounts(workspaceId: string, origin: Origin) {
     const rows = await db
       .select({ type: events.type, value: count() })
       .from(events)
-      .where(eq(events.workspaceId, workspaceId))
+      .where(and(eq(events.workspaceId, workspaceId), eq(events.origin, origin)))
       .groupBy(events.type);
     return Object.fromEntries(rows.map((row) => [row.type, row.value])) as Record<string, number>;
   },
 
-  async eventsOfType(workspaceId: string, type: string) {
+  async eventsOfType(workspaceId: string, type: string, origin: Origin) {
     return await db
       .select()
       .from(events)
-      .where(and(eq(events.workspaceId, workspaceId), eq(events.type, type)));
+      .where(
+        and(eq(events.workspaceId, workspaceId), eq(events.origin, origin), eq(events.type, type)),
+      );
   },
 
   async getAccounts(ids: string[]) {
@@ -546,8 +552,18 @@ export const createRepository = (db: SignalDb) => ({
       .limit(input.limit);
   },
 
-  /** Raw counts behind Intake Duplicate Rate, backlog baseline, Review Coverage, Suspected Duplication and undo rate. */
-  async reviewMetricCounts(workspaceId: string) {
+  /**
+   * Raw counts behind Intake Duplicate Rate, backlog baseline, Review Coverage, Suspected
+   * Duplication and undo rate. Origin separates activity; the Workspace separates the backlog:
+   * the pre-Signal backlog (not created through a Check) counts for every caller of this
+   * Workspace, while intake (created through a Check) counts only for `origin`. A Review Decision
+   * counts when the Feature Request it was made on is in that scope.
+   */
+  async reviewMetricCounts(workspaceId: string, origin: Origin) {
+    const inScope = or(
+      eq(featureRequests.createdViaCheck, false),
+      eq(featureRequests.origin, origin),
+    );
     const open = isNull(featureRequests.duplicateOfId);
     const rows = await db
       .select({
@@ -559,7 +575,7 @@ export const createRepository = (db: SignalDb) => ({
         total: count(),
       })
       .from(featureRequests)
-      .where(eq(featureRequests.workspaceId, workspaceId))
+      .where(and(eq(featureRequests.workspaceId, workspaceId), inScope))
       .groupBy(featureRequests.createdViaCheck);
     const [decisions] = await db
       .select({
@@ -567,10 +583,12 @@ export const createRepository = (db: SignalDb) => ({
         undone: countWhere(sql`${reviewDecisions.undoneAt} is not null`),
       })
       .from(reviewDecisions)
+      .innerJoin(featureRequests, eq(featureRequests.id, reviewDecisions.featureRequestId))
       .where(
         and(
           eq(reviewDecisions.workspaceId, workspaceId),
           eq(reviewDecisions.decision, "duplicate"),
+          inScope,
         ),
       );
     const group = (createdViaCheck: boolean) => {
@@ -658,10 +676,10 @@ export const createRepository = (db: SignalDb) => ({
       .onConflictDoNothing({ target: comments.seedKey });
   },
 
-  async upsertSeedFeatureRequest(input: NewFeatureRequest & { seedKey: string }) {
+  async upsertSeedFeatureRequest(input: Omit<NewFeatureRequest, "origin"> & { seedKey: string }) {
     await db
       .insert(featureRequests)
-      .values({ ...input, isDemo: true })
+      .values({ ...input, isDemo: true, origin: "seed" })
       .onConflictDoNothing({ target: featureRequests.seedKey });
     const [row] = await db
       .select()

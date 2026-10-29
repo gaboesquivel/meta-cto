@@ -32,6 +32,7 @@ describe("signal service support", () => {
     const [event] = await harness.repo.eventsOfType(
       harness.workspaceId,
       "feature_request_supported",
+      "demo",
     );
     assert.equal(event?.subjectId, sofia.id);
     const account = await harness.repo.upsertAccount({
@@ -68,6 +69,7 @@ describe("signal service support", () => {
     const events = await harness.repo.eventsOfType(
       harness.workspaceId,
       "feature_request_supported",
+      "demo",
     );
     assert.equal(events.length, 1);
   });
@@ -105,7 +107,7 @@ describe("signal service comment", () => {
     assert.equal(withAccount.body, "Seen at Cedar too");
     assert.deepEqual(withAccount.actor, staff);
     assert.equal(plain.account, null);
-    const events = await harness.repo.eventsOfType(harness.workspaceId, "comment_added");
+    const events = await harness.repo.eventsOfType(harness.workspaceId, "comment_added", "demo");
     assert.equal(events.length, 2);
     assert.equal(events[0]?.subjectId, sofia.id);
   });
@@ -121,7 +123,7 @@ describe("signal service comment", () => {
     });
     await harness.service.comment(sofia.id, { actor: staff, body: "Noted" });
 
-    const events = await harness.repo.eventsOfType(harness.workspaceId, "comment_added");
+    const events = await harness.repo.eventsOfType(harness.workspaceId, "comment_added", "demo");
     assert.deepEqual(
       events.map((event) => (event.payload as Record<string, unknown>).checkId),
       ["33333333-3333-4333-8333-333333333333", null],

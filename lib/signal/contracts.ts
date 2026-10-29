@@ -9,6 +9,19 @@ export const MAX_SAME_NEED = 3;
 export const MAX_RELATED_NEED = 2;
 export const CANDIDATE_POOL = 10;
 
+/**
+ * Origin: where a Check or event came from (decision 0003). Recorded at the source; a metric
+ * reads one Origin at a time. `pilot` is the Pilot Workspace (spec 003 task 02).
+ */
+export const ORIGINS = ["pilot", "demo", "seed", "eval"] as const;
+export type Origin = (typeof ORIGINS)[number];
+export const originSchema = z.enum(ORIGINS);
+/** The Origin of the Crewday demo caller, the default for REST, MCP and `/review`. */
+export const DEMO_ORIGIN: Origin = "demo";
+
+export const metricsInputSchema = z.object({ origin: originSchema.optional() });
+export type MetricsInput = z.infer<typeof metricsInputSchema>;
+
 export const actorSchema = z.object({
   name: z.string().trim().min(1).max(80),
   type: z.enum(["agent", "staff"]),
@@ -203,6 +216,11 @@ export interface SuggestionMetrics {
 
 /** Spec 002 metrics: the shape of `GET /api/metrics`. */
 export interface ReviewMetrics extends SuggestionMetrics {
+  /**
+   * The intake Origin: Checks, events and Feature Requests created through a Check count only
+   * from it. The pre-Signal backlog (baseline, its suspicions) is the Workspace's, for any Origin.
+   */
+  origin: Origin;
   /** Reviewed pre-Signal Feature Requests confirmed Duplicate ÷ reviewed pre-Signal Feature Requests. */
   backlogBaseline: { duplicates: number; rate: number | null; reviewed: number };
   /**
@@ -413,8 +431,11 @@ export interface SignalService {
 /** Review port (spec 002). Writes need Operator access, checked by REST and MCP before calling. */
 export interface ReviewService {
   decide: (input: DecideInput, actor: Actor) => Promise<ReviewDecision>;
-  /** Review metrics plus Suggestion Acceptance; needs only the database. */
-  metrics: () => Promise<ReviewMetrics>;
+  /**
+   * Review metrics plus Suggestion Acceptance for one Origin, the caller's own when omitted;
+   * needs only the database.
+   */
+  metrics: (input?: MetricsInput) => Promise<ReviewMetrics>;
   queue: () => Promise<ReviewQueue>;
   scan: (options?: ScanOptions) => Promise<ScanResult>;
   undo: (decisionId: string, actor: Actor) => Promise<ReviewDecision>;

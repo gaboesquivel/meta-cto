@@ -13,6 +13,8 @@ import {
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 
+import type { Origin } from "./contracts";
+
 export const EMBEDDING_DIMENSIONS = 1536;
 
 const id = () =>
@@ -22,6 +24,10 @@ const id = () =>
 const createdAt = () => timestamp("created_at", { withTimezone: true }).notNull().defaultNow();
 const seedKey = () => text("seed_key").unique();
 const isDemo = () => boolean("is_demo").notNull().default(false);
+/** Origin (decision 0003): recorded by every writer, so no default. */
+const origin = () => text("origin").$type<Origin>().notNull();
+const originCheck = (name: string, column: AnyPgColumn) =>
+  check(name, sql`${column} in ('pilot', 'demo', 'seed', 'eval')`);
 
 export const workspaces = pgTable("workspaces", {
   createdAt: createdAt(),
@@ -65,6 +71,8 @@ export const featureRequests = pgTable(
     id: id(),
     isDemo: isDemo(),
     onBehalfOfAccountId: uuid("on_behalf_of_account_id").references(() => accounts.id),
+    /** The Origin of the Check that created it; `seed` for seeded backlog. */
+    origin: origin(),
     requesterName: text("requester_name"),
     requesterRole: text("requester_role"),
     seedKey: seedKey(),
@@ -83,6 +91,8 @@ export const featureRequests = pgTable(
     uniqueIndex("feature_requests_check_id").on(table.checkId),
     index("feature_requests_duplicate_of").on(table.duplicateOfId),
     check("feature_requests_duplicate_not_self", sql`${table.duplicateOfId} <> ${table.id}`),
+    originCheck("feature_requests_origin", table.origin),
+    index("feature_requests_workspace_origin").on(table.workspaceId, table.origin),
   ],
 );
 
@@ -148,25 +158,31 @@ export const relatedLinks = pgTable(
   ],
 );
 
-export const checks = pgTable("checks", {
-  actorName: text("actor_name").notNull(),
-  actorType: text("actor_type").notNull(),
-  createdAt: createdAt(),
-  draft: jsonb("draft").notNull(),
-  draftHash: text("draft_hash").notNull(),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-  id: id(),
-  result: jsonb("result").notNull(),
-  workspaceId: uuid("workspace_id")
-    .notNull()
-    .references(() => workspaces.id),
-});
+export const checks = pgTable(
+  "checks",
+  {
+    actorName: text("actor_name").notNull(),
+    actorType: text("actor_type").notNull(),
+    createdAt: createdAt(),
+    draft: jsonb("draft").notNull(),
+    draftHash: text("draft_hash").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    id: id(),
+    origin: origin(),
+    result: jsonb("result").notNull(),
+    workspaceId: uuid("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+  },
+  (table) => [originCheck("checks_origin", table.origin)],
+);
 
 export const events = pgTable(
   "events",
   {
     createdAt: createdAt(),
     id: id(),
+    origin: origin(),
     payload: jsonb("payload").notNull(),
     subjectId: uuid("subject_id"),
     type: text("type").notNull(),
@@ -174,7 +190,11 @@ export const events = pgTable(
       .notNull()
       .references(() => workspaces.id),
   },
-  (table) => [index("events_workspace_type").on(table.workspaceId, table.type)],
+  (table) => [
+    index("events_workspace_type").on(table.workspaceId, table.type),
+    index("events_workspace_origin_type").on(table.workspaceId, table.origin, table.type),
+    originCheck("events_origin", table.origin),
+  ],
 );
 
 /** An AI Same Need judgment between two existing Feature Requests, stored once per unordered pair (a < b). */

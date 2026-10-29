@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "vitest";
 
 import type { Harness } from "./test-fixtures";
-import { addNewRequest, addRequest, createHarness, staff, unit } from "./test-fixtures";
+import { createSignalService } from "./index";
+import { addNewRequest, addRequest, cedar, createHarness, staff, unit } from "./test-fixtures";
 
 /**
  * Worked examples of each metric as PRODUCT.md "Main metric and kill criterion" defines it.
@@ -16,6 +17,7 @@ const DEFINED_IN_PRODUCT = [
   "suggestion acceptance",
   "Suspected Duplication",
   "undo rate",
+  "Origin",
 ] as const;
 
 const productMetricSection = async () => {
@@ -152,5 +154,126 @@ describe("undo rate: Duplicate decisions later undone", () => {
 
     const metrics = await harness.review.metrics();
     assert.deepEqual(metrics.undoRate, { decisions: 0, rate: null, undone: 0 });
+  });
+});
+
+describe("Origin: intake reads one Origin (the caller's by default); the Workspace owns the backlog", () => {
+  const draft = { description: "Managers sign off each change", title: "Managers approve swaps" };
+
+  /** An eval run on the demo Workspace: a Check that finds a Same Need, then a Support. */
+  const evalCheckThenSupport = async (harness: Harness, targetId: string) => {
+    const evalService = createSignalService({
+      embedder: harness.embedder.embedder,
+      judge: harness.judge.judge,
+      origin: "eval",
+      repo: harness.repo,
+      workspaceId: harness.workspaceId,
+    });
+    const check = await evalService.check({ actor: { name: "eval", type: "agent" }, draft });
+    await evalService.support(targetId, {
+      actor: staff,
+      checkId: check.checkId,
+      onBehalfOf: cedar,
+    });
+  };
+
+  it("leaves an eval Check and its Support out of demo Suggestion Acceptance", async () => {
+    const harness = await createHarness({ vectors: { Managers: unit(0) } });
+    const target = await addRequest(harness, "Manager approval for swaps", unit(0));
+    harness.judge.state.behavior = {
+      build: () => ({
+        judgments: [
+          {
+            featureRequestId: target.id,
+            reason: "same approval flow",
+            sharedDimension: null,
+            verdict: "same_need",
+          },
+        ],
+        underlyingNeed: "Control over swaps",
+      }),
+      kind: "output",
+    };
+
+    await evalCheckThenSupport(harness, target.id);
+
+    const demo = await harness.review.metrics();
+    assert.equal(demo.origin, "demo");
+    assert.equal(demo.checks, 0);
+    assert.equal(demo.suggestionAcceptance, null);
+    const evalRun = await harness.review.metrics({ origin: "eval" });
+    assert.equal(evalRun.checks, 1);
+    assert.equal(evalRun.suggestionAcceptance, 1);
+  });
+
+  it("reads the Workspace's seeded backlog for every intake Origin, and only that Origin's intake", async () => {
+    const harness = await createHarness({});
+    const seeded = await Promise.all(
+      ["Manager approval", "Approve trades", "Swap sign-off"].map(
+        async (title, index) =>
+          await harness.repo.upsertSeedFeatureRequest({
+            createdByActorName: "seed",
+            createdByActorType: "staff",
+            description: `${title} description`,
+            embedding: unit(index),
+            seedKey: `fr-${index}`,
+            title,
+            underlyingNeed: null,
+            workspaceId: harness.workspaceId,
+          }),
+      ),
+    );
+    const [canonical, older, pending] = seeded;
+    assert.ok(canonical && older && pending);
+    await suspect(harness, canonical.id, older.id);
+    await duplicate(harness, older.id, canonical.id);
+    await suspect(harness, pending.id, canonical.id);
+    const evalIntake = await harness.repo.insertFeatureRequest({
+      createdByActorName: "eval",
+      createdByActorType: "agent",
+      createdViaCheck: true,
+      description: "Eval filing",
+      embedding: null,
+      origin: "eval",
+      title: "Eval filing",
+      underlyingNeed: null,
+      workspaceId: harness.workspaceId,
+    });
+    await suspect(harness, evalIntake.id, canonical.id);
+
+    const demo = await harness.review.metrics();
+    assert.equal(demo.origin, "demo");
+    assert.deepEqual(demo.backlogBaseline, { duplicates: 1, rate: 1, reviewed: 1 });
+    assert.deepEqual(demo.suspectedDuplication, { open: 2, rate: 1, total: 2 });
+    assert.deepEqual(demo.undoRate, { decisions: 1, rate: 0, undone: 0 });
+    assert.deepEqual(demo.reviewCoverage, { rate: null, reviewed: 0, total: 0 });
+    const evalRun = await harness.review.metrics({ origin: "eval" });
+    assert.deepEqual(evalRun.suspectedDuplication, { open: 3, rate: 1, total: 3 });
+    assert.deepEqual(evalRun.reviewCoverage, { rate: 0, reviewed: 0, total: 1 });
+  });
+
+  it("keeps the backlog baseline for a demo caller once the seeded backlog is reviewed", async () => {
+    const harness = await createHarness({});
+    const [canonical, older] = await Promise.all(
+      ["Manager approval", "Approve trades"].map(
+        async (title, index) =>
+          await harness.repo.upsertSeedFeatureRequest({
+            createdByActorName: "seed",
+            createdByActorType: "staff",
+            description: `${title} description`,
+            embedding: unit(index),
+            seedKey: `fr-${index}`,
+            title,
+            underlyingNeed: null,
+            workspaceId: harness.workspaceId,
+          }),
+      ),
+    );
+    assert.ok(canonical && older);
+    await suspect(harness, canonical.id, older.id);
+    await duplicate(harness, older.id, canonical.id);
+
+    const demo = await harness.review.metrics();
+    assert.deepEqual(demo.backlogBaseline, { duplicates: 2, rate: 1, reviewed: 2 });
   });
 });

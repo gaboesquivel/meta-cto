@@ -373,15 +373,21 @@ describe("OpenAPI document for review routes", () => {
 describe("GET /api/metrics", () => {
   it("returns 200 with the review service's metrics, needing only a database", async () => {
     state.service = null;
-    const response = await getMetrics();
+    const response = await getMetrics(new Request("http://localhost/api/metrics"));
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(metrics);
-    expect(review.metrics).toHaveBeenCalledOnce();
+    expect(review.metrics).toHaveBeenCalledExactlyOnceWith({});
+  });
+
+  it("passes the requested Origin to the review service", async () => {
+    const response = await getMetrics(new Request("http://localhost/api/metrics?origin=seed"));
+    expect(response.status).toBe(200);
+    expect(review.metrics).toHaveBeenCalledExactlyOnceWith({ origin: "seed" });
   });
 
   it("returns 503 when the review service is not configured", async () => {
     state.review = null;
-    const response = await getMetrics();
+    const response = await getMetrics(new Request("http://localhost/api/metrics"));
     expect(response.status).toBe(503);
     expect(((await response.json()) as { code?: string }).code).toBe("service_unavailable");
   });

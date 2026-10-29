@@ -93,6 +93,7 @@ const addRelatedLink = async (
     source: "check",
   });
   await context.repo.insertEvent({
+    origin: context.origin,
     payload: { checkId, featureRequestId: candidate.featureRequestId, sharedDimension },
     subjectId: id,
     type: "related_link_added",
@@ -140,7 +141,7 @@ export const runCreate = async (
   const { checkId } = parsed;
   if (!checkId) throw checkRequired(CHECK_AGAIN);
   const input = { ...parsed, checkId };
-  const { result } = await requireValidCheck(context, input);
+  const { check, result } = await requireValidCheck(context, input);
   const account = await upsertOnBehalfOf(context, input.onBehalfOf);
   const row = await context.repo
     .insertFeatureRequest({
@@ -151,6 +152,8 @@ export const runCreate = async (
       embedding: await embedOrNull(context, draftText(input.draft)),
       isDemo: context.markDemo,
       onBehalfOfAccountId: account?.id ?? null,
+      // A Feature Request belongs to the Origin of the Check that authorized it.
+      origin: check.origin,
       requesterName: input.onBehalfOf?.requester?.name ?? null,
       requesterRole: input.onBehalfOf?.requester?.role ?? null,
       skipReason: input.skipReason ?? null,
@@ -163,6 +166,7 @@ export const runCreate = async (
       throw databaseErrorCode(error) === UNIQUE_VIOLATION ? alreadyUsed() : error;
     });
   await context.repo.insertEvent({
+    origin: context.origin,
     payload: {
       actor: input.actor,
       checkId: input.checkId,

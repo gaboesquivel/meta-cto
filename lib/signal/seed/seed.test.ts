@@ -119,6 +119,7 @@ describe("seedCrewday", () => {
       createdByActorType: "staff",
       description: "User description",
       embedding: null,
+      origin: "demo",
       title: "User request",
       underlyingNeed: "User need",
       workspaceId,

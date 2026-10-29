@@ -116,9 +116,10 @@ const report = (set: EvalSetName, results: PairResult[], metrics: EvalMetrics): 
 const main = async () => {
   loadRootEnv();
   const set = parseSet(process.argv.slice(2));
+  // Eval Checks record Origin `eval`, so they never count in demo or pilot metrics.
   const service = process.argv.includes("--local")
     ? await createLocalEvalService()
-    : getSignalService();
+    : getSignalService("eval");
   if (!service) {
     console.error(
       "Signal service unavailable: configure DATABASE_URL and AI keys (.env.local) and seed the Crewday Demo Workspace.",

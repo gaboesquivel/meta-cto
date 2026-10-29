@@ -30,6 +30,7 @@ const reviewMetrics = (overrides: Partial<ReviewMetrics> = {}): ReviewMetrics =>
   checksWithSameNeed: 4,
   createsAfterSameNeed: 1,
   intakeDuplicateRate: { duplicates: 1, rate: 0.1, reviewed: 10 },
+  origin: "demo",
   reviewCoverage: { rate: 0.5, reviewed: 10, total: 20 },
   suggestionAcceptance: 0.75,
   suspectedDuplication: { open: 2, rate: 2 / 30, total: 30 },
