@@ -243,3 +243,28 @@ Skills used: none. Docs changed: README.md.
 2026-10-29T02:13:59Z — "Not yet"
 Question (assistant → user): Push to origin/main? Answer: Not yet. Left 9ee8291 unpushed.
 Skills used: none. Docs changed: none.
+
+2026-10-29T02:14:25Z — "lets continue, thanks for the summary"
+Question (assistant → user): What should we continue with next (proof slice, slice 3, hygiene)? Answer: Proof slice (explore then spec real evidence before slice 3).
+Summary: Started exploring the proof slice.
+Skills used: explore. Docs changed: none (in progress).
+
+2026-10-29T02:16:04Z — "primarily agents and a couple people"
+Question (assistant → user): Who would the pilot users be? Answer: primarily agents and a couple of people.
+Skills used: explore (interview). Docs changed: none.
+
+2026-10-29T02:19:24Z — "1", then "Both hold"
+Question (assistant → user): What will agents file (real or generated feedback)? Answer: "1" — real evidence = real agent behavior + real human review, not real customers. Follow-up question: do the answer key and a separate pilot workspace hold? Answer: both hold.
+Skills used: explore (interview). Docs changed: none.
+
+2026-10-29T02:20:08Z — "yes" (confirmed proof-slice intent)
+Summary: Intent confirmed: proof slice before slice 3 — agents over MCP + 1-2 PM reviewers, separate pilot workspace, generated feedback with answer key, larger human-confirmed frozen held-out set, pilot vs demo separation. Starting grill + pre-mortem.
+Skills used: explore, grill. Docs changed: none.
+
+2026-10-29T02:23:20Z — grill answers
+Questions (assistant → user) and answers: ground truth → human-confirmed labels, feedback from a different model family than the judge; agent evidence → correctness vs answer key (acceptance not evidence); success bar → halve the baseline, coverage >=80%, ~200 filings, preset; related need → preset 75% precision threshold, else two-way for submitters (direction change then). Pre-mortem folded in: reviewer anchoring (blind subset), baseline built in advance by someone else, >=60 same-need positives, tag origin at source.
+Skills used: explore, grill. Docs changed: none.
+
+2026-10-29T02:24:50Z — "to spec"
+Summary: Moved to to-spec for the proof slice (PRODUCT.md diff not written separately; carried into the spec).
+Skills used: to-spec. Docs changed: (see next entry).
