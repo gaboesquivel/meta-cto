@@ -1,16 +1,16 @@
-import path from "node:path";
-
 import {
   checkV2Ready,
   loadHeldOutV2,
   readV2Lock,
   unconfirmedPairs,
 } from "@/evals/signal-verdict/held-out-v2";
+import { evalDir } from "@/evals/signal-verdict/paths";
 import { currentPromptVersion, currentV2Reading, readRunLog } from "@/evals/signal-verdict/run-log";
 import type { RunLogEntry } from "@/evals/signal-verdict/run-log";
 import {
   answerKeyLabels,
   checkPilotReady,
+  pilotDir,
   readPilotFiles,
   readPilotLock,
 } from "@/lib/pilot-load/files";
@@ -176,19 +176,15 @@ export const loadProofInputs = async (deps: ProofSourceDeps): Promise<ProofInput
   };
 };
 
-/** Pilot files and the eval set, from the project root (traced into the server bundle). */
-export const PROOF_PILOT_DIR = path.join(process.cwd(), "data", "pilot");
-export const PROOF_EVAL_DIR = path.join(process.cwd(), "evals", "signal-verdict");
-
 export const runtimeProofDeps = (): ProofSourceDeps => ({
   answerKeyScores: async (labels) => {
     const db = getDb();
     if (!db) return null;
     return await createAnswerKeyScoring({ answerKey: labels, repo: createRepository(db) }).score();
   },
-  evalDir: PROOF_EVAL_DIR,
+  evalDir: evalDir(),
   now: () => new Date(),
-  pilotDir: PROOF_PILOT_DIR,
+  pilotDir: pilotDir(),
   pilotMetrics: async () => {
     const service = getReviewService(PILOT_ORIGIN);
     return service ? await service.metrics({ origin: PILOT_ORIGIN }) : null;
