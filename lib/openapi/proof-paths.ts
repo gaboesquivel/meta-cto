@@ -161,6 +161,6 @@ export const proofMcpTools = {
     operationId: "mcpProofReport",
     requestBody: { properties: {}, type: "object" },
     summary:
-      "Read the Proof Report (public MCP with the Pilot Key, or the Operator MCP); same body as GET /api/proof",
+      "Read the Proof Report (public MCP with the Pilot Key, or the Operator MCP); same body as GET /api/proof. A refused key is pilot_key_required: branch on error.details.reason (missing | invalid | disabled)",
   },
 };

@@ -9,7 +9,7 @@ import {
 } from "./genui-preview-resource";
 import { registerOperatorMcpTools } from "./register-operator-tools";
 import { registerProofMcpTool } from "./register-proof-tools";
-import { registerReviewMcpTools } from "./register-review-tools";
+import { registerReviewMcpTools, registerReviewMetricsMcpTool } from "./register-review-tools";
 import { registerStarterMcpTools } from "./register-tools";
 
 /** `access` from the Pilot Key header binds the review tools to the Pilot Workspace (demo by default). */
@@ -40,6 +40,7 @@ export const createOperatorMcpServer = ({ access }: { access?: PilotAccess } = {
   registerStarterMcpTools(server);
   registerOperatorMcpTools(server);
   registerReviewMcpTools(server, { access });
+  registerReviewMetricsMcpTool(server, access);
   // The route verified Operator access; the Proof Report needs nothing more.
   registerProofMcpTool(server, () => ({ ok: true, via: "operator" }));
   return server;

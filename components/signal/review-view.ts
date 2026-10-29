@@ -274,3 +274,45 @@ export const DECISION_LABELS: Record<ReviewDecisionKind, string> = {
   none: "No duplicates",
   related: "Related",
 };
+
+/** The Workspace an Operator works in `/review` (spec 003). The demo is everyone's default. */
+export type ReviewWorkspace = "demo" | "pilot";
+
+/**
+ * Adds the Workspace selector to a review API path. Only the selector travels: the server checks
+ * the Operator session and resolves the Pilot Workspace itself, so the browser never holds the
+ * Pilot Key.
+ */
+export const withWorkspace = (path: string, workspace: ReviewWorkspace): string =>
+  workspace === "pilot" ? `${path}${path.includes("?") ? "&" : "?"}workspace=pilot` : path;
+
+export interface ReviewWorkspaceOption {
+  available: boolean;
+  label: string;
+  note: string;
+  value: ReviewWorkspace;
+}
+
+/** The Workspace switch: shown only with an Operator session; the Pilot greys out when off. */
+export const reviewWorkspaceOptions = (input: {
+  operator: boolean;
+  pilotAvailable: boolean;
+}): ReviewWorkspaceOption[] | null => {
+  if (!input.operator) return null;
+  return [
+    {
+      available: true,
+      label: "Crewday demo",
+      note: "The seeded Crewday Demo Workspace.",
+      value: "demo",
+    },
+    {
+      available: input.pilotAvailable,
+      label: "Pilot",
+      note: input.pilotAvailable
+        ? "The Pilot Workspace of the proof run; some items are under Blind Review."
+        : "Unavailable: no Pilot Key (SIGNAL_PILOT_KEY) is configured on this deployment.",
+      value: "pilot",
+    },
+  ];
+};

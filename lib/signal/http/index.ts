@@ -3,10 +3,15 @@ import type { z } from "zod";
 import { jsonError, withExtraHeaders } from "@/lib/api/json-error";
 import { buildRateLimitHeaders } from "@/lib/api/rate-limit-headers";
 import { verifyOperatorRequest } from "@/lib/auth/operator-access";
-import { pilotKeyRefusal, resolvePilotAccess } from "@/lib/auth/pilot-access";
+import {
+  isPilotAccessConfigured,
+  originOfAccess,
+  pilotKeyRefusal,
+  resolvePilotAccess,
+} from "@/lib/auth/pilot-access";
 import type { PilotAccess } from "@/lib/auth/pilot-access";
 import { SignalError } from "@/lib/signal/contracts";
-import type { Origin, ReviewService, SignalErrorCode, SignalService } from "@/lib/signal/contracts";
+import type { ReviewService, SignalErrorCode, SignalService } from "@/lib/signal/contracts";
 import { getReviewService, getSignalService } from "@/lib/signal/runtime";
 
 /** Writes allowed per client IP per window (best effort: in-memory per instance). */
@@ -188,15 +193,68 @@ const operatorRequired = (reason: "disabled" | "unauthorized") =>
 export const pilotAccessOf = (request: Request | undefined): PilotAccess =>
   request ? resolvePilotAccess(request) : { kind: "demo" };
 
-/** The Origin (and so the Workspace) a granted caller acts on. */
-export const originOfAccess = (access: Exclude<PilotAccess, { kind: "refused" }>): Origin =>
-  access.kind === "pilot" ? "pilot" : "demo";
+/** Query parameter by which an Operator picks the Workspace on the review routes (`/review`). */
+export const WORKSPACE_PARAM = "workspace";
+
+const WORKSPACES = ["demo", "pilot"] as const;
+
+const invalidWorkspace = (message: string) =>
+  invalidInput([{ code: "invalid_value", message, path: [WORKSPACE_PARAM] }]);
+
+/**
+ * The Workspace a review request acts on. Without `?workspace=` it is the Pilot Key header, as
+ * before. `?workspace=pilot` is how an Operator reaches the Pilot Workspace from the browser: the
+ * server resolves it after checking Operator access (session, Bearer or secret), so the Pilot Key
+ * never leaves the server. It still fails closed (`pilot_key_required`, reason `disabled`) when no
+ * Pilot Key is configured. A Pilot Key header with the same selector is accepted as the key alone;
+ * `workspace=demo` with the key is a conflict.
+ */
+export const resolveReviewWorkspace = async (
+  request: Request | undefined,
+): Promise<
+  | { access: Exclude<PilotAccess, { kind: "refused" }>; ok: true }
+  | { ok: false; response: Response }
+> => {
+  const header = pilotAccessOf(request);
+  if (header.kind === "refused")
+    return { ok: false, response: await toErrorResponse(pilotKeyRefusal(header.reason)) };
+  const selector = request ? new URL(request.url).searchParams.get(WORKSPACE_PARAM) : null;
+  if (selector === null) return { access: header, ok: true };
+  if (!(WORKSPACES as readonly string[]).includes(selector))
+    return {
+      ok: false,
+      response: await toErrorResponse(
+        invalidWorkspace(`${WORKSPACE_PARAM} must be one of: ${WORKSPACES.join(", ")}.`),
+      ),
+    };
+  if (selector === "demo") {
+    if (header.kind === "pilot")
+      return {
+        ok: false,
+        response: await toErrorResponse(
+          invalidWorkspace(
+            `${WORKSPACE_PARAM}=demo conflicts with the Pilot Key header; drop one of them.`,
+          ),
+        ),
+      };
+    return { access: header, ok: true };
+  }
+  if (header.kind === "pilot") return { access: header, ok: true };
+  const operator = request
+    ? verifyOperatorRequest(request)
+    : { ok: false as const, reason: "unauthorized" as const };
+  if (!operator.ok) return { ok: false, response: operatorRequired(operator.reason) };
+  if (!isPilotAccessConfigured())
+    return { ok: false, response: await toErrorResponse(pilotKeyRefusal("disabled")) };
+  return { access: { kind: "pilot" }, ok: true };
+};
 
 /**
  * Runs a review route. Reads are open; writes spend the per-client write budget and need Operator
  * access, as before spec 003. The Pilot Key header selects the Pilot Workspace but never
  * authorizes a write by itself: agents hold that key, and what agents file must stay separate
- * from what people decide. A bad or unconfigured key is refused before any service call.
+ * from what people decide. A bad or unconfigured key is refused before any service call. An
+ * Operator selects the Pilot Workspace with `?workspace=pilot` instead (see resolveReviewWorkspace).
  */
 export const handleReview = async ({
   request,
@@ -209,9 +267,9 @@ export const handleReview = async ({
 }): Promise<Response> => {
   const limit = write && request ? consumeWrite(request) : null;
   if (limit?.limited) return limit.limited;
-  const pilot = pilotAccessOf(request);
-  if (pilot.kind === "refused")
-    return withExtraHeaders(await toErrorResponse(pilotKeyRefusal(pilot.reason)), limit?.headers);
+  const workspace = await resolveReviewWorkspace(request);
+  if (!workspace.ok) return withExtraHeaders(workspace.response, limit?.headers);
+  const pilot = workspace.access;
   if (write) {
     const access = request
       ? verifyOperatorRequest(request)

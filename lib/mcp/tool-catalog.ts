@@ -1,5 +1,6 @@
 import { GENUI_PREVIEW_RESOURCE_URI } from "./genui-preview-resource";
 import { PROOF_REPORT_TOOL, proofReportToolDescription } from "./register-proof-tools";
+import { REVIEW_METRICS_TOOL, reviewMetricsToolDescription } from "./register-review-tools";
 import { signalMcpToolNames, signalToolDescriptions } from "./signal-tool-descriptions";
 
 const starterMcpAppResourceUri = GENUI_PREVIEW_RESOURCE_URI;
@@ -23,6 +24,7 @@ export const starterMcpToolCatalog: StarterMcpToolCard[] = [
     name: "compose_ui",
   },
   ...signalMcpToolNames.map((name) => ({ description: signalToolDescriptions[name], name })),
+  { description: reviewMetricsToolDescription, name: REVIEW_METRICS_TOOL },
   { description: proofReportToolDescription, name: PROOF_REPORT_TOOL },
 ];
 

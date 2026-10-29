@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 
 import { SignalError } from "@/lib/signal/contracts";
+import type { Origin } from "@/lib/signal/contracts";
 import { PILOT_KEY_ENV, PILOT_KEY_HEADER, PILOT_KEY_MIN_LENGTH } from "@/lib/signal/pilot";
 
 /** Why a pilot request was refused: no key sent, the wrong key, or no key configured. */
@@ -14,6 +15,10 @@ export type PilotAccess =
   | { kind: "demo" }
   | { kind: "pilot" }
   | { kind: "refused"; reason: PilotRefusalReason };
+
+/** The Origin (and so the Workspace) a granted caller acts on: pilot with the Pilot Key, else demo. */
+export const originOfAccess = (access: Exclude<PilotAccess, { kind: "refused" }>): Origin =>
+  access.kind === "pilot" ? "pilot" : "demo";
 
 export const getPilotKey = () => process.env[PILOT_KEY_ENV]?.trim() ?? "";
 

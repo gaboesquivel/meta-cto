@@ -1,6 +1,6 @@
 import { registerAppTool } from "@modelcontextprotocol/ext-apps/server";
 import type { McpServer } from "@modelcontextprotocol/server";
-import { pilotKeyRefusal } from "@/lib/auth/pilot-access";
+import { originOfAccess, pilotKeyRefusal } from "@/lib/auth/pilot-access";
 import type { PilotAccess } from "@/lib/auth/pilot-access";
 import {
   checkInputSchema,
@@ -37,7 +37,7 @@ const plainToolMeta = { _meta: {} };
 /** The caller's service: the Pilot Workspace with the Pilot Key, the demo without; refused otherwise. */
 const serviceFor = (access: PilotAccess): SignalService => {
   if (access.kind === "refused") throw pilotKeyRefusal(access.reason);
-  const service = getSignalService(access.kind === "pilot" ? "pilot" : "demo");
+  const service = getSignalService(originOfAccess(access));
   if (service) return service;
   throw new SignalError({
     code: "service_unavailable",
