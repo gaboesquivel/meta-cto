@@ -16,6 +16,9 @@ export const SignalHeader = () => (
       <Link className="text-muted-foreground hover:text-foreground" href="/review">
         Review
       </Link>
+      <Link className="text-muted-foreground hover:text-foreground" href="/proof">
+        Proof
+      </Link>
     </div>
   </nav>
 );

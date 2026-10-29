@@ -4,6 +4,13 @@ import type { NextConfig } from "next";
 /** Markdown negotiation when Accept asks for markdown and does not list text/html. */
 const markdownAcceptPattern = "^(?!.*text/html).*text/markdown";
 
+/** Files the Proof Report reads at request time (lib/signal/proof/sources.ts). */
+const proofReportFiles = [
+  "./data/pilot/*.json",
+  "./evals/signal-verdict/held-out-v2*.json",
+  "./evals/signal-verdict/runs.jsonl",
+];
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["meta-cto.localhost", "*.meta-cto.localhost"],
   experimental: {
@@ -20,9 +27,11 @@ const nextConfig: NextConfig = {
     ];
   },
   outputFileTracingIncludes: {
-    "/api/mcp": ["./mcp-app/dist/genui-preview.html"],
-    "/api/mcp/operator": ["./mcp-app/dist/genui-preview.html"],
-    "/mcp": ["./mcp-app/dist/genui-preview.html"],
+    "/api/mcp": ["./mcp-app/dist/genui-preview.html", ...proofReportFiles],
+    "/api/mcp/operator": ["./mcp-app/dist/genui-preview.html", ...proofReportFiles],
+    "/api/proof": proofReportFiles,
+    "/mcp": ["./mcp-app/dist/genui-preview.html", ...proofReportFiles],
+    "/proof": proofReportFiles,
   },
   redirects() {
     return [{ destination: "/dev", permanent: false, source: "/developers" }];

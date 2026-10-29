@@ -1,12 +1,14 @@
 import { registerAppResource, RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { McpServer } from "@modelcontextprotocol/server";
 import type { PilotAccess } from "@/lib/auth/pilot-access";
+import { proofAccessForPilot } from "@/lib/auth/proof-access";
 
 import {
   GENUI_PREVIEW_RESOURCE_URI,
   genuiPreviewResourceDescription,
   readGenuiPreviewHtml,
 } from "./genui-preview-resource";
+import { registerProofMcpTool } from "./register-proof-tools";
 import { registerReviewMcpTools } from "./register-review-tools";
 import { registerSignalMcpTools } from "./register-signal-tools";
 import { registerStarterMcpTools } from "./register-tools";
@@ -15,6 +17,7 @@ import { registerStarterMcpTools } from "./register-tools";
  * The public MCP. `access` comes from the Pilot Key header: the demo (default) gets the Signal
  * tools on the Crewday Demo Workspace; the Pilot Key gets them on the Pilot Workspace plus the
  * read-only review_queue bound to it (review writes stay on the Operator MCP); a refused key gets Signal tools that each return `pilot_key_required`.
+ * proof_report is always listed and answers only with the Pilot Key.
  */
 export const createStarterMcpServer = ({
   access = { kind: "demo" },
@@ -44,6 +47,7 @@ export const createStarterMcpServer = ({
 
   registerStarterMcpTools(server);
   registerSignalMcpTools(server, access);
+  registerProofMcpTool(server, () => proofAccessForPilot(access));
   if (access.kind === "pilot") registerReviewMcpTools(server, { access, readOnly: true });
   return server;
 };
