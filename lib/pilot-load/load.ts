@@ -1,14 +1,12 @@
 import type { Embedder } from "@/lib/signal/contracts";
-import { PILOT_WORKSPACE } from "@/lib/signal/pilot";
+import { PILOT_WORKSPACE, pilotSeedKey } from "@/lib/signal/pilot";
 import type { SignalRepository } from "@/lib/signal/repository";
 import { embeddingText } from "@/lib/signal/seed";
 
 import { checkPilotReady } from "./files";
 import type { PilotFiles, PilotLock, PilotStatus } from "./files";
 
-/** Pilot rows get a prefixed seed key: seed keys are unique across Workspaces. */
-export const PILOT_SEED_PREFIX = "pilot:";
-export const pilotSeedKey = (key: string) => `${PILOT_SEED_PREFIX}${key}`;
+export { PILOT_SEED_PREFIX, pilotSeedKey } from "@/lib/signal/pilot";
 
 export type LoadPilotResult =
   | {

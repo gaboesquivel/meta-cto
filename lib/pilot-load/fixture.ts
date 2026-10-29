@@ -9,20 +9,30 @@ export const at = <T>(items: T[], index: number): T => {
 
 /** A small, valid, confirmed pilot set for tests. */
 export const pilotFixture = (): PilotFiles => ({
-  answerKey: [
-    {
-      confirmedAt: "2026-10-27",
-      confirmedBy: "Rosa (labeler)",
-      feedback: "fb-1",
-      sharesNeedWith: "fr-swap",
-    },
-    {
-      confirmedAt: "2026-10-27T10:00:00Z",
-      confirmedBy: "Rosa (labeler)",
-      feedback: "fb-2",
-      sharesNeedWith: null,
-    },
-  ],
+  answerKey: {
+    featureRequests: [
+      {
+        confirmedAt: "2026-10-27",
+        confirmedBy: "Rosa (labeler)",
+        featureRequest: "fr-swap",
+        needId: "swap",
+      },
+    ],
+    feedback: [
+      {
+        confirmedAt: "2026-10-27",
+        confirmedBy: "Rosa (labeler)",
+        feedback: "fb-1",
+        needId: "swap",
+      },
+      {
+        confirmedAt: "2026-10-27T10:00:00Z",
+        confirmedBy: "Rosa (labeler)",
+        feedback: "fb-2",
+        needId: "payroll",
+      },
+    ],
+  },
   backlog: {
     accounts: [
       { key: "acme", name: "Acme Diner", plan: "Pro", segment: "restaurant", size: "3 locations" },

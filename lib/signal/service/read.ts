@@ -2,6 +2,7 @@ import type { FeatureRequestSummary, SearchInput } from "../contracts";
 import { searchInputSchema } from "../contracts";
 import type { ServiceContext } from "./context";
 import { embedOrUnavailable, parseInput } from "./context";
+import { withholdBlindNeeds } from "./blind-detail";
 import { summarize } from "./views";
 
 const DEFAULT_LIMIT = 20;
@@ -34,7 +35,7 @@ export const runSearch = async (
   const rows = await fetchPage(context, input, limit + 1);
   const page = rows.slice(0, limit);
   return {
-    items: await summarize(context, page),
+    items: await withholdBlindNeeds(context, page, await summarize(context, page)),
     nextCursor: rows.length > limit ? (input.cursor ?? 0) + limit : null,
   };
 };

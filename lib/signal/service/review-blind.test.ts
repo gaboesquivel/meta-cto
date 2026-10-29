@@ -230,3 +230,79 @@ describe("blind review decisions", () => {
     assert.equal(payloadOf(event).blind, false);
   });
 });
+
+/** A blind-eligible new request with the AI's Related Need link to the backlog request. */
+const withAiLink = async (blindShare: number) => {
+  const setup = await suspectedNewRequest(blindShare);
+  await setup.harness.repo.insertRelatedLink({
+    a: setup.fresh.id,
+    b: setup.backlog.id,
+    reason: "AI related reason",
+    sharedDimension: "manager approval",
+    source: "check",
+  });
+  return setup;
+};
+
+describe("blind request detail (get_feature_request, REST detail, detail page)", () => {
+  it("withholds the AI's restated need and Related Need links until the blind decision", async () => {
+    const { backlog, fresh, harness } = await withAiLink(1);
+
+    const detail = await harness.service.get(fresh.id);
+
+    assert.equal(detail.underlyingNeed, null);
+    assert.deepEqual(detail.relatedLinks, []);
+    assert.doesNotMatch(
+      JSON.stringify(detail),
+      /AI restated need|AI related reason|same approval/u,
+    );
+    // Everything else stays.
+    assert.equal(detail.title, "Approve shift trades");
+    assert.equal(detail.description, "Approve shift trades description");
+    assert.deepEqual(detail.reviewHistory, []);
+    // The backlog side does not reveal the AI's link to the blind request either.
+    const other = await harness.service.get(backlog.id);
+    assert.equal(other.underlyingNeed, "Approvals");
+    assert.deepEqual(other.relatedLinks, []);
+  });
+
+  it("shows them again once the blind request has its own decision", async () => {
+    const { backlog, fresh, harness } = await withAiLink(1);
+    await harness.review.decide({ decision: "none", featureRequestId: fresh.id }, staff);
+
+    const detail = await harness.service.get(fresh.id);
+
+    assert.equal(detail.underlyingNeed, "AI restated need");
+    assert.equal(detail.relatedLinks[0]?.reason, "AI related reason");
+    const other = await harness.service.get(backlog.id);
+    assert.equal(other.relatedLinks[0]?.featureRequestId, fresh.id);
+  });
+
+  it("withholds the restated need from search results until the blind decision", async () => {
+    const { backlog, fresh, harness } = await withAiLink(1);
+
+    const hidden = await harness.service.search({});
+    const needs = new Map(hidden.items.map((item) => [item.id, item.underlyingNeed]));
+    assert.equal(needs.get(fresh.id), null);
+    assert.equal(needs.get(backlog.id), "Approvals");
+
+    await harness.review.decide({ decision: "none", featureRequestId: fresh.id }, staff);
+    const shown = await harness.service.search({});
+    const after = shown.items.find((item) => item.id === fresh.id);
+    assert.equal(after?.underlyingNeed, "AI restated need");
+  });
+
+  it("keeps the detail unchanged when nothing is blind (the Crewday demo)", async () => {
+    const { backlog, fresh, harness } = await withAiLink(0);
+
+    const detail = await harness.service.get(fresh.id);
+
+    assert.equal(detail.underlyingNeed, "AI restated need");
+    assert.equal(detail.relatedLinks[0]?.featureRequestId, backlog.id);
+    const page = await harness.service.search({});
+    assert.equal(
+      page.items.find((item) => item.id === fresh.id)?.underlyingNeed,
+      "AI restated need",
+    );
+  });
+});

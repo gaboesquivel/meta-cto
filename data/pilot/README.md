@@ -9,7 +9,7 @@ by the build agent.
 | `manifest.json`   | Who wrote what, which models, and the expected backlog duplicate rate    |
 | `backlog.json`    | Accounts and pre-pilot Feature Requests, loaded into the Pilot Workspace |
 | `feedback.json`   | Customer feedback items agents file through Checks; never loaded as rows |
-| `answer-key.json` | Per feedback item, the backlog request it shares a need with, or `null`  |
+| `answer-key.json` | A confirmed `needId` per backlog request and per feedback item           |
 | `pilot.lock.json` | Written by `freeze`: the fingerprint of all four files above             |
 
 ## Rules
@@ -21,7 +21,8 @@ by the build agent.
    match.
 3. **Stated before the run.** `expectedBacklogDuplicateRate` (0–1) and `statedAt` are set before
    freezing; they are part of the fingerprint.
-4. **Confirmed by a person.** Every Answer Key entry carries `confirmedBy` and `confirmedAt`.
+4. **Confirmed by a person.** Every Answer Key entry, backlog and feedback alike, carries
+   `confirmedBy` and `confirmedAt`.
 5. **Frozen before the run.** Once frozen, any change to these files resets the reading: `load`
    and `check` report "changed after freeze: reading reset". To start over, delete
    `pilot.lock.json` deliberately and say so in the Proof Report.
@@ -83,19 +84,61 @@ Workspace's pre-Signal backlog.
 ]
 ```
 
-`answer-key.json`: exactly one entry per feedback item; `sharesNeedWith` is a backlog request key
-or `null` (no existing request shares the need).
+`answer-key.json`: need clusters. Exactly one entry per backlog Feature Request and one per
+feedback item, each with a `needId` (any stable label, such as `swap`). Two items share a need
+iff their `needId`s are equal, so feedback can share a need with the backlog, with other feedback
+(an intake duplicate inside the pilot), or with nothing.
 
 ```json
-[
-  {
-    "feedback": "fb-1",
-    "sharesNeedWith": "fr-swap",
-    "confirmedBy": "Rosa",
-    "confirmedAt": "2026-11-02"
-  }
-]
+{
+  "featureRequests": [
+    {
+      "featureRequest": "fr-swap",
+      "needId": "swap",
+      "confirmedBy": "Rosa",
+      "confirmedAt": "2026-11-02"
+    }
+  ],
+  "feedback": [
+    { "feedback": "fb-1", "needId": "swap", "confirmedBy": "Rosa", "confirmedAt": "2026-11-02" },
+    { "feedback": "fb-2", "needId": "export", "confirmedBy": "Rosa", "confirmedAt": "2026-11-02" },
+    { "feedback": "fb-3", "needId": "export", "confirmedBy": "Rosa", "confirmedAt": "2026-11-02" }
+  ]
+}
 ```
+
+`check` and the lock count `sharesNeed`: feedback items whose `needId` a backlog request also has.
+The expected backlog duplicate rate stays in `manifest.json`.
+
+## Agent harness: linking filings to feedback items
+
+Agents file each feedback item through a Check with the Pilot Key. To score Agent Correctness,
+pass the feedback item `key` as the optional `feedbackItemId` on `check_feature_request` (or
+`POST /api/checks`), then pass that Check's `checkId` on the Support, Comment or create that
+follows. A filing without a `checkId`, or whose Check has no `feedbackItemId`, counts as
+unlinked and is not scored.
+
+```json
+{
+  "actor": { "name": "pilot-agent-1", "type": "agent" },
+  "draft": { "title": "Trade shifts", "description": "Let my team trade shifts themselves." },
+  "feedbackItemId": "fb-1",
+  "onBehalfOf": { "account": { "name": "Acme Diner" } }
+}
+```
+
+Scoring (`lib/signal/service/answer-key.ts`). A request filed in the pilot has the `needId` of
+the feedback item that created it.
+
+- **Support or Comment:** correct when the target request has the item's `needId`, harm when it
+  has another; unresolved (counted, not scored) when the target's need is unknown.
+- **Create:** a miss when a request with the same `needId` already existed (backlog or filed
+  earlier in the pilot), otherwise correct.
+- **Product Manager agreement** (blind and non-blind apart): a Duplicate agrees when the other
+  side has the same `needId`; Related, Distinct or No Duplicates agrees when no earlier request
+  has the same `needId`.
+
+Unlinked, unmatched and unconfirmed items are counted, not scored.
 
 ## Commands (Operator only; never part of a build)
 

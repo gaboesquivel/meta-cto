@@ -17,3 +17,11 @@ export const PILOT_KEY_HEADER = "x-signal-pilot-key";
 export const PILOT_KEY_ENV = "SIGNAL_PILOT_KEY";
 
 export const PILOT_KEY_MIN_LENGTH = 16;
+
+/** Pilot rows get a prefixed seed key: seed keys are unique across Workspaces. */
+export const PILOT_SEED_PREFIX = "pilot:";
+export const pilotSeedKey = (key: string) => `${PILOT_SEED_PREFIX}${key}`;
+
+/** The pilot file key behind a Pilot Workspace seed key, or null for any other row. */
+export const pilotKeyOfSeed = (seedKey: string | null): string | null =>
+  seedKey?.startsWith(PILOT_SEED_PREFIX) ? seedKey.slice(PILOT_SEED_PREFIX.length) : null;

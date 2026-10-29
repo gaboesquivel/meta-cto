@@ -45,13 +45,34 @@ export const draftSchema = z.object({
   title: z.string().trim().min(3).max(MAX_TITLE),
 });
 
-export const checkInputSchema = z.object({
+const draftInputSchema = z.object({
   actor: actorSchema,
   draft: draftSchema,
   onBehalfOf: onBehalfOfSchema.optional(),
 });
 
-export const createInputSchema = checkInputSchema.extend({
+/** Longest feedback item id an agent harness may pass on a Check. */
+export const MAX_FEEDBACK_ITEM_ID = 120;
+
+export const checkInputSchema = draftInputSchema.extend({
+  /**
+   * Pilot agent harness only (spec 003): the key of the pilot feedback item this Check files
+   * (`feedback.json` `key`). Recorded on the `draft_checked` event; the Support, Comment or create
+   * that passes this Check's `checkId` is scored against that item's Answer Key entry. Optional:
+   * omitted, nothing changes.
+   */
+  feedbackItemId: z
+    .string()
+    .trim()
+    .min(1)
+    .max(MAX_FEEDBACK_ITEM_ID)
+    .optional()
+    .describe(
+      "Pilot agent harness only: the pilot feedback item key this Check files. Pass this Check's checkId on the Support, Comment or create so it is scored against the Answer Key.",
+    ),
+});
+
+export const createInputSchema = draftInputSchema.extend({
   /** Optional in the schema so a missing Check returns `check_required`, not `invalid_input`. */
   checkId: z.string().uuid().optional(),
   skipReason: z.string().trim().min(3).max(500).optional(),

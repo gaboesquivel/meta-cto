@@ -29,6 +29,8 @@ export const workspaceFor = (origin: Origin = "demo") =>
  * are not demo data, so the demo seed reset never deletes them.
  */
 export const createRuntimeService = (deps: {
+  /** Share of new Feature Requests under Blind Review, so reads withhold the AI's suggestions. */
+  blindShare?: number;
   db: SignalDb;
   embedder: Embedder;
   judge: Judge;
@@ -41,6 +43,7 @@ export const createRuntimeService = (deps: {
     try {
       const row = await repo.ensureWorkspace(workspaceFor(deps.origin));
       return createSignalService({
+        blindShare: deps.blindShare,
         embedder: deps.embedder,
         judge: deps.judge,
         judgeTimeoutMs: deps.judgeTimeoutMs,
@@ -92,6 +95,7 @@ export const getSignalService = (origin: Origin = "demo"): SignalService | null 
   if (!(embedder && model)) return null;
   const judgeTimeoutMs = judgeTimeoutFromEnv() ?? DEFAULT_JUDGE_TIMEOUT_MS;
   const service = createRuntimeService({
+    blindShare: blindShareFor(origin),
     db,
     embedder,
     // The judge aborts its own model call at the same budget the service waits for.

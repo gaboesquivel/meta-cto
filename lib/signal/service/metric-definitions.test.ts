@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "vitest";
 
+import { scoreAgentCorrectness, scorePmAgreement } from "./answer-key";
 import type { Harness } from "./test-fixtures";
 import { createSignalService } from "./index";
 import { addNewRequest, addRequest, cedar, createHarness, staff, unit } from "./test-fixtures";
@@ -18,6 +19,7 @@ const DEFINED_IN_PRODUCT = [
   "Suspected Duplication",
   "undo rate",
   "Origin",
+  "Agent correctness",
 ] as const;
 
 const productMetricSection = async () => {
@@ -130,6 +132,128 @@ describe("Review Coverage: reviewed new requests over new requests", () => {
 
     const metrics = await harness.review.metrics();
     assert.deepEqual(metrics.reviewCoverage, { rate: 0.5, reviewed: 1, total: 2 });
+  });
+});
+
+describe("Review Coverage under Blind Review: a blind request is reviewed by its own decision", () => {
+  it("counts a blind new request once its blind decision is made, its unseen suspicion still open", async () => {
+    const harness = await createHarness({ blindShare: 1 });
+    const backlog = await addRequest(harness, "Manager approval for swaps", unit(0));
+    const fresh = await addNewRequest(harness, "Approve shift trades", unit(1));
+    await suspect(harness, fresh.id, backlog.id);
+    const before = await harness.review.metrics();
+    // 0 reviewed of 1 new request: the blind reviewer has not decided yet.
+    assert.deepEqual(before.reviewCoverage, { rate: 0, reviewed: 0, total: 1 });
+
+    await harness.review.decide({ decision: "none", featureRequestId: fresh.id }, staff);
+
+    const metrics = await harness.review.metrics();
+    // 1 reviewed ÷ 1 new = 100%, although the suspicion it never saw is still undecided: it
+    // stays Suspected Duplication workload for the backlog side.
+    assert.deepEqual(metrics.reviewCoverage, { rate: 1, reviewed: 1, total: 1 });
+    assert.deepEqual(metrics.suspectedDuplication, { open: 2, rate: 1, total: 2 });
+  });
+});
+
+describe("Agent correctness: agent Supports, Comments and creates scored against the Answer Key", () => {
+  /**
+   * Need clusters, each label confirmed by a person: backlog fr-swap and feedback fb-swap share
+   * "swap"; fb-export and fb-export2 share "export", which no backlog request has; fb-draft is
+   * not confirmed yet.
+   */
+  const answerKey = {
+    featureRequests: [
+      { confirmed: true, key: "fr-swap", needId: "swap" },
+      { confirmed: true, key: "fr-clock", needId: "clock" },
+    ],
+    feedback: [
+      { confirmed: true, key: "fb-swap", needId: "swap" },
+      { confirmed: true, key: "fb-export", needId: "export" },
+      { confirmed: true, key: "fb-export2", needId: "export" },
+      { confirmed: false, key: "fb-draft", needId: "swap" },
+    ],
+  };
+  const backlog = [{ backlog: "fr-swap" }, { backlog: "fr-clock" }];
+
+  it("counts a Support on a different need as harm and a create of an existing need as a miss", () => {
+    const score = scoreAgentCorrectness(
+      [
+        // Correct: Support on a request with the same needId.
+        { feedbackItemId: "fb-swap", kind: "support", target: { backlog: "fr-swap" } },
+        // Harm: Support on a request with a different needId.
+        { feedbackItemId: "fb-swap", kind: "support", target: { backlog: "fr-clock" } },
+        // Miss: create while a request of the same need existed (fr-swap).
+        { existing: backlog, feedbackItemId: "fb-swap", kind: "create" },
+        // Correct: create when no request of the need existed yet.
+        { existing: backlog, feedbackItemId: "fb-export", kind: "create" },
+        // Correct: Support on the request filed earlier in the pilot for the same need.
+        { feedbackItemId: "fb-export2", kind: "support", target: { filedFor: "fb-export" } },
+        // Excluded and counted: the entry is not confirmed by a person.
+        { feedbackItemId: "fb-draft", kind: "support", target: { backlog: "fr-swap" } },
+        // Counted, not scored: no Answer Key entry.
+        { existing: backlog, feedbackItemId: "fb-unknown", kind: "create" },
+      ],
+      answerKey,
+    );
+
+    // 3 correct ÷ 5 scored (3 correct + 1 harm + 1 miss) = 60%.
+    assert.deepEqual(score, {
+      actions: 7,
+      correct: 3,
+      excludedUnconfirmed: 1,
+      harm: 1,
+      miss: 1,
+      rate: 0.6,
+      scored: 5,
+      unlinked: 0,
+      unmatched: 1,
+      unresolved: 0,
+    });
+  });
+
+  it("reports Product Manager agreement with the Answer Key, blind and non-blind apart", () => {
+    const score = scorePmAgreement(
+      [
+        // Non-blind agree: Duplicate of a request with the same needId.
+        {
+          blind: false,
+          feedbackItemId: "fb-swap",
+          verdict: { kind: "duplicate", other: { backlog: "fr-swap" } },
+        },
+        // Non-blind disagree: Related, though an earlier request has the same needId.
+        {
+          blind: false,
+          feedbackItemId: "fb-swap",
+          verdict: { earlier: backlog, kind: "not_duplicate" },
+        },
+        // Blind agree: no duplicate, and no earlier request has the export need.
+        {
+          blind: true,
+          feedbackItemId: "fb-export",
+          verdict: { earlier: backlog, kind: "not_duplicate" },
+        },
+        // Blind disagree: Duplicate of a request with a different needId.
+        {
+          blind: true,
+          feedbackItemId: "fb-export2",
+          verdict: { kind: "duplicate", other: { backlog: "fr-swap" } },
+        },
+        // Blind, excluded: unconfirmed entry.
+        {
+          blind: true,
+          feedbackItemId: "fb-draft",
+          verdict: { earlier: backlog, kind: "not_duplicate" },
+        },
+      ],
+      answerKey,
+    );
+
+    // Non-blind 1 ÷ 2 = 50%; blind 1 ÷ 2 = 50%, with 3 decided and 1 excluded.
+    assert.deepEqual(
+      [score.nonBlind.rate, score.nonBlind.decided, score.blind.rate, score.blind.decided],
+      [0.5, 2, 0.5, 3],
+    );
+    assert.equal(score.blind.excludedUnconfirmed, 1);
   });
 });
 

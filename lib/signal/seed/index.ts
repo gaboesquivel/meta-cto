@@ -1,4 +1,4 @@
-import { eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 
 import {
@@ -12,7 +12,7 @@ import {
 import type { Embedder } from "../contracts";
 import type { SignalDb } from "../db";
 import type { ActorType, SignalRepository } from "../repository";
-import { comments, featureRequests, relatedLinks, supports } from "../schema";
+import { comments, featureRequests, relatedLinks, supports, workspaces } from "../schema";
 
 export interface SeedOptions {
   /** Needed only for `reset`, which deletes demo rows with raw queries. */
@@ -43,41 +43,47 @@ const requireId = (ids: Map<string, string>, key: string, kind: string) => {
   return id;
 };
 
+const touches = (ids: string[], column: PgColumn) =>
+  ids.length > 0 ? inArray(column, ids) : undefined;
+
 /**
- * Deletes demo rows in dependency order. Rows attached to a demo Feature Request go with it;
- * user-created Feature Requests and all Accounts stay (Accounts are static and upserted by name).
+ * Deletes demo rows of the Crewday Demo Workspace in dependency order. Rows attached to a demo
+ * Feature Request go with it; user-created Feature Requests and all Accounts stay (Accounts are
+ * static and upserted by name). Every other Workspace is untouched: the Pilot Workspace's backlog
+ * is loaded through the seed upsert (so it is marked demo) and must survive a reset.
  */
 export const resetDemo = async (db: SignalDb) => {
-  const demoRows = await db
-    .select({ id: featureRequests.id })
+  const [crewday] = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.slug, workspace.slug));
+  if (!crewday) return;
+  const crewdayRows = await db
+    .select({ id: featureRequests.id, isDemo: featureRequests.isDemo })
     .from(featureRequests)
-    .where(eq(featureRequests.isDemo, true));
-  const demoIds = demoRows.map((row) => row.id);
-  const touchesDemo = (column: PgColumn) =>
-    demoIds.length > 0 ? inArray(column, demoIds) : undefined;
+    .where(eq(featureRequests.workspaceId, crewday.id));
+  const crewdayIds = crewdayRows.map((row) => row.id);
+  const demoIds = crewdayRows.filter((row) => row.isDemo).map((row) => row.id);
+  if (crewdayIds.length === 0) return;
+  /** Demo-marked and attached to a Crewday Feature Request, or attached to a demo one. */
+  const inDemo = (isDemo: PgColumn, ...columns: PgColumn[]) =>
+    or(
+      and(eq(isDemo, true), or(...columns.map((column) => touches(crewdayIds, column)))),
+      ...columns.map((column) => touches(demoIds, column)),
+    );
 
   await db
     .delete(relatedLinks)
     .where(
-      or(
-        eq(relatedLinks.isDemo, true),
-        touchesDemo(relatedLinks.featureRequestAId),
-        touchesDemo(relatedLinks.featureRequestBId),
-      ),
+      inDemo(relatedLinks.isDemo, relatedLinks.featureRequestAId, relatedLinks.featureRequestBId),
     );
-  await db
-    .delete(comments)
-    .where(or(eq(comments.isDemo, true), touchesDemo(comments.featureRequestId)));
+  await db.delete(comments).where(inDemo(comments.isDemo, comments.featureRequestId));
   await db
     .delete(supports)
-    .where(
-      or(
-        eq(supports.isDemo, true),
-        touchesDemo(supports.featureRequestId),
-        touchesDemo(supports.originalFeatureRequestId),
-      ),
-    );
-  await db.delete(featureRequests).where(eq(featureRequests.isDemo, true));
+    .where(inDemo(supports.isDemo, supports.featureRequestId, supports.originalFeatureRequestId));
+  await db
+    .delete(featureRequests)
+    .where(and(eq(featureRequests.isDemo, true), eq(featureRequests.workspaceId, crewday.id)));
 };
 
 /** Runs `task` over `items` in sequential batches of `size`, keeping concurrency bounded. */

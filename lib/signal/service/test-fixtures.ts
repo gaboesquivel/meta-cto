@@ -100,6 +100,7 @@ export const createHarness = async (input: {
   const clock = { now: new Date("2026-10-28T12:00:00.000Z") };
   const origin = input.origin ?? "demo";
   const service = createSignalService({
+    blindShare: input.blindShare,
     embedder: embedder.embedder,
     judge: judge.judge,
     judgeTimeoutMs: input.judgeTimeoutMs,

@@ -3,6 +3,8 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
+import type { AnswerKeyLabels } from "@/lib/signal/service/answer-key";
+
 /**
  * Pilot files (spec 003, task 03): the pre-pilot backlog, the feedback agents will file, the
  * Answer Key and the manifest that states the expected backlog duplicate rate. All four are
@@ -66,12 +68,29 @@ export const pilotFeedbackSchema = z.object({
   title: z.string().min(1),
 });
 
-/** The backlog request a feedback item shares a need with, or null; confirmed by a person. */
-export const answerKeyEntrySchema = z.object({
+const confirmation = {
   confirmedAt: dateSchema.nullable().optional(),
   confirmedBy: nullableText.optional(),
+};
+
+/**
+ * A need cluster label confirmed by a person: two items share a need iff their `needId`s are
+ * equal. Every backlog Feature Request and every feedback item carries exactly one.
+ */
+export const backlogNeedSchema = z.object({
+  ...confirmation,
+  featureRequest: keySchema,
+  needId: keySchema,
+});
+export const feedbackNeedSchema = z.object({
+  ...confirmation,
   feedback: keySchema,
-  sharesNeedWith: keySchema.nullable(),
+  needId: keySchema,
+});
+
+export const answerKeySchema = z.object({
+  featureRequests: z.array(backlogNeedSchema),
+  feedback: z.array(feedbackNeedSchema),
 });
 
 export const pilotLockSchema = z.object({
@@ -89,11 +108,14 @@ export type PilotAccount = z.infer<typeof pilotAccountSchema>;
 export type PilotFeatureRequest = z.infer<typeof pilotFeatureRequestSchema>;
 export type PilotBacklog = z.infer<typeof pilotBacklogSchema>;
 export type PilotFeedback = z.infer<typeof pilotFeedbackSchema>;
-export type AnswerKeyEntry = z.infer<typeof answerKeyEntrySchema>;
+export type BacklogNeed = z.infer<typeof backlogNeedSchema>;
+export type FeedbackNeed = z.infer<typeof feedbackNeedSchema>;
+export type AnswerKey = z.infer<typeof answerKeySchema>;
+type AnswerKeyEntry = BacklogNeed | FeedbackNeed;
 export type PilotLock = z.infer<typeof pilotLockSchema>;
 
 export interface PilotFiles {
-  answerKey: AnswerKeyEntry[];
+  answerKey: AnswerKey;
   backlog: PilotBacklog;
   feedback: PilotFeedback[];
   manifest: PilotManifest;
@@ -103,7 +125,7 @@ const readJson = (dir: string, file: string): unknown =>
   JSON.parse(readFileSync(path.join(dir, file), "utf-8"));
 
 export const readPilotFiles = (dir = PILOT_DIR): PilotFiles => ({
-  answerKey: z.array(answerKeyEntrySchema).parse(readJson(dir, PILOT_FILES.answerKey)),
+  answerKey: answerKeySchema.parse(readJson(dir, PILOT_FILES.answerKey)),
   backlog: pilotBacklogSchema.parse(readJson(dir, PILOT_FILES.backlog)),
   feedback: z.array(pilotFeedbackSchema).parse(readJson(dir, PILOT_FILES.feedback)),
   manifest: pilotManifestSchema.parse(readJson(dir, PILOT_FILES.manifest)),
@@ -138,7 +160,10 @@ const canonicalJson = (value: unknown): string => {
 /** SHA-256 over all four files (entries ordered by key): any content change moves it. */
 export const fingerprint = (files: PilotFiles): string => {
   const ordered = {
-    answerKey: byKey(files.answerKey, (e) => e.feedback),
+    answerKey: {
+      featureRequests: byKey(files.answerKey.featureRequests, (e) => e.featureRequest),
+      feedback: byKey(files.answerKey.feedback, (e) => e.feedback),
+    },
     backlog: {
       accounts: byKey(files.backlog.accounts, (a) => a.key),
       featureRequests: byKey(files.backlog.featureRequests, (r) => r.key),
@@ -152,22 +177,50 @@ export const fingerprint = (files: PilotFiles): string => {
 const isConfirmed = (entry: AnswerKeyEntry) =>
   Boolean(entry.confirmedBy?.trim() && entry.confirmedAt);
 
-/** Feedback keys whose Answer Key entry lacks a person (`confirmedBy`) and a time (`confirmedAt`). */
-export const unconfirmedEntries = (files: PilotFiles): string[] =>
-  files.answerKey.filter((entry) => !isConfirmed(entry)).map((entry) => entry.feedback);
+/** Keys (backlog request or feedback) whose Answer Key entry lacks `confirmedBy` and `confirmedAt`. */
+export const unconfirmedEntries = (files: PilotFiles): string[] => [
+  ...files.answerKey.featureRequests.filter((e) => !isConfirmed(e)).map((e) => e.featureRequest),
+  ...files.answerKey.feedback.filter((e) => !isConfirmed(e)).map((e) => e.feedback),
+];
 
 /**
- * Answer Key lookup for one feedback item: the backlog request key it shares a need with (null
- * for none) and whether a person confirmed it; undefined when the item has no entry.
+ * Answer Key lookup for one feedback item: its need cluster (`needId`), whether a person confirmed
+ * it, and the backlog requests in the same cluster; undefined when the item has no entry.
  */
 export const answerKeyFor = (
   files: Pick<PilotFiles, "answerKey">,
   feedbackKey: string,
-): { confirmed: boolean; sharesNeedWith: string | null } | undefined => {
-  const entry = files.answerKey.find((e) => e.feedback === feedbackKey);
-  return entry
-    ? { confirmed: isConfirmed(entry), sharesNeedWith: entry.sharesNeedWith }
-    : undefined;
+): { confirmed: boolean; needId: string; sharesNeedWith: string[] } | undefined => {
+  const entry = files.answerKey.feedback.find((e) => e.feedback === feedbackKey);
+  if (!entry) return undefined;
+  return {
+    confirmed: isConfirmed(entry),
+    needId: entry.needId,
+    sharesNeedWith: files.answerKey.featureRequests
+      .filter((e) => e.needId === entry.needId)
+      .map((e) => e.featureRequest)
+      .toSorted(),
+  };
+};
+
+/** Every Answer Key label as Answer Key scoring reads it; unconfirmed ones are excluded there. */
+export const answerKeyLabels = (files: Pick<PilotFiles, "answerKey">): AnswerKeyLabels => ({
+  featureRequests: files.answerKey.featureRequests.map((e) => ({
+    confirmed: isConfirmed(e),
+    key: e.featureRequest,
+    needId: e.needId,
+  })),
+  feedback: files.answerKey.feedback.map((e) => ({
+    confirmed: isConfirmed(e),
+    key: e.feedback,
+    needId: e.needId,
+  })),
+});
+
+/** Feedback items whose need cluster includes a backlog request (expected intake duplicates). */
+const sharesBacklogNeed = (files: PilotFiles): number => {
+  const backlogNeeds = new Set(files.answerKey.featureRequests.map((e) => e.needId));
+  return files.answerKey.feedback.filter((e) => backlogNeeds.has(e.needId)).length;
 };
 
 const duplicates = (keys: string[]) => [...new Set(keys.filter((k, i) => keys.indexOf(k) !== i))];
@@ -186,7 +239,11 @@ export const pilotProblems = (files: PilotFiles): string[] => {
     ["account name", accounts.map((a) => a.name)],
     ["feature request", featureRequests.map((r) => r.key)],
     ["feedback", files.feedback.map((f) => f.key)],
-    ["Answer Key entry for feedback", files.answerKey.map((e) => e.feedback)],
+    ["Answer Key entry for feedback", files.answerKey.feedback.map((e) => e.feedback)],
+    [
+      "Answer Key entry for feature request",
+      files.answerKey.featureRequests.map((e) => e.featureRequest),
+    ],
   ] as const) {
     for (const key of duplicates([...keys])) problems.push(`duplicate ${kind} "${key}"`);
   }
@@ -196,21 +253,28 @@ export const pilotProblems = (files: PilotFiles): string[] => {
   for (const item of files.feedback.filter((f) => !accountKeys.has(f.account))) {
     problems.push(`feedback "${item.key}" names unknown account "${item.account}"`);
   }
-  const answered = new Set(files.answerKey.map((e) => e.feedback));
+  const answered = new Set(files.answerKey.feedback.map((e) => e.feedback));
   for (const item of files.feedback.filter((f) => !answered.has(f.key))) {
     problems.push(`feedback "${item.key}" has no Answer Key entry`);
   }
-  for (const e of files.answerKey) {
+  const labeled = new Set(files.answerKey.featureRequests.map((e) => e.featureRequest));
+  for (const request of featureRequests.filter((r) => !labeled.has(r.key))) {
+    problems.push(`feature request "${request.key}" has no Answer Key entry`);
+  }
+  for (const e of files.answerKey.feedback) {
     if (!feedbackKeys.has(e.feedback)) {
       problems.push(`Answer Key entry names unknown feedback "${e.feedback}"`);
     }
-    if (e.sharesNeedWith !== null && !requestKeys.has(e.sharesNeedWith)) {
-      problems.push(
-        `Answer Key entry "${e.feedback}" names unknown feature request "${e.sharesNeedWith}"`,
-      );
+  }
+  for (const e of files.answerKey.featureRequests) {
+    if (!requestKeys.has(e.featureRequest)) {
+      problems.push(`Answer Key entry names unknown feature request "${e.featureRequest}"`);
     }
+  }
+  for (const e of [...files.answerKey.featureRequests, ...files.answerKey.feedback]) {
     if (sameName(e.confirmedBy, files.manifest.backlogAuthor)) {
-      problems.push(`Answer Key entry "${e.feedback}" is confirmed by the backlog author`);
+      const key = "feedback" in e ? e.feedback : e.featureRequest;
+      problems.push(`Answer Key entry "${key}" is confirmed by the backlog author`);
     }
   }
   const { feedbackGenerator, judgeFamily } = files.manifest;
@@ -264,7 +328,7 @@ export const checkPilotReady = (files: PilotFiles, lock: PilotLock | null): Pilo
   const changed = frozen && lock.fingerprint !== print;
   const problems = pilotProblems(files);
   const unconfirmed = unconfirmedEntries(files);
-  const sharesNeed = files.answerKey.filter((e) => e.sharesNeedWith !== null).length;
+  const sharesNeed = sharesBacklogNeed(files);
   const messages: string[] = [];
   if (changed) messages.push(changedMessage(lock));
   if (files.feedback.length === 0) messages.push("Pilot files have no feedback items yet.");
@@ -284,10 +348,10 @@ export const checkPilotReady = (files: PilotFiles, lock: PilotLock | null): Pilo
     changed,
     counts: {
       accounts: files.backlog.accounts.length,
-      answerKey: files.answerKey.length,
+      answerKey: files.answerKey.featureRequests.length + files.answerKey.feedback.length,
       featureRequests: files.backlog.featureRequests.length,
       feedback: files.feedback.length,
-      noMatch: files.answerKey.length - sharesNeed,
+      noMatch: files.answerKey.feedback.length - sharesNeed,
       sharesNeed,
       unconfirmed: unconfirmed.length,
     },
@@ -360,7 +424,7 @@ export const freezePilot = (input: {
       feedback: files.feedback.length,
       fingerprint: print,
       frozenAt: input.now.toISOString(),
-      sharesNeed: files.answerKey.filter((e) => e.sharesNeedWith !== null).length,
+      sharesNeed: sharesBacklogNeed(files),
     },
     ok: true,
   };

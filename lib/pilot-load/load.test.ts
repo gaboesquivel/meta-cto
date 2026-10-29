@@ -115,7 +115,7 @@ describe("loadPilot", () => {
 
     const files = pilotFixture();
     at(files.backlog.featureRequests, 0).key = crewdayRow.seedKey;
-    at(files.answerKey, 0).sharesNeedWith = crewdayRow.seedKey;
+    at(files.answerKey.featureRequests, 0).featureRequest = crewdayRow.seedKey;
     const result = await loadPilot({ embedder: fakeEmbedder(), files, lock: null, repo });
     assert.ok(result.ok);
     assert.equal(await requestCount(db, crewdayId), before);
@@ -150,7 +150,7 @@ describe("loadPilot", () => {
 
   it("reports readiness alongside the load", async () => {
     const files = pilotFixture();
-    at(files.answerKey, 0).confirmedBy = null;
+    at(files.answerKey.feedback, 0).confirmedBy = null;
     const result = await loadPilot({ embedder: null, files, lock: null, repo });
     assert.ok(result.ok);
     assert.deepEqual(result.status.unconfirmed, ["fb-1"]);
