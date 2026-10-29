@@ -2,7 +2,7 @@ import { handleSignal } from "@/lib/signal/http";
 
 export const dynamic = "force-dynamic";
 
-/** Check, Suggestion Acceptance and create-after-Same-Need metrics. */
+/** Review metrics (Intake Duplicate Rate, backlog baseline, Review Coverage, Suspected Duplication, Undo Rate) plus Suggestion Acceptance. */
 export const GET = () =>
   handleSignal({
     run: async (service) => {

@@ -6,13 +6,13 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 
 ## Runtime surfaces
 
-| Surface          | Path                                                                                                     | Notes                                                         |
-| ---------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Signal UI        | `/`, `/requests`, `/requests/new`, `/requests/[id]`                                                      | Internal; open demo on the Crewday Demo Workspace             |
-| Signal REST      | `/api/checks`, `/api/feature-requests`, `/api/feature-requests/[id]/{supports,comments}`, `/api/metrics` | Listed in `/openapi.json`; writes rate-limited per IP         |
-| Public MCP       | `/api/mcp`, `/.well-known/mcp.json`                                                                      | Signal tools (`check_feature_request`, …) plus template tools |
-| GenUI playground | `/genui`                                                                                                 | Template OpenUI compose + preview                             |
-| Operator         | `/operator`, `/api/mcp/operator`                                                                         | Template; protected, fail closed without `OPERATOR_SECRET`    |
+| Surface          | Path                                                                                                                                                               | Notes                                                                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Signal UI        | `/`, `/requests`, `/requests/new`, `/requests/[id]`, `/review`                                                                                                     | Internal; open demo on the Crewday Demo Workspace; review actions need Operator sign-in                                                       |
+| Signal REST      | `/api/checks`, `/api/feature-requests`, `/api/feature-requests/[id]/{supports,comments}`, `/api/metrics`, `/api/review/{queue,decisions,decisions/[id]/undo,scan}` | Listed in `/openapi.json`; writes rate-limited per IP; review writes need Operator access                                                     |
+| Public MCP       | `/api/mcp`, `/.well-known/mcp.json`                                                                                                                                | Signal tools (`check_feature_request`, …) plus template tools                                                                                 |
+| GenUI playground | `/genui`                                                                                                                                                           | Template OpenUI compose + preview                                                                                                             |
+| Operator         | `/operator`, `/api/mcp/operator`                                                                                                                                   | Protected, fail closed without `OPERATOR_SECRET`; adds review tools (`review_queue`, `decide_review`, `undo_review_decision`, `scan_backlog`) |
 
 ## Signal modules (`lib/signal/`)
 
@@ -20,8 +20,10 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 - `agent/`: AI Gateway embedder (`openai/text-embedding-3-small`, 1536 dimensions) and the LLM judge (one structured-output call returning the Underlying Need and a Verdict, Reason and Shared Dimension per candidate).
 - `service/`: the domain service. A Check embeds the Draft, takes the 10 nearest Feature Requests by cosine distance, asks the judge, caps the result (≤ 3 Same Need, ≤ 2 Related Need) and falls back to `unknown` verdicts (`degraded`) on judge failure or a 20 s timeout. Create requires a matching, unexpired Check and a Skip Reason after Same Need. Every action records a domain event.
 - `repository.ts`, `schema.ts`, `db.ts`: Drizzle on Neon Postgres with pgvector ([decision 0001](docs/decisions/0001-postgres-pgvector-neon-drizzle.md)); migrations in `drizzle/`.
+- `service/review*`: the Review Queue, Review Decisions (Duplicate with a canonical, Related with a human Shared Dimension, Distinct) and Undo with history; Mark Duplicate is a reversible association, so canonical Feature Requests show duplicates' evidence with provenance and Checks skip confirmed duplicates ([spec 002](docs/specs/002-review-queue.md), [decision 0002](docs/decisions/0002-fragmentation-and-duplicate-association.md)). Metrics: Intake Duplicate Rate with backlog baseline, Review Coverage, Suspected Duplication, Undo Rate, Suggestion Acceptance.
+- `scan/`: the backlog scan (Same Need only, once per Feature Request), run only as an Operator action or `pnpm signal:scan`, never in builds.
 - `seed/`: idempotent Crewday Demo Workspace seed from `data/crewday/`.
-- `runtime/`: `getSignalService()` composes the above, or returns null when `DATABASE_URL` or AI keys are missing (routes then answer 503 `service_unavailable`).
+- `runtime/`: `getSignalService()` and `getReviewService()` compose the above, or return null when `DATABASE_URL` (and, for Checks, AI keys) are missing; routes then answer 503 `service_unavailable`. The scan needs AI keys too.
 - `http/`: REST helpers (parsing, error mapping, write rate limit).
 
 ## Data and environments
