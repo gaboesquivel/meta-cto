@@ -112,6 +112,8 @@ export const runCheck = async (context: ServiceContext, raw: CheckInput): Promis
   const pool = await context.repo.nearestFeatureRequests({
     embedding,
     limit: CANDIDATE_POOL,
+    // Confirmed duplicates are never offered; their canonical Feature Request is.
+    openOnly: true,
     workspaceId: context.workspaceId,
   });
   const judged = await judgePool(context, input, pool);

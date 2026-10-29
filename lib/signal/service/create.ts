@@ -2,7 +2,14 @@ import type { Candidate, CheckResult, CreateInput, FeatureRequestDetail } from "
 import { CHECK_TTL_MINUTES, SignalError, createInputSchema } from "../contracts";
 import type { CheckRow } from "../repository";
 import type { ServiceContext } from "./context";
-import { draftHash, draftText, parseInput, upsertOnBehalfOf } from "./context";
+import {
+  UNIQUE_VIOLATION,
+  databaseErrorCode,
+  draftHash,
+  draftText,
+  parseInput,
+  upsertOnBehalfOf,
+} from "./context";
 import { buildDetail } from "./views";
 
 /** Reaches UI, REST and MCP callers alike, so it names both ways to Check. */
@@ -21,13 +28,6 @@ const checkRequired = (resolution: string, message?: string) =>
 
 const alreadyUsed = () =>
   checkRequired(ALREADY_USED, "The Check already created a Feature Request.");
-
-/** Postgres unique violation, possibly wrapped by the driver or Drizzle. */
-const isUniqueViolation = (error: unknown): boolean => {
-  if (typeof error !== "object" || error === null) return false;
-  const { cause, code } = error as { cause?: unknown; code?: unknown };
-  return code === "23505" || isUniqueViolation(cause);
-};
 
 /** Loads the Check for a create and enforces existence, single use, Draft match, expiry and Skip Reason. */
 const requireValidCheck = async (
@@ -108,6 +108,25 @@ const addRelatedLinks = async (context: ServiceContext, id: string, result: Chec
   );
 };
 
+/** A skipped Same Need candidate becomes a Suspected Duplicate for the Product Manager to review. */
+const recordSuspicions = async (context: ServiceContext, id: string, result: CheckResult) => {
+  const sameNeed = result.candidates.filter((candidate) => candidate.verdict === "same_need");
+  await Promise.all(
+    sameNeed.map(
+      async (candidate) =>
+        await context.repo.upsertSuspectedDuplicate({
+          a: id,
+          b: candidate.featureRequestId,
+          judgedAt: context.now(),
+          model: null,
+          reason: candidate.reason ?? "",
+          source: "check",
+          workspaceId: context.workspaceId,
+        }),
+    ),
+  );
+};
+
 export const runCreate = async (
   context: ServiceContext,
   raw: CreateInput,
@@ -136,7 +155,7 @@ export const runCreate = async (
     })
     .catch((error: unknown) => {
       // A concurrent create with the same Check lost the race on the unique index.
-      throw isUniqueViolation(error) ? alreadyUsed() : error;
+      throw databaseErrorCode(error) === UNIQUE_VIOLATION ? alreadyUsed() : error;
     });
   await context.repo.insertEvent({
     payload: {
@@ -150,5 +169,6 @@ export const runCreate = async (
     workspaceId: context.workspaceId,
   });
   await addRelatedLinks(context, row.id, result);
+  await recordSuspicions(context, row.id, result);
   return await buildDetail(context, row);
 };

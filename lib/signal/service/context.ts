@@ -77,13 +77,28 @@ export const notFound = (featureRequestId: string) =>
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 
+/** The part of a context that reads Feature Requests in one Workspace. */
+export type WorkspaceScope = Pick<ServiceContext, "repo" | "workspaceId">;
+
+export const isUuid = (id: string) => UUID.test(id);
+
 /** Loads a Feature Request in this Workspace or throws `not_found`. */
-export const requireFeatureRequest = async (context: ServiceContext, id: string) => {
+export const requireFeatureRequest = async (context: WorkspaceScope, id: string) => {
   if (!UUID.test(id)) throw notFound(id);
   const row = await context.repo.getFeatureRequest(id);
   if (!row || row.workspaceId !== context.workspaceId) throw notFound(id);
   return row;
 };
+
+/** Postgres SQLSTATE of a database error, possibly wrapped by the driver or Drizzle. */
+export const databaseErrorCode = (error: unknown): string | null => {
+  if (typeof error !== "object" || error === null) return null;
+  const { cause, code } = error as { cause?: unknown; code?: unknown };
+  if (typeof code === "string" && /^[0-9A-Z]{5}$/u.test(code)) return code;
+  return databaseErrorCode(cause);
+};
+
+export const UNIQUE_VIOLATION = "23505";
 
 const normalize = (text: string) => text.trim().replaceAll(/\s+/gu, " ").toLowerCase();
 
