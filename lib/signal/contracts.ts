@@ -216,7 +216,10 @@ export interface SuggestionMetrics {
 
 /** Spec 002 metrics: the shape of `GET /api/metrics`. */
 export interface ReviewMetrics extends SuggestionMetrics {
-  /** The one Origin every count here was read from. */
+  /**
+   * The intake Origin: Checks, events and Feature Requests created through a Check count only
+   * from it. The pre-Signal backlog (baseline, its suspicions) is the Workspace's, for any Origin.
+   */
   origin: Origin;
   /** Reviewed pre-Signal Feature Requests confirmed Duplicate ÷ reviewed pre-Signal Feature Requests. */
   backlogBaseline: { duplicates: number; rate: number | null; reviewed: number };

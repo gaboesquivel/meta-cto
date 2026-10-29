@@ -157,7 +157,7 @@ describe("undo rate: Duplicate decisions later undone", () => {
   });
 });
 
-describe("Origin: every metric reads one Origin, the caller's own by default", () => {
+describe("Origin: intake reads one Origin (the caller's by default); the Workspace owns the backlog", () => {
   const draft = { description: "Managers sign off each change", title: "Managers approve swaps" };
 
   /** An eval run on the demo Workspace: a Check that finds a Same Need, then a Support. */
@@ -206,9 +206,55 @@ describe("Origin: every metric reads one Origin, the caller's own by default", (
     assert.equal(evalRun.suggestionAcceptance, 1);
   });
 
-  it("counts the seeded backlog under seed, never under demo", async () => {
+  it("reads the Workspace's seeded backlog for every intake Origin, and only that Origin's intake", async () => {
     const harness = await createHarness({});
     const seeded = await Promise.all(
+      ["Manager approval", "Approve trades", "Swap sign-off"].map(
+        async (title, index) =>
+          await harness.repo.upsertSeedFeatureRequest({
+            createdByActorName: "seed",
+            createdByActorType: "staff",
+            description: `${title} description`,
+            embedding: unit(index),
+            seedKey: `fr-${index}`,
+            title,
+            underlyingNeed: null,
+            workspaceId: harness.workspaceId,
+          }),
+      ),
+    );
+    const [canonical, older, pending] = seeded;
+    assert.ok(canonical && older && pending);
+    await suspect(harness, canonical.id, older.id);
+    await duplicate(harness, older.id, canonical.id);
+    await suspect(harness, pending.id, canonical.id);
+    const evalIntake = await harness.repo.insertFeatureRequest({
+      createdByActorName: "eval",
+      createdByActorType: "agent",
+      createdViaCheck: true,
+      description: "Eval filing",
+      embedding: null,
+      origin: "eval",
+      title: "Eval filing",
+      underlyingNeed: null,
+      workspaceId: harness.workspaceId,
+    });
+    await suspect(harness, evalIntake.id, canonical.id);
+
+    const demo = await harness.review.metrics();
+    assert.equal(demo.origin, "demo");
+    assert.deepEqual(demo.backlogBaseline, { duplicates: 1, rate: 1, reviewed: 1 });
+    assert.deepEqual(demo.suspectedDuplication, { open: 2, rate: 1, total: 2 });
+    assert.deepEqual(demo.undoRate, { decisions: 1, rate: 0, undone: 0 });
+    assert.deepEqual(demo.reviewCoverage, { rate: null, reviewed: 0, total: 0 });
+    const evalRun = await harness.review.metrics({ origin: "eval" });
+    assert.deepEqual(evalRun.suspectedDuplication, { open: 3, rate: 1, total: 3 });
+    assert.deepEqual(evalRun.reviewCoverage, { rate: 0, reviewed: 0, total: 1 });
+  });
+
+  it("keeps the backlog baseline for a demo caller once the seeded backlog is reviewed", async () => {
+    const harness = await createHarness({});
+    const [canonical, older] = await Promise.all(
       ["Manager approval", "Approve trades"].map(
         async (title, index) =>
           await harness.repo.upsertSeedFeatureRequest({
@@ -223,17 +269,11 @@ describe("Origin: every metric reads one Origin, the caller's own by default", (
           }),
       ),
     );
-    const [canonical, older] = seeded;
     assert.ok(canonical && older);
     await suspect(harness, canonical.id, older.id);
     await duplicate(harness, older.id, canonical.id);
 
     const demo = await harness.review.metrics();
-    assert.deepEqual(demo.backlogBaseline, { duplicates: 0, rate: null, reviewed: 0 });
-    assert.deepEqual(demo.suspectedDuplication, { open: 0, rate: null, total: 0 });
-    assert.deepEqual(demo.undoRate, { decisions: 0, rate: null, undone: 0 });
-    const seed = await harness.review.metrics({ origin: "seed" });
-    assert.deepEqual(seed.backlogBaseline, { duplicates: 2, rate: 1, reviewed: 2 });
-    assert.deepEqual(seed.undoRate, { decisions: 1, rate: 0, undone: 0 });
+    assert.deepEqual(demo.backlogBaseline, { duplicates: 2, rate: 1, reviewed: 2 });
   });
 });

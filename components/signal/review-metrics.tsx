@@ -75,7 +75,9 @@ export const ReviewMetricsPanel = ({
     <p className="text-muted-foreground text-sm">
       Only a Product Manager&apos;s Review Decision confirms a Duplicate. The AI&apos;s Suspected
       Duplicates are prompts for review and never count as duplication.
-      {metrics ? ` These counts read ${metrics.origin} activity only.` : null}
+      {metrics
+        ? ` Checks and new requests count ${metrics.origin} activity only; the backlog baseline reads this Workspace's backlog.`
+        : null}
     </p>
   </section>
 );

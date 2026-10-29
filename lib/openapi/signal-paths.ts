@@ -112,7 +112,7 @@ const duplicateEvidence = {
 
 const originSchema = {
   description:
-    "Origin: where Checks and events came from. Every count in one response reads this one Origin.",
+    "Origin of the intake counted: Checks, events and Feature Requests created through a Check read only this Origin; the backlog baseline reads the Workspace's pre-Signal backlog.",
   enum: ["pilot", "demo", "seed", "eval"],
   type: "string",
 };

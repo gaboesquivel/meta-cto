@@ -554,10 +554,16 @@ export const createRepository = (db: SignalDb) => ({
 
   /**
    * Raw counts behind Intake Duplicate Rate, backlog baseline, Review Coverage, Suspected
-   * Duplication and undo rate, over the Feature Requests of one Origin. A Review Decision counts
-   * under the Origin of the Feature Request it was made on.
+   * Duplication and undo rate. Origin separates activity; the Workspace separates the backlog:
+   * the pre-Signal backlog (not created through a Check) counts for every caller of this
+   * Workspace, while intake (created through a Check) counts only for `origin`. A Review Decision
+   * counts when the Feature Request it was made on is in that scope.
    */
   async reviewMetricCounts(workspaceId: string, origin: Origin) {
+    const inScope = or(
+      eq(featureRequests.createdViaCheck, false),
+      eq(featureRequests.origin, origin),
+    );
     const open = isNull(featureRequests.duplicateOfId);
     const rows = await db
       .select({
@@ -569,7 +575,7 @@ export const createRepository = (db: SignalDb) => ({
         total: count(),
       })
       .from(featureRequests)
-      .where(and(eq(featureRequests.workspaceId, workspaceId), eq(featureRequests.origin, origin)))
+      .where(and(eq(featureRequests.workspaceId, workspaceId), inScope))
       .groupBy(featureRequests.createdViaCheck);
     const [decisions] = await db
       .select({
@@ -582,7 +588,7 @@ export const createRepository = (db: SignalDb) => ({
         and(
           eq(reviewDecisions.workspaceId, workspaceId),
           eq(reviewDecisions.decision, "duplicate"),
-          eq(featureRequests.origin, origin),
+          inScope,
         ),
       );
     const group = (createdViaCheck: boolean) => {
