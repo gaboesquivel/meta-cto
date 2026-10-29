@@ -88,3 +88,13 @@ Moving Supports or Comments between rows, bulk or automatic decisions, AI-sugges
 - **AI nondeterminism:** scan results vary between runs, so the demo depends on the seed's deliberate near-duplicates, not on specific pairs.
 - **What prevention means here:** a lower Intake Duplicate Rate than the backlog baseline suggests prevention works. It is not proof: new requests are fewer and younger.
 - **Candidate follow-ups:** themes/groups and evidence summaries (slice 3); a real Product Manager identity; scheduled scans.
+
+## Tasks
+
+- [ ] 01: Review contracts and data model (#15)
+- [ ] 02: Review service: queue, decisions, evidence, metrics (#19) — blocked by 01
+- [ ] 03: Backlog scan as an Operator action (#16) — blocked by 01
+- [ ] 04: Review REST API with Operator access (#14) — blocked by 01
+- [ ] 05: Operator MCP review tools (#18) — blocked by 01
+- [ ] 06: Review UI and canonical evidence (#17) — blocked by 01
+- [ ] 07: Wire, verify and align docs (#20) — blocked by 02–06
