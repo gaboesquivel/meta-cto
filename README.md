@@ -9,17 +9,18 @@ pnpm setup
 pnpm dev
 ```
 
-Open the Portless URL (default host `meta-cto.localhost`). Configure `.env.local` from `.env.example`.
+Open `https://meta-cto.localhost` (Portless proxy on 443, never a port in the URL; run `pnpm setup:portless` once). Configure `.env.local` from `.env.example`.
 
 ## Scripts
 
-| Script       | Purpose                                      |
-| ------------ | -------------------------------------------- |
-| `pnpm setup` | Prerequisites + non-destructive `.env.local` |
-| `pnpm dev`   | Development via Portless                     |
-| `pnpm qa`    | Lint, types, tests                           |
-| `pnpm build` | Production build (includes MCP App bundle)   |
-| `pnpm eval`  | Offline GenUI eval + Eve tool smoke          |
+| Script          | Purpose                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm setup`    | Prerequisites + non-destructive `.env.local`                                                                                                                  |
+| `pnpm dev`      | Development via Portless (`https://meta-cto.localhost`, no port)                                                                                              |
+| `pnpm dev:port` | Plain `next dev` on loopback `localhost:<port>` for parallel agents (one per worktree, copy `.env.local` in); pass `PORT` or let Next pick the next free port |
+| `pnpm qa`       | Lint, types, tests                                                                                                                                            |
+| `pnpm build`    | Production build (includes MCP App bundle)                                                                                                                    |
+| `pnpm eval`     | Offline GenUI eval + Eve tool smoke                                                                                                                           |
 
 ## Surfaces
 

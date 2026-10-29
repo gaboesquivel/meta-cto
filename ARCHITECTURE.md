@@ -27,7 +27,7 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 ## Data and environments
 
 - Neon Postgres through the Vercel Marketplace, one database branch per preview deployment; `DATABASE_URL` per environment.
-- The Vercel build runs `pnpm db:migrate && pnpm db:seed && pnpm build`; both scripts skip when `DATABASE_URL` is absent. Locally `predev` runs them before `pnpm dev`.
+- The Vercel build runs `pnpm db:migrate && pnpm db:seed && pnpm build`; both scripts skip when `DATABASE_URL` is absent. Locally `predev` runs them before `pnpm dev` and `pnpm dev:port`.
 - Seeded rows carry `is_demo` and a stable `seed_key`; seeding never overwrites user rows.
 
 ## Quality
@@ -38,4 +38,5 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 ## Local development
 
 - `pnpm setup`: dependencies and template technical skills
-- `pnpm dev`: migrate, seed, then Portless at `meta-cto.localhost`
+- `pnpm dev`: migrate, seed, then Portless at `https://meta-cto.localhost` (proxy pinned to 443, so the URL never carries a port)
+- `pnpm dev:port`: migrate, seed, then plain `next dev` on loopback at `localhost:<port>`, for agents and subagents running dev servers in parallel (one per worktree; set `PORT` or take Next's next free port). A new worktree has no `.env.local` (gitignored): copy it in, and give parallel worktrees their own Neon branch or run migrations once, since concurrent migrate runs can race
