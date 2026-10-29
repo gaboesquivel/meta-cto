@@ -290,3 +290,7 @@ Skills used: ship, build. Docs changed: none yet.
 2026-10-29T02:43:18Z — "continue, is there any pending work?"
 Question (user → assistant): any pending work? Answer: yes — tasks 02 and 06 running; 03,04,05,07,08 waiting; then review, checks, merge, verify; human labeling after ship.
 Skills used: build. Docs changed: none.
+
+2026-10-29T02:52:58Z — build progress
+Summary: Integrated 003 tasks 06 (#28) and 02 (#24, after fix round: pilot review writes need Operator access); fixed off-by-one task issue titles; started 03 and 04.
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (ticks).
