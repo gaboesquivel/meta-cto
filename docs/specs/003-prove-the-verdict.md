@@ -109,6 +109,6 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 - [ ] 03: Load the pilot backlog and Answer Key (#25)
 - [ ] 04: Blind review in the Review Queue (#26)
 - [ ] 05: Score agent correctness and PM agreement (#27)
-- [ ] 06: Held-Out Set v2 runner with intervals (#28)
+- [x] 06: Held-Out Set v2 runner with intervals (#28) — [a645ce4](https://github.com/gaboesquivel/meta-cto/commit/a645ce47e8def8075cbf94a5acb2346eda1bfa8c)
 - [ ] 07: Proof Report (#29)
 - [ ] 08: Wire, verify on a preview and align docs (#30)
