@@ -7,9 +7,9 @@ import { describe, test } from "vitest";
 import { seedFeatureRequests } from "@/data/crewday/seed";
 import type { CheckResult, Verdict } from "@/lib/signal/contracts";
 
-import { freezeV2, V2_SET_FILE, writeV2Lock } from "./held-out-v2";
+import { freezeV2, readV2Lock, V2_SET_FILE, writeV2Lock } from "./held-out-v2";
 import type { HeldOutV2Pair } from "./held-out-v2";
-import { readRunLog } from "./run-log";
+import { currentV2Reading, readRunLog } from "./run-log";
 import { runEval } from "./runner";
 import type { EvalService } from "./runner";
 import { loadEvalSet } from "./sets";
@@ -270,6 +270,28 @@ describe("runEval on Held-Out Set v2", () => {
     const outcome = await run(dir, null);
     assert.equal(outcome.status, "failed");
     assert.equal(readRunLog(dir)[0]?.status, "failed");
+    assert.equal(readRunLog(dir)[0]?.counts.completed, 0);
+  });
+
+  test("a run that failed before the judge leaves the next real run as the reading", async () => {
+    const { pairs, verdicts } = fullSet();
+    const dir = v2Dir(pairs);
+    const unavailable = await run(dir, null);
+    assert.equal(unavailable.status, "failed");
+    const missingTarget = await run(dir, {
+      ...mockService(verdicts),
+      search: () => Promise.resolve({ items: [], nextCursor: null }),
+    });
+    assert.equal(missingTarget.status, "failed");
+    assert.equal(missingTarget.entry.counts.completed, 0);
+
+    const real = await run(dir, mockService(verdicts));
+    assert.equal(real.status, "completed");
+    assert.equal(real.entry.repeat, false);
+    assert.equal(real.reportFile, "report.v2.md");
+    const lock = readV2Lock(dir);
+    assert.ok(lock);
+    assert.deepEqual(currentV2Reading(readRunLog(dir), lock), real.entry);
   });
 });
 

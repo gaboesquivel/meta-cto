@@ -163,6 +163,8 @@ describe("freezeV2", () => {
     const lock = frozenLock([pair("v2-01")]);
     const changed = freeze([pair("v2-01", { expected: "different" })], lock);
     assert.equal(!changed.ok && changed.code, "changed_after_freeze");
+    const emptied = freeze([], lock);
+    assert.equal(!emptied.ok && emptied.code, "changed_after_freeze");
   });
 
   test("checks every seeded target the real set could use", () => {
@@ -202,6 +204,12 @@ describe("checkV2Ready", () => {
   test("refuses a set changed after freeze and says the reading reset", () => {
     const lock = frozenLock(pairs);
     const ready = checkV2Ready([...pairs, pair("v2-03")], lock);
+    assert.equal(!ready.ok && ready.code, "changed_after_freeze");
+    assert.match(ready.ok ? "" : ready.message, /changed after freeze: reading reset/u);
+  });
+
+  test("reports a set emptied after freeze as changed, not empty", () => {
+    const ready = checkV2Ready([], frozenLock(pairs));
     assert.equal(!ready.ok && ready.code, "changed_after_freeze");
     assert.match(ready.ok ? "" : ready.message, /changed after freeze: reading reset/u);
   });

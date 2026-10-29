@@ -250,13 +250,15 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
       set: options.set,
     });
 
+  // A failure before any pair reaches the Check is logged as failed with nothing completed: it is
+  // never a reading and never makes the next run a repeat (see `judgedPairs`).
   let results: PairResult[];
   try {
     const service = await options.getService();
     if (!service) {
       return stop(
         "failed",
-        "Signal service unavailable: configure DATABASE_URL and AI keys (.env.local) and seed the Crewday Demo Workspace.",
+        "Failed before any pair was judged: Signal service unavailable. Configure DATABASE_URL and AI keys (.env.local) and seed the Crewday Demo Workspace.",
       );
     }
     const ids = await resolveTargets(
@@ -267,7 +269,7 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
       runPair(service, ids.get(pair.target) ?? "", pair),
     );
   } catch (error) {
-    return stop("failed", `Run failed: ${errorText(error)}`);
+    return stop("failed", `Failed before any pair was judged: ${errorText(error)}`);
   }
 
   const failures = results.flatMap((r) => (r.error ? [{ error: r.error, id: r.pair.id }] : []));

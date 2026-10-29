@@ -13,6 +13,7 @@ import { pilotDir } from "@/lib/pilot-load/files";
 const ROOT = process.cwd();
 const REACHABLE = [
   "lib/pilot-load/files.ts",
+  "lib/signal/proof/bars.ts",
   "lib/signal/proof/report.ts",
   "lib/signal/proof/sources.ts",
   "evals/signal-verdict/held-out-v2.ts",

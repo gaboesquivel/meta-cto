@@ -78,17 +78,20 @@ const changedMessage = (lock: HeldOutV2Lock) =>
 const unconfirmedMessage = (ids: string[]) =>
   `Held-Out Set v2 has unconfirmed pairs: ${ids.join(", ")}. A person must set confirmedBy and confirmedAt on every pair.`;
 
-/** The runner's gate: refuses an empty, changed, unconfirmed or unfrozen set. */
+/**
+ * The runner's gate: refuses a changed, empty, unconfirmed or unfrozen set. With a lock, the
+ * fingerprint is compared first, so a set emptied or edited after freeze reports the reset.
+ */
 export const checkV2Ready = (
   pairs: HeldOutV2Pair[],
   lock: HeldOutV2Lock | null,
 ): V2Result<{ fingerprint: string }> => {
-  if (pairs.length === 0) {
-    return { code: "empty", message: "Held-Out Set v2 has no pairs yet.", ok: false };
-  }
   const fingerprint = fingerprintPairs(pairs);
   if (lock && lock.fingerprint !== fingerprint) {
     return { code: "changed_after_freeze", message: changedMessage(lock), ok: false };
+  }
+  if (pairs.length === 0) {
+    return { code: "empty", message: "Held-Out Set v2 has no pairs yet.", ok: false };
   }
   const unconfirmed = unconfirmedPairs(pairs);
   if (unconfirmed.length > 0) {
@@ -131,9 +134,6 @@ export const freezeV2 = (input: {
   seedKeys: ReadonlySet<string>;
 }): V2Result<{ lock: HeldOutV2Lock }> => {
   const { lock, pairs } = input;
-  if (pairs.length === 0) {
-    return { code: "empty", message: "Held-Out Set v2 has no pairs to freeze.", ok: false };
-  }
   const fingerprint = fingerprintPairs(pairs);
   if (lock) {
     return lock.fingerprint === fingerprint
@@ -147,6 +147,9 @@ export const freezeV2 = (input: {
           message: `${changedMessage(lock)} To freeze a new set, delete ${V2_LOCK_FILE} deliberately.`,
           ok: false,
         };
+  }
+  if (pairs.length === 0) {
+    return { code: "empty", message: "Held-Out Set v2 has no pairs to freeze.", ok: false };
   }
   const invalid = invalidReason(pairs, input.seedKeys, input.devTitles);
   if (invalid)
