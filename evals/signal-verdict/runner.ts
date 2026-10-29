@@ -184,8 +184,8 @@ const v2Report = (input: {
 
 export interface RunEvalOptions {
   /**
-   * Holds the v2 lock (committed) and receives the reports; v1 and Dev Set runs also go to its
-   * local, gitignored `runs.jsonl`.
+   * Holds the v2 lock (committed) and receives the v1 and Dev Set reports and their local,
+   * gitignored `runs.jsonl`. v2 reports never go here (see `setDir`).
    */
   dir?: string;
   /** Called only after the set passes its gate, so a refused v2 never builds a service. */
@@ -194,8 +194,9 @@ export interface RunEvalOptions {
   prompt?: { id: string; model: string };
   set: RunSetName;
   /**
-   * Holds the v2 pairs (`held-out-v2.json`): the private folder's `evals/` from the CLI
-   * (spec 004). Defaults to `dir`.
+   * Holds the v2 pairs (`held-out-v2.json`) and receives the v2 reports (`report.v2.md`,
+   * `report.v2.repeat.md`, which list pair ids, targets and labels): the private folder's
+   * `evals/` from the CLI, outside the repository (spec 004). Defaults to `dir`.
    */
   setDir?: string;
   /**
@@ -210,6 +211,8 @@ export interface RunEvalOutcome {
   message: string;
   report: string | null;
   reportFile: string | null;
+  /** Where the report was written: `setDir` for v2 (private), `dir` otherwise. */
+  reportPath: string | null;
   status: RunStatus;
 }
 
@@ -240,6 +243,7 @@ const unrecordedRefusal = (base: RunLogEntry, message: string): RunEvalOutcome =
   message,
   report: null,
   reportFile: null,
+  reportPath: null,
   status: "refused",
 });
 
@@ -283,7 +287,7 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
   const stop = async (status: RunStatus, message: string): Promise<RunEvalOutcome> => {
     const entry = { ...base, message, status };
     await record(entry);
-    return { entry, message, report: null, reportFile: null, status };
+    return { entry, message, report: null, reportFile: null, reportPath: null, status };
   };
 
   if (isV2 && !store) return unrecordedRefusal(base, V2_NEEDS_DATABASE);
@@ -344,8 +348,10 @@ export const runEval = async (options: RunEvalOptions): Promise<RunEvalOutcome> 
     ? v2Report({ at, entry, metrics, readings, results })
     : v1Report(options.set as EvalSetName, at, results, metrics);
   const reportFile = reportFileFor(options.set, repeat);
-  writeFileSync(path.join(dir, reportFile), report, "utf-8");
+  // v2 reports list pair ids, targets and labels: they go to the private folder, never the repo.
+  const reportPath = path.join(isV2 ? setDir : dir, reportFile);
+  writeFileSync(reportPath, report, "utf-8");
   await record(entry);
   const message = repeat ? "Repeat run, not a new reading." : `Run ${status}.`;
-  return { entry, message, report, reportFile, status };
+  return { entry, message, report, reportFile, reportPath, status };
 };

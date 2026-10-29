@@ -212,7 +212,7 @@ describe("runEval on Held-Out Set v2", () => {
     assert.match(entry?.message ?? "", /reading reset/u);
   });
 
-  test("reads v2 pairs from a separate private folder; lock, log and report stay in dir", async () => {
+  test("reads v2 pairs from a separate private folder and writes its reports there, never in dir", async () => {
     const { pairs, verdicts } = fullSet();
     const dir = v2Dir(pairs);
     const setDir = mkdtempSync(path.join(tmpdir(), "v2-private-"));
@@ -232,8 +232,22 @@ describe("runEval on Held-Out Set v2", () => {
     const stored = await storedRuns();
     assert.equal(stored.length, 1);
     assert.ok(!existsSync(path.join(dir, RUN_LOG_FILE)), "v2 runs never go to a local run log");
-    assert.ok(existsSync(path.join(dir, "report.v2.md")));
-    assert.ok(!existsSync(path.join(setDir, "report.v2.md")));
+    assert.ok(existsSync(path.join(setDir, "report.v2.md")));
+    assert.ok(!existsSync(path.join(dir, "report.v2.md")), "v2 reports never land in the repo");
+    assert.equal(outcome.reportPath, path.join(setDir, "report.v2.md"));
+
+    const again = await runEval({
+      dir,
+      getService: () => Promise.resolve(mockService(verdicts)),
+      now: () => NOW,
+      prompt: PROMPT,
+      set: "held-out-v2",
+      setDir,
+      store,
+    });
+    assert.equal(again.entry.repeat, true);
+    assert.ok(existsSync(path.join(setDir, "report.v2.repeat.md")));
+    assert.ok(!existsSync(path.join(dir, "report.v2.repeat.md")));
   });
 
   test("reads precision with intervals, logs the run and writes the v2 report", async () => {
@@ -416,6 +430,7 @@ describe("runEval on v1", () => {
     const outcome = await run(dir, service, "held-out");
     assert.equal(outcome.status, "completed");
     assert.equal(outcome.entry.repeat, false);
+    assert.equal(outcome.reportPath, path.join(dir, "report.md"));
     const report = readFileSync(path.join(dir, "report.md"), "utf-8");
     assert.match(report, /^# Signal verdict eval: held-out\n/u);
     assert.match(report, /- Pairs: 25 \(correct 25, absent \d+, unknown 0\)/u);

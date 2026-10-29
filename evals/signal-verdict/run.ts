@@ -1,5 +1,5 @@
 import { loadRootEnv } from "@/lib/env";
-import { missingPrivateFiles, privateDataDir } from "@/lib/pilot-load/private-dir";
+import { checkPrivateFiles, privateDataDir } from "@/lib/pilot-load/private-dir";
 import { getDb } from "@/lib/signal/db";
 import { createRepository } from "@/lib/signal/repository";
 import { getSignalService } from "@/lib/signal/runtime";
@@ -20,11 +20,14 @@ const parseSet = (argv: string[]): RunSetName => {
   throw new Error(`Unknown --set "${value}". Use --set ${SETS.join(", --set ")}.`);
 };
 
-/** v2 pairs come from `$SIGNAL_PRIVATE_DATA_DIR/evals` (spec 004); exits with the reason if refused. */
+/**
+ * v2 pairs come from, and v2 reports go to, `$SIGNAL_PRIVATE_DATA_DIR/evals` (spec 004); exits
+ * with the reason if refused.
+ */
 const v2SetDir = (): string => {
   const dir = privateDataDir();
   const refusal = dir.ok
-    ? missingPrivateFiles(dir.evalDir, [V2_SET_FILE], "evals/signal-verdict")
+    ? checkPrivateFiles(dir, "evals", [V2_SET_FILE], "evals/signal-verdict")
     : dir.message;
   if (!dir.ok || refusal) {
     console.error(`Refusing: ${refusal}`);
@@ -50,7 +53,7 @@ const main = async () => {
     store: db ? repositoryRunStore(createRepository(db)) : undefined,
   });
   if (outcome.report) console.log(outcome.report);
-  if (outcome.reportFile) console.log(`Wrote evals/signal-verdict/${outcome.reportFile}`);
+  if (outcome.reportPath) console.log(`Wrote ${outcome.reportPath}`);
   const recorded = [
     db ? "the database" : null,
     set === V2_SET_NAME ? null : "evals/signal-verdict/runs.jsonl (local, not committed)",
