@@ -30,6 +30,7 @@ Initialized from [`flow-next`](https://github.com/gaboesquivel/flow-next) at com
 
 - Neon Postgres through the Vercel Marketplace, one database branch per preview deployment; `DATABASE_URL` per environment.
 - The Vercel build runs `pnpm db:migrate && pnpm db:seed && pnpm build`; both scripts skip when `DATABASE_URL` is absent. Locally `predev` runs them before `pnpm dev` and `pnpm dev:port`.
+- `pnpm verify:prod [sha]` is ship's Verify for a shipped commit (default `origin/main`): GitHub check runs, the production deployment (from Vercel when GitHub has none) and unauthenticated GETs of the production pages. Read-only; exits 0 only when live.
 - Seeded rows carry `is_demo` and a stable `seed_key`; seeding never overwrites user rows.
 
 ## Quality
