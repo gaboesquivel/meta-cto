@@ -294,3 +294,7 @@ Skills used: build. Docs changed: none.
 2026-10-29T02:52:58Z — build progress
 Summary: Integrated 003 tasks 06 (#28) and 02 (#24, after fix round: pilot review writes need Operator access); fixed off-by-one task issue titles; started 03 and 04.
 Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (ticks).
+
+2026-10-29T02:58:44Z — build progress
+Summary: Integrated 003 task 03 (#25) at d82f793; noted resetDemo would delete pilot backlog (fix assigned to task 05).
+Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick).
