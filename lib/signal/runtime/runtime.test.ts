@@ -4,6 +4,8 @@ import { afterEach, describe, it, vi } from "vitest";
 import type { Embedder, Judge } from "@/lib/signal/contracts";
 import { createTestDb } from "@/lib/signal/test-db";
 
+import { PILOT_WORKSPACE } from "@/lib/signal/pilot";
+import { featureRequests, workspaces } from "@/lib/signal/schema";
 import { DEFAULT_JUDGE_TIMEOUT_MS } from "@/lib/signal/service/context";
 
 import {
@@ -76,6 +78,82 @@ describe("signal runtime", () => {
     await assert.rejects(service.search({}), /connection reset/u);
     const page = await service.search({});
     assert.deepEqual(page.items, []);
+  });
+});
+
+describe("pilot runtime", () => {
+  const filing = {
+    actor: { name: "pilot-agent", type: "agent" as const },
+    draft: { description: "Trades don't show up for my manager", title: "Trades not syncing" },
+  };
+
+  const fileThroughCheck = async (service: ReturnType<typeof createRuntimeService>) => {
+    const check = await service.check(filing);
+    return await service.create({ ...filing, checkId: check.checkId });
+  };
+
+  it("acts on the Pilot Workspace with Origin pilot, not the Crewday demo", async () => {
+    const db = await createTestDb();
+    const pilot = createRuntimeService({ db, embedder, judge, origin: "pilot" });
+    const created = await fileThroughCheck(pilot);
+
+    const rows = await db.select().from(workspaces);
+    const pilotRow = rows.find((row) => row.slug === PILOT_WORKSPACE.slug);
+    assert.ok(pilotRow, "the Pilot Workspace row exists");
+    const [stored] = await db.select().from(featureRequests);
+    assert.equal(stored?.id, created.id);
+    assert.equal(stored?.workspaceId, pilotRow.id);
+    assert.equal(stored?.origin, "pilot");
+    // Pilot rows are not demo data: the demo seed reset never deletes them.
+    assert.equal(stored?.isDemo, false);
+  });
+
+  it("keeps demo and pilot rows apart in both directions", async () => {
+    const db = await createTestDb();
+    const demo = createRuntimeService({ db, embedder, judge });
+    const pilot = createRuntimeService({ db, embedder, judge, origin: "pilot" });
+    const demoRequest = await fileThroughCheck(demo);
+    const pilotRequest = await fileThroughCheck(pilot);
+
+    const demoPage = await demo.search({});
+    const pilotPage = await pilot.search({});
+    assert.deepEqual(
+      demoPage.items.map((item) => item.id),
+      [demoRequest.id],
+    );
+    assert.deepEqual(
+      pilotPage.items.map((item) => item.id),
+      [pilotRequest.id],
+    );
+    await assert.rejects(pilot.get(demoRequest.id), { code: "not_found" });
+    await assert.rejects(demo.get(pilotRequest.id), { code: "not_found" });
+  });
+
+  it("scopes review and metrics to the Pilot Workspace, defaulting to Origin pilot", async () => {
+    const db = await createTestDb();
+    await fileThroughCheck(createRuntimeService({ db, embedder, judge }));
+    await fileThroughCheck(createRuntimeService({ db, embedder, judge, origin: "pilot" }));
+    await createRuntimeService({ db, embedder, judge, origin: "pilot" }).check(filing);
+
+    const demoReview = createRuntimeReviewService({ db });
+    const pilotReview = createRuntimeReviewService({ db, origin: "pilot" });
+    const demoMetrics = await demoReview.metrics();
+    const pilotMetrics = await pilotReview.metrics();
+    assert.equal(demoMetrics.origin, "demo");
+    assert.equal(demoMetrics.checks, 1);
+    assert.equal(pilotMetrics.origin, "pilot");
+    assert.equal(pilotMetrics.checks, 2);
+    // Reading demo Origin inside the Pilot Workspace finds nothing: the Workspace bounds it too.
+    const demoInPilot = await pilotReview.metrics({ origin: "demo" });
+    const pilotInDemo = await demoReview.metrics({ origin: "pilot" });
+    assert.equal(demoInPilot.checks, 0);
+    assert.equal(pilotInDemo.checks, 0);
+
+    const demoQueue = await demoReview.queue();
+    const pilotQueue = await pilotReview.queue();
+    assert.equal(demoQueue.counts.new, 1);
+    assert.equal(pilotQueue.counts.new, 1);
+    assert.notEqual(demoQueue.items[0]?.featureRequest.id, pilotQueue.items[0]?.featureRequest.id);
   });
 });
 

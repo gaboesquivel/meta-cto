@@ -39,7 +39,10 @@ const operatorUnavailable = err(
   "Signal is not configured, or OPERATOR_SECRET is unset so review writes fail closed",
   ["service_unavailable", "operator_required"],
 );
-/** Operator access for review writes; any one of these is enough. */
+/**
+ * Operator access for review writes (any one is enough), and the Pilot Key, which selects the
+ * Pilot Workspace on every Signal route; a review write needs Operator access with it.
+ */
 export const signalSecuritySchemes = {
   operatorBearer: {
     description: "Authorization: Bearer <OPERATOR_SECRET>",
@@ -53,7 +56,16 @@ export const signalSecuritySchemes = {
     name: "flow_operator_session",
     type: "apiKey",
   },
+  pilotKey: {
+    description:
+      "The Pilot Key (SIGNAL_PILOT_KEY). Selects the Pilot Workspace (Origin pilot); without it the route acts on the Crewday Demo Workspace. A wrong or empty key, or none configured, is refused with pilot_key_required.",
+    in: "header",
+    name: "X-Signal-Pilot-Key",
+    type: "apiKey",
+  },
 };
+
+const pilotRefused = "pilot_key_required: the Pilot Key is missing or wrong (details in reason)";
 
 const operatorSecurity = [{ operatorBearer: [] }, { operatorSecret: [] }, { operatorSession: [] }];
 
@@ -510,7 +522,7 @@ export const signalSchemas = {
 
 const tags = ["signal"];
 
-export const signalPaths = {
+const demoPaths = {
   "/api/checks": {
     post: {
       description:
@@ -659,7 +671,7 @@ export const signalPaths = {
   "/api/review/decisions": {
     post: {
       description:
-        "Operator access only. Confirm Duplicate, Related, Distinct, or none (no duplicate).",
+        "Operator access only; add the Pilot Key to act on the Pilot Workspace. Confirm Duplicate, Related, Distinct, or none (no duplicate).",
       operationId: "decideReview",
       requestBody: jsonBody("SignalReviewDecideInput"),
       responses: {
@@ -686,7 +698,7 @@ export const signalPaths = {
   "/api/review/decisions/{id}/undo": {
     post: {
       description:
-        "Operator access only. Ends the decision's effect; the decision and its undo stay in history.",
+        "Operator access only; add the Pilot Key to act on the Pilot Workspace. Ends the decision's effect; the decision and its undo stay in history.",
       operationId: "undoReviewDecision",
       parameters: [{ ...idParameter, description: "Review Decision id (uuid)" }],
       requestBody: jsonBody("SignalUndoInput"),
@@ -724,7 +736,7 @@ export const signalPaths = {
   "/api/review/scan": {
     post: {
       description:
-        "Operator access only. Judges unscanned backlog Feature Requests for suspected duplicates (paid AI calls); call again while remaining > 0.",
+        "Operator access only; add the Pilot Key to act on the Pilot Workspace. Judges unscanned backlog Feature Requests for suspected duplicates (paid AI calls); call again while remaining > 0.",
       operationId: "scanBacklog",
       requestBody: {
         content: { "application/json": { schema: ref("SignalScanInput") } },
@@ -743,6 +755,55 @@ export const signalPaths = {
     },
   },
 };
+
+interface PathOperation {
+  description?: string;
+  responses: Record<string, unknown>;
+  security?: Record<string, string[]>[];
+}
+
+const describedWith = (response: unknown, extra: string) => {
+  const { description, ...rest } = response as { description: string };
+  return { ...rest, description: `${description}; or ${extra}` };
+};
+
+/**
+ * Every Signal operation also accepts the Pilot Key: an open route stays open (`{}`) or takes the
+ * key; an Operator-only write takes Operator access together with the key. 401 and 503 list the
+ * refusal.
+ */
+const withPilotKey = <T extends object>(paths: T): T =>
+  Object.fromEntries(
+    Object.entries(paths as Record<string, Record<string, PathOperation>>).map(([path, item]) => [
+      path,
+      Object.fromEntries(
+        Object.entries(item).map(([method, operation]) => [
+          method,
+          {
+            ...operation,
+            responses: {
+              ...operation.responses,
+              "401": operation.responses["401"]
+                ? describedWith(operation.responses["401"], pilotRefused)
+                : err("Pilot Key missing or wrong", ["pilot_key_required"]),
+              "503": describedWith(
+                operation.responses["503"] ?? unavailable,
+                "pilot_key_required: the Pilot Key is sent but none is configured",
+              ),
+            },
+            security: operation.security
+              ? [
+                  ...operation.security,
+                  ...operation.security.map((scheme) => ({ ...scheme, pilotKey: [] })),
+                ]
+              : [{}, { pilotKey: [] }],
+          },
+        ]),
+      ),
+    ]),
+  ) as T;
+
+export const signalPaths = withPilotKey(demoPaths);
 
 export const signalTag = { description: "Check before create (Feature Requests)", name: "signal" };
 

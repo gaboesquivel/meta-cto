@@ -1,6 +1,6 @@
 /**
  * Contract test: Signal check, create, support and get must produce the same outcome code over
- * REST and MCP (comment and search share the same error mapping and write budget; add rows here
+ * REST and MCP, for the demo and for the Pilot Workspace (Pilot Key header on both transports) (comment and search share the same error mapping and write budget; add rows here
  * when they gain transport-specific behavior).
  * One shared fake service backs both transports; each scenario runs through the REST route
  * handler and the MCP tool (via POST /api/mcp tools/call) and compares the normalized codes.
@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import type { CreateInput, SignalService } from "@/lib/signal/contracts";
 import { SignalError } from "@/lib/signal/contracts";
 import { resetSignalWriteLimit, SIGNAL_WRITE_LIMIT } from "@/lib/signal/http";
+import { PILOT_KEY_HEADER } from "@/lib/signal/pilot";
 
 import {
   actor,
@@ -26,11 +27,16 @@ import {
   support,
 } from "../signal-api/fixtures";
 
-const runtime = vi.hoisted(() => ({ service: null as SignalService | null }));
+const runtime = vi.hoisted(() => ({
+  pilot: null as SignalService | null,
+  service: null as SignalService | null,
+}));
 
 vi.mock("@/lib/signal/runtime", () => ({
-  getSignalService: () => runtime.service,
+  getSignalService: (origin = "demo") => (origin === "pilot" ? runtime.pilot : runtime.service),
 }));
+
+const PILOT_KEY = "pilot-key-for-parity-0123";
 
 const { POST: postApiMcp } = await import("../../app/api/mcp/route");
 const { POST: postCheck } = await import("../../app/api/checks/route");
@@ -72,8 +78,19 @@ interface McpCall {
 interface Operation {
   mcp: McpCall;
   name: string;
-  rest: (ip: string) => Promise<Response>;
+  rest: (ip: string, headers: Record<string, string>) => Promise<Response>;
 }
+
+/** A fixture request plus the scenario's headers (the Pilot Key, when the row sends one). */
+const req = (
+  path: string,
+  options: Parameters<typeof jsonRequest>[1],
+  headers: Record<string, string>,
+) => {
+  const request = jsonRequest(path, options);
+  for (const [name, value] of Object.entries(headers)) request.headers.set(name, value);
+  return request;
+};
 
 interface Scenario {
   expected: string;
@@ -83,29 +100,34 @@ interface Scenario {
   setup?: (service: SignalService) => void;
   /** Spend the write budget for this IP before the compared calls. */
   exhaustBudget?: boolean;
+  /** Headers sent on both transports (e.g. the Pilot Key). */
+  headers?: Record<string, string>;
+  /** Runs after both calls, e.g. to prove which Workspace's service answered. */
+  verify?: () => void;
 }
 
 const checkOp: Operation = {
   mcp: { args: { actor, draft, onBehalfOf }, tool: "check_feature_request" },
   name: "check",
-  rest: (ip) => postCheck(jsonRequest("/api/checks", { body: { actor, draft, onBehalfOf }, ip })),
+  rest: (ip, headers) =>
+    postCheck(req("/api/checks", { body: { actor, draft, onBehalfOf }, ip }, headers)),
 };
 
 const createOp = (extra: Record<string, unknown>): Operation => ({
   mcp: { args: { actor, draft, onBehalfOf, ...extra }, tool: "create_feature_request" },
   name: "create",
-  rest: (ip) =>
+  rest: (ip, headers) =>
     postCreate(
-      jsonRequest("/api/feature-requests", { body: { actor, draft, onBehalfOf, ...extra }, ip }),
+      req("/api/feature-requests", { body: { actor, draft, onBehalfOf, ...extra }, ip }, headers),
     ),
 });
 
 const supportOp: Operation = {
   mcp: { args: { actor, featureRequestId: FR_ID, onBehalfOf }, tool: "support_feature_request" },
   name: "support",
-  rest: (ip) =>
+  rest: (ip, headers) =>
     postSupport(
-      jsonRequest(`/api/feature-requests/${FR_ID}/supports`, { body: { actor, onBehalfOf }, ip }),
+      req(`/api/feature-requests/${FR_ID}/supports`, { body: { actor, onBehalfOf }, ip }, headers),
       idParams(FR_ID),
     ),
 };
@@ -113,15 +135,15 @@ const supportOp: Operation = {
 const getOp = (id: string): Operation => ({
   mcp: { args: { featureRequestId: id }, tool: "get_feature_request" },
   name: "get",
-  rest: (ip) =>
-    getDetail(jsonRequest(`/api/feature-requests/${id}`, { ip, method: "GET" }), idParams(id)),
+  rest: (ip, headers) =>
+    getDetail(req(`/api/feature-requests/${id}`, { ip, method: "GET" }, headers), idParams(id)),
 });
 
 const invalidCheckOp: Operation = {
   mcp: { args: { actor, draft: { ...draft, title: "" } }, tool: "check_feature_request" },
   name: "check (empty title)",
-  rest: (ip) =>
-    postCheck(jsonRequest("/api/checks", { body: { actor, draft: { ...draft, title: "" } }, ip })),
+  rest: (ip, headers) =>
+    postCheck(req("/api/checks", { body: { actor, draft: { ...draft, title: "" } }, ip }, headers)),
 };
 
 const rejectCreate =
@@ -207,6 +229,49 @@ const scenarios: Scenario[] = [
     op: supportOp,
     restStatus: 429,
   },
+  // Pilot Workspace (spec 003 task 02): the Pilot Key header selects it on both transports.
+  {
+    expected: "ok",
+    headers: { [PILOT_KEY_HEADER]: PILOT_KEY },
+    name: "check with the Pilot Key acts on the Pilot Workspace",
+    op: checkOp,
+    restStatus: 200,
+    verify: () => {
+      assert.equal(vi.mocked(runtime.pilot?.check)?.mock.calls.length, 2);
+      assert.equal(vi.mocked(runtime.service?.check)?.mock.calls.length, 0);
+    },
+  },
+  {
+    expected: "check_required",
+    headers: { [PILOT_KEY_HEADER]: PILOT_KEY },
+    name: "create without checkId in the Pilot Workspace",
+    op: createOp({}),
+    restStatus: 409,
+  },
+  {
+    expected: "pilot_key_required",
+    headers: { [PILOT_KEY_HEADER]: "not-the-pilot-key-at-all" },
+    name: "wrong Pilot Key",
+    op: supportOp,
+    restStatus: 401,
+  },
+  {
+    expected: "pilot_key_required",
+    headers: { [PILOT_KEY_HEADER]: "" },
+    name: "empty Pilot Key",
+    op: getOp(FR_ID),
+    restStatus: 401,
+  },
+  {
+    expected: "pilot_key_required",
+    headers: { [PILOT_KEY_HEADER]: PILOT_KEY },
+    name: "Pilot Key not configured",
+    op: checkOp,
+    restStatus: 503,
+    setup: () => {
+      vi.stubEnv("SIGNAL_PILOT_KEY", undefined);
+    },
+  },
 ];
 
 const restOutcome = async (response: Response): Promise<Outcome> => {
@@ -225,7 +290,7 @@ interface ToolCallJson {
   result?: { content?: { text?: string }[]; isError?: boolean };
 }
 
-const callMcp = async ({ args, tool }: McpCall, ip: string) => {
+const callMcp = async ({ args, tool }: McpCall, ip: string, extra: Record<string, string> = {}) => {
   const response = await postApiMcp(
     new Request("http://meta-cto.localhost/api/mcp", {
       body: JSON.stringify({
@@ -238,6 +303,7 @@ const callMcp = async ({ args, tool }: McpCall, ip: string) => {
         Accept: "application/json, text/event-stream",
         "Content-Type": "application/json",
         "x-forwarded-for": ip,
+        ...extra,
       },
       method: "POST",
     }),
@@ -257,7 +323,7 @@ const mcpOutcome = (raw: string, tool: string): Outcome => {
 
 /** Alternates transports so the budget is provably shared across REST and MCP. */
 const spendWrite = async (ip: string, viaRest: boolean): Promise<Outcome> => {
-  if (viaRest) return await restOutcome(await checkOp.rest(ip));
+  if (viaRest) return await restOutcome(await checkOp.rest(ip, {}));
   return mcpOutcome(await callMcp(checkOp.mcp, ip), checkOp.mcp.tool);
 };
 
@@ -273,8 +339,10 @@ const runScenario = async (scenario: Scenario, ip: string) => {
   if (runtime.service) scenario.setup?.(runtime.service);
   if (scenario.exhaustBudget) await exhaustBudget(ip);
 
-  const rest = await restOutcome(await scenario.op.rest(ip));
-  const mcp = mcpOutcome(await callMcp(scenario.op.mcp, ip), scenario.op.mcp.tool);
+  const headers = scenario.headers ?? {};
+  const rest = await restOutcome(await scenario.op.rest(ip, headers));
+  const mcp = mcpOutcome(await callMcp(scenario.op.mcp, ip, headers), scenario.op.mcp.tool);
+  scenario.verify?.();
   const label = `${scenario.op.name} (${scenario.name})`;
 
   assert.equal(
@@ -301,12 +369,15 @@ const runScenario = async (scenario: Scenario, ip: string) => {
 
 beforeEach(() => {
   runtime.service = fakeService();
+  runtime.pilot = fakeService();
   resetSignalWriteLimit();
+  vi.stubEnv("SIGNAL_PILOT_KEY", PILOT_KEY);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe("Signal REST and MCP transport parity", () => {

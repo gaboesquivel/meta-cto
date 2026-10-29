@@ -363,6 +363,7 @@ export type SignalErrorCode =
   | "invalid_input"
   | "not_found"
   | "operator_required"
+  | "pilot_key_required"
   | "service_unavailable"
   | "skip_reason_required";
 
