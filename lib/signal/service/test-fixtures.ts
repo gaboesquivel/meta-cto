@@ -1,11 +1,19 @@
 import { once } from "node:events";
 
-import type { Embedder, Judge, JudgeOutput, SignalService } from "../contracts";
+import type {
+  Embedder,
+  Judge,
+  JudgeOutput,
+  ReviewService,
+  ScanOptions,
+  ScanResult,
+  SignalService,
+} from "../contracts";
 import { createRepository } from "../repository";
 import type { SignalRepository } from "../repository";
 import { EMBEDDING_DIMENSIONS } from "../schema";
 import { createTestDb } from "../test-db";
-import { createSignalService } from "./index";
+import { createReviewService, createSignalService } from "./index";
 
 export const unit = (index: number) => {
   const vector = Array.from({ length: EMBEDDING_DIMENSIONS }, () => 0);
@@ -61,6 +69,7 @@ export interface Harness {
   embedder: ReturnType<typeof fakeEmbedder>;
   judge: ReturnType<typeof fakeJudge>;
   repo: SignalRepository;
+  review: ReviewService;
   service: SignalService;
   workspaceId: string;
 }
@@ -68,6 +77,9 @@ export interface Harness {
 export const createHarness = async (input: {
   judge?: JudgeBehavior;
   judgeTimeoutMs?: number;
+  /** Repository overrides for the review service only, to simulate storage failures. */
+  reviewRepo?: (repo: SignalRepository) => SignalRepository;
+  scan?: (options?: ScanOptions) => Promise<ScanResult>;
   vectors?: Record<string, number[]>;
 }): Promise<Harness> => {
   const db = await createTestDb();
@@ -86,7 +98,13 @@ export const createHarness = async (input: {
     repo,
     workspaceId: workspace.id,
   });
-  return { clock, embedder, judge, repo, service, workspaceId: workspace.id };
+  const review = createReviewService({
+    now: () => clock.now,
+    repo: input.reviewRepo ? input.reviewRepo(repo) : repo,
+    scan: input.scan,
+    workspaceId: workspace.id,
+  });
+  return { clock, embedder, judge, repo, review, service, workspaceId: workspace.id };
 };
 
 export const addRequest = async (
@@ -102,6 +120,19 @@ export const addRequest = async (
     embedding,
     title,
     underlyingNeed,
+    workspaceId: harness.workspaceId,
+  });
+
+/** A Feature Request created through a Check (spec 001), i.e. a new one for review metrics. */
+export const addNewRequest = async (harness: Harness, title: string, embedding: number[] | null) =>
+  await harness.repo.insertFeatureRequest({
+    createdByActorName: "Ana",
+    createdByActorType: "staff",
+    createdViaCheck: true,
+    description: `${title} description`,
+    embedding,
+    title,
+    underlyingNeed: null,
     workspaceId: harness.workspaceId,
   });
 

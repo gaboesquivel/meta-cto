@@ -8,6 +8,8 @@ import { runMetrics, runSearch } from "./read";
 import { buildDetail } from "./views";
 
 export type { SignalServiceDeps } from "./context";
+export { createReviewService } from "./review";
+export type { ReviewServiceDeps } from "./review";
 
 /** The Signal service behind REST, MCP and the UI; ports are injected so tests use fakes. */
 export const createSignalService = (deps: SignalServiceDeps): SignalService => {

@@ -139,12 +139,15 @@ describe("signal service metrics", () => {
     const harness = await createHarness({});
 
     assert.deepEqual(await harness.service.metrics(), {
+      backlogBaseline: { duplicates: 0, rate: null, reviewed: 0 },
       checks: 0,
       checksWithSameNeed: 0,
       createsAfterSameNeed: 0,
-      fragmentationRate: null,
-      reviewCoverage: 0,
+      intakeDuplicateRate: { duplicates: 0, rate: null, reviewed: 0 },
+      reviewCoverage: { rate: null, reviewed: 0, total: 0 },
       suggestionAcceptance: null,
+      suspectedDuplication: { open: 0, rate: null, total: 0 },
+      undoRate: { decisions: 0, rate: null, undone: 0 },
     });
   });
 
@@ -188,14 +191,12 @@ describe("signal service metrics", () => {
       skipReason: "Different scope",
     });
 
-    assert.deepEqual(await harness.service.metrics(), {
-      checks: 3,
-      checksWithSameNeed: 2,
-      createsAfterSameNeed: 1,
-      fragmentationRate: null,
-      reviewCoverage: 0,
-      suggestionAcceptance: 0.5,
-    });
+    const { checks, checksWithSameNeed, createsAfterSameNeed, suggestionAcceptance } =
+      await harness.service.metrics();
+    assert.deepEqual(
+      { checks, checksWithSameNeed, createsAfterSameNeed, suggestionAcceptance },
+      { checks: 3, checksWithSameNeed: 2, createsAfterSameNeed: 1, suggestionAcceptance: 0.5 },
+    );
   });
 
   it("counts a comment citing a same need check as acceptance", async () => {
