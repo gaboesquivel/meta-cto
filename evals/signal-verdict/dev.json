@@ -1,0 +1,92 @@
+[
+  {
+    "id": "dev-01",
+    "draft": {
+      "title": "Picked-up shift still shows open",
+      "description": "Grabbed a shift off the board this morning and it's still listed as open for everyone hours later. Two other people tried to take it too."
+    },
+    "target": "trade-board-stale",
+    "expected": "same_need",
+    "note": "Trade board not refreshing after pickup."
+  },
+  {
+    "id": "dev-02",
+    "draft": {
+      "title": "NYC predictive scheduling",
+      "description": "Our Manhattan stores need schedules posted two weeks out and we have to track predictability pay when we change shifts last minute. Doing it in spreadsheets now."
+    },
+    "target": "fair-workweek",
+    "expected": "same_need",
+    "note": "Fair Workweek compliance, different city phrasing."
+  },
+  {
+    "id": "dev-03",
+    "draft": {
+      "title": "app en español?",
+      "description": "half my crew reads spanish way better than english, they misread their shifts all the time. can the employee app be in spanish"
+    },
+    "target": "spanish-app",
+    "expected": "same_need",
+    "note": "Spanish language support."
+  },
+  {
+    "id": "dev-04",
+    "draft": {
+      "title": "Selfie at clock-in",
+      "description": "Buddy punching is a problem at our bakeries. Take a photo when someone clocks in so we know it's really them."
+    },
+    "target": "geofenced-clock-in",
+    "expected": "same_need",
+    "note": "Photo verification shares the exact seeded underlying need with geofenced clock-in (real presence)."
+  },
+  {
+    "id": "dev-05",
+    "draft": {
+      "title": "Back-office edits never hit their phone",
+      "description": "When I move someone's shift from the office computer, their phone still shows the old time. They show up at the wrong hour."
+    },
+    "target": "swap-sync",
+    "expected": "related_need",
+    "note": "Manager edits not reaching phones shares accurate current schedules with swap-sync, but the change is not an employee trade."
+  },
+  {
+    "id": "dev-06",
+    "draft": {
+      "title": "Borrow a cook for Friday",
+      "description": "My downtown spot is short a cook Friday and the airport location has one free, but I can't see their staff from my login."
+    },
+    "target": "multi-location-view",
+    "expected": "related_need",
+    "note": "Borrowing staff shares multi-location staffing with the multi-location view, but the need is filling a gap from another location."
+  },
+  {
+    "id": "dev-07",
+    "draft": {
+      "title": "OT check on swaps",
+      "description": "Before I approve a swap, show me if the person picking it up goes into overtime."
+    },
+    "target": "overtime-alerts",
+    "expected": "related_need",
+    "note": "Swap overtime check shares overtime awareness with overtime alerts, but is about controlling who covers a change."
+  },
+  {
+    "id": "dev-08",
+    "draft": {
+      "title": "Tip split for bussers",
+      "description": "We pool tips. Split them by hours worked and include bussers and bar backs, and show everyone their share."
+    },
+    "target": "earnings-preview",
+    "expected": "different",
+    "note": "Tip pooling vs earnings preview: both about money employees receive, different needs."
+  },
+  {
+    "id": "dev-09",
+    "draft": {
+      "title": "Invite holiday temps by text",
+      "description": "We hire 40 seasonal people every November. Let me invite them by SMS and have them on the schedule the same day."
+    },
+    "target": "login-persistence",
+    "expected": "different",
+    "note": "Seasonal onboarding vs staying logged in: both about getting into the employee app, different needs."
+  }
+]

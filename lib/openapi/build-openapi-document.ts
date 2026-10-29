@@ -1,3 +1,5 @@
+import { signalMcpTools, signalPaths, signalSchemas, signalTag } from "@/lib/openapi/signal-paths";
+
 const toolPaths = {
   compose_ui: {
     operationId: "composeUi",
@@ -20,6 +22,7 @@ const toolPaths = {
     requestBody: { properties: {}, type: "object" },
     summary: "List registered GenUI components",
   },
+  ...signalMcpTools,
 } as const;
 
 const mcpToolSchemaName = (name: string) => `McpTool_${name.replaceAll("-", "_")}`;
@@ -139,6 +142,7 @@ const openApiComponents = {
       type: "object",
     },
     ...mcpToolComponents,
+    ...signalSchemas,
   },
 };
 
@@ -263,6 +267,7 @@ export const buildOpenApiDocument = (origin: string) => {
     "/api/chat": { post: chatOperation },
     "/api/genui/compose": { post: genuiOperation },
     "/api/mcp": { post: mcpOperation },
+    ...signalPaths,
     "/v1/api/chat": {
       post: { ...chatOperation, operationId: "starterChatV1" },
     },
@@ -281,7 +286,7 @@ export const buildOpenApiDocument = (origin: string) => {
       url: `${origin}/dev`,
     },
     info: {
-      description: `${versioningDescription}\n\nAgentic application starter — MCP tools via POST /api/mcp; GenUI via POST /api/genui/compose.`,
+      description: `${versioningDescription}\n\nAgentic application starter — MCP tools via POST /api/mcp; GenUI via POST /api/genui/compose; check-before-create via POST /api/checks then /api/feature-requests.`,
       title: "Meta Cto API",
       version: "1.0.0",
       "x-api-version": "v1",
@@ -293,6 +298,7 @@ export const buildOpenApiDocument = (origin: string) => {
       { description: "Streamable HTTP MCP", name: "mcp" },
       { description: "GenUI NDJSON compose", name: "genui" },
       { description: "Chat assistant", name: "chat" },
+      signalTag,
     ],
   };
 };

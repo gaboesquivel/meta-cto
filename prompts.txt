@@ -52,3 +52,117 @@ Summary: Vercel CLI 59.11.7 logged in as gabo-esquivel. Existing team project "m
 Skills used: none. Docs changed/created: none.
 Question (assistant → user): New Vercel project or repoint the existing meta-cto one? Answer: new project; use the values from local .env for Vercel and GitHub secrets.
 Question (assistant → user): Which env vars for production? Answer: AI via OIDC, no Operator (superseded by "use same values" and "OPERATOR_SECRET is set on .env too").
+
+2026-10-28T17:20:00Z — Prompt: "Done, redeploy" (mid-turn: "you run the github and vercle commands")
+Summary: Secrets were not yet set on either side, so at the user's request ran the commands: set AI_GATEWAY_API_KEY, ANTHROPIC_API_KEY and OPERATOR_SECRET from local .env as sensitive Vercel env vars (production, preview) on meta-cto-app and as GitHub Actions secrets on gaboesquivel/meta-cto (values piped from .env, never printed). Pushed main (6078388) to trigger the Git production deploy dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX; verifying once ready.
+Skills used: none. Docs changed/created: none.
+Result: Git production deploy dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX READY, aliased to meta-cto-app.vercel.app. /, /genui, /.well-known/mcp.json, /api/mcp 200; Operator 401 without or with a wrong secret, 200 with OPERATOR_SECRET. Live AI calls not exercised. First CLI deployment (meta-cto-khh0fbdeu, contains uploaded .env) still exists; awaiting user OK to remove.
+
+2026-10-28T17:35:00Z — Prompt: "Yes, remove it"
+Summary: Confirmed meta-cto-app.vercel.app points to dpl_2SkjPs6Zz1b6QGh8JcdnuLAhDNXX, then removed the first CLI deployment meta-cto-khh0fbdeu (dpl_AtbnEaCuVmvWRUx9jbibxPQtRHh1) that contained the uploaded .env. Production still returns 200.
+Skills used: none. Docs changed/created: none.
+
+2026-10-28T17:50:00Z — Prompt: "Explore this. We're building Signal, an AI-first Feature Intelligence platform…" (full Signal brief with Crewday demo dataset; explore only, no implementation)
+Summary: Started Flow `explore` for a new product. Background reader found: root docs are template stubs; no database, ORM, vector store or embeddings; only auth is the single OPERATOR_SECRET (no users/tenants); MCP has only template tools (register via registerAppTool, keep tool-catalog.ts and tests/mcp parity); AI goes through AI Gateway (Sonnet defaults); GenUI/eve agents are framed around UI prototyping on synthetic data; no docs/decisions or docs/specs; no unmerged branches; "Operator" is a reserved glossary term. Opened the interview with a hypothesis (~65%).
+Skills used: explore, interview. Docs changed/created: none.
+Question (assistant → user): Which AI workflow anchors slice 1 (problem grouping / duplicate check on submit / priority + decision brief), who is the primary user (PM / customer submitter / product leader), and how requests enter (seeded data + form / public portal / agents via MCP too)? Answer: not answered yet (form dismissed).
+Answer (user, in place of the form): Focus on submissions first; API/MCP-first before any UI; while drafting a feature request the system should suggest similar requests to upvote or comment on instead of creating a new one.
+Question (assistant → user): Who calls the submission API first in practice: customer-facing staff and agents filing on a customer's behalf (assistant's guess), or end customers via an embedded widget? Answer: pending.
+Answer (user): Use Neon Postgres via Vercel's integration, with Drizzle migrations or a better option.
+Summary: Recommended Neon via Vercel Marketplace (DATABASE_URL on meta-cto-app), Drizzle + drizzle-kit (SQL-first, native pgvector support, TS schema shared with API/MCP validation), pgvector in the same DB with embeddings via AI Gateway, and a retrieve-then-classify step (vector candidates, then one LLM call labeling same need / related / different with a reason). Recorded as technical direction for ARCHITECTURE.md and spec 001, not the product brief; nothing provisioned. Re-asked who calls the submission API first. Skills used: explore. Docs changed/created: none.
+
+2026-10-28T18:05:00Z — Prompt: "dont update previous specs, create new specs… before we spec this out, we should explore more our problem, identify our key metrics and journeys… clear defined mvp goals"
+Summary: Confirmed no docs/specs exist yet; future specs will be new numbered files. Drafted MVP framing as hypotheses: problem = fragmentation at intake while keeping related-but-distinct needs separate; journeys = human submitter, agent submitter via MCP, PM reviewing consolidated evidence; metric candidates; riskiest assumptions. Flagged that fragmentation rate requires a PM merge/split capability in API/MCP. Saved a feedback memory about new specs and exploring before specs.
+Skills used: explore, interview. Docs changed/created: none.
+Question (assistant → user): Main metric? Answer: fragmentation rate (share of new requests a PM later marks as duplicates).
+Question (assistant → user): Who calls the submission API first? Answer: customer-facing staff and agents filing on a customer's behalf, with account context.
+Question (assistant → user): How to prove AI tells "same need" from "related need"? Answer: labeled Crewday eval set (precision/recall offline).
+Question (assistant → user): Kill criterion — ~85% precision on "same need" on the labeled set, or a line on wrong-merge rate? Answer: pending.
+Answer (user): Yes, 85% precision on "same need" on the labeled Crewday set is the kill line.
+Summary: Restated intent (outcome, users, why now [assistant guess], success, kill criterion, constraints, out of scope) for explicit confirmation; 4 guesses accepted unchanged, 1 overridden. Skills used: explore, interview. Docs changed/created: none.
+Question (assistant → user): Is the restated intent right as written, or what would you change? Answer: pending.
+
+2026-10-28T18:15:00Z — Prompt: "Yes, confirmed"
+Summary: Intent confirmed explicitly (includes the assistant's "why now" guess). Per explore/interview, ended the turn and named the grill (with a parallel pre-mortem) as the next step; nothing written. Skills used: explore, interview. Docs changed/created: none.
+
+2026-10-28T18:30:00Z — Prompt: "Grill it"
+Summary: Ran grill on the riskiest claims with a parallel pre-mortem worker (failure modes: metric never measured, eval leakage, callers always create, "related" noise, wrong merges losing account context, inflated supports). Took F4/F5/F6 mitigations as spec defaults (≤2 related results above a threshold with a shared-dimension note; append-only merges keeping original request per support; actor vs on_behalf_of, one support per customer org per request). Outcome: resolved direction; drafted the PRODUCT.md brief for approval.
+Skills used: explore, grill. Docs changed/created: none.
+Question (assistant → user): How to measure fragmentation before real PMs exist? Answer: add seed data; run migrations and non-destructive, repeatable seeding on Vercel deployments and app startup, maybe local startup too.
+Question (assistant → user): How to keep the eval honest? Answer: frozen held-out set.
+Question (assistant → user): Require a similarity check before create? Answer: search before create.
+Question (assistant → user): Test the kill criterion with a 1-week spike before building? Answer: build, then measure.
+Question (assistant → user): Include a PM review-queue tool with coverage? Answer: yes, with coverage.
+Question (assistant → user): Write the shown PRODUCT.md brief to explore/signal? Answer: not yet — first run /competitors to identify opportunities and patterns.
+
+2026-10-28T18:45:00Z — Prompt: "first lets do some /competitors analysis to identify opportunities and patterns"
+Summary: Ran the competitors skill to inform positioning and MVP scope. Launched four parallel web-research workers: feedback boards/voting portals; PM suites with AI insights; AI-native feedback analytics; intake inside support/issue tools and agent/MCP ecosystems. Manual status quo covered in the main thread. Results pending.
+Skills used: competitors. Docs changed/created: none yet (research file to be saved under docs/research/ on explore/signal).
+Result: Four workers returned; verified key claims against vendor pages (Productboard MCP feedback creation contradicted between marketing and support docs → unverified; GitHub duplicate detection is web-form only, unlabeled; Canny MCP has no similarity tool; Pylon match-or-create confirmed, no API/MCP documented; Linear Triage Intelligence is post-creation; VoteShip unverifiable). Saved docs/research/2026-10-28-feature-request-landscape.md on new branch explore/signal. Main finding: no documented agent-facing check-before-create with same/related/different verdicts and reasons; review queues, lossless merges and MRR context are table stakes; Linear, Atlassian, Canny, Pylon are fast-follow threats.
+Skills used: competitors, explore. Docs changed/created: docs/research/2026-10-28-feature-request-landscape.md.
+Summary (cont.): Presented patterns, opening, threats, falsifiers and proposed brief changes (alternatives by class, evidence-based why-now, new incumbent-timing assumption, positioning line). Question (assistant → user): Should Signal be the standalone system of record for requests, or a neutral intake layer that syncs into existing trackers (Linear, JPD)? Answer: pending.
+
+2026-10-28T19:10:00Z — Prompt: "Own the records"
+Summary: Positioning set: Signal is the system of record for feature requests; tracker integrations later. Showed the updated brief sections (Definition positioning line, evidence-based Why now, new incumbent-timing assumption, Alternatives by class) for approval before writing PRODUCT.md on explore/signal. Skills used: explore. Docs changed/created: none.
+Question (assistant → user): Write the brief with these changes to PRODUCT.md on explore/signal? Answer: pending.
+
+2026-10-28T19:20:00Z — Prompt: "yes, but emphasize our differentiator"
+Summary: Wrote the Signal brief to PRODUCT.md on explore/signal, adding a dedicated "Differentiator" section (a verdict before every create, not a merge after it; three-way verdict with reasons; for staff and agents over API/MCP; comparison table vs everyone else; table stakes named; edge = verdict quality). Exploration is spec-ready.
+Skills used: explore. Docs changed/created: PRODUCT.md.
+
+2026-10-28T19:35:00Z — Prompt: "before specs, lets review the initial requirements, MVP definition can be broaden while keeping first implementation slice we have defined (ingestion optimization and it's key metric)" + pasted core requirements
+Summary: Mapped core requirements against the brief: submit, support and AI-first covered; view/discover and understand-grouping/evaluation were gaps; brief's "no end-user UI" and "no prioritization" conflicted with requirements (brief is unmerged, no gate). Proposed a 3-slice MVP keeping slice 1 (Capture → Connect, fragmentation rate) first. Showed exact PRODUCT.md changes (MVP sentence, new MVP slices section, journeys 4–5, later-slice signals, new out-of-scope) for approval.
+Skills used: explore. Docs changed/created: none yet.
+Question (assistant → user): Human UI in the MVP? Answer: yes, as slice 2 (minimal internal UI).
+Question (assistant → user): How far on grouped/evaluated/prioritized? Answer: group + evaluate (underlying need, related view with reasons, evidence summaries); no AI priority scores.
+Question (assistant → user): Who uses discover/support? Answer: internal teams (staff, agents, PMs).
+Question (assistant → user): Write these PRODUCT.md changes? Answer: pending.
+
+2026-10-28T19:40:00Z — Prompt: "Yes, write it"
+Summary: Applied the MVP changes to PRODUCT.md on explore/signal: MVP sentence (Capture → Connect → Understand in three slices), new "MVP slices" section, journeys 4–5, later-slice signals, updated out of scope. Brief is spec-ready.
+Skills used: explore. Docs changed/created: PRODUCT.md.
+
+2026-10-28T19:50:00Z — Prompt: "interview me more, grill this"
+Summary: Started a second interview pass before grilling the broadened MVP. Hypothesis (~60%): scope is right; biggest unknown is the build context (reviewed time-boxed build vs product for paying teams), which sets polish, depth and real-world plumbing (workspaces, import, billing).
+Skills used: interview, grill. Docs changed/created: none.
+Question (assistant → user): Is Signal a time-boxed build someone will review, or the start of a product for paying teams? Guess: time-boxed reviewed build. Answer: pending.
+Answer (user): Reviewed build.
+Question (assistant → user): Time box? Answer: today, 3 hours (AI-assisted dev with the Flow process). Reviewers weigh: AI-first product thinking. Access: deployed URL.
+Summary (grill): Three-slice MVP doesn't fit 3 hours; proposed today's cut — seeded Crewday (~40 requests incl. Sofia/Daniel/Patricia), one check service returning underlying need + same/related/different verdicts with reasons (API, MCP, UI), support/comment/create-with-reason, minimal internal UI (submit with live verdict, list, detail), ~25-pair frozen eval, event logging for fragmentation rate. Cut today but kept in brief: review queue, merge/split, account-aware verdicts, groups, per-integration API keys, large held-out set.
+Question (assistant → user): Retrieval? Answer: pgvector embeddings (against recommendation of LLM over full catalog).
+Question (assistant → user): Ship order? Answer: service → MCP → UI (against recommendation of service → UI → MCP).
+Question (assistant → user): Reviewer access? Answer: open demo, rate-limited.
+Outcome: resolved direction for spec 001; brief unchanged (time-box cut belongs to the spec). Skills used: interview, grill. Docs changed/created: none.
+
+2026-10-28T20:05:00Z — Prompt: "Use TDD for the agent, api and mcp service"
+Summary: Recorded TDD as a build constraint for spec 001 (verdict agent unit-tested with a mocked model, real quality via frozen eval; API route tests; MCP tool parity and smoke tests; real Postgres only for pgvector and seed idempotency). Saved a feedback memory. Skills used: none. Docs changed/created: none.
+
+2026-10-28T20:15:00Z — Prompt: "we have identified term for glossary.md update it accordingly to DDD patterns"
+Summary: Ran domain-modeling (user explicitly asked for DDD structure, overriding the skill's default of not introducing it). Rewrote GLOSSARY.md as Signal's ubiquitous language by bounded context (Intake, People and tenancy, Review, Measurement, Platform) and pattern (aggregate root Feature Request; entities Check, Support, Comment, Related Link; value objects Draft, Verdict, Same Need/Related Need/Different, Reason, Underlying Need, Shared Dimension, Skip Reason, Account Context, Review Decision; domain events). Naming calls: Support (not upvote), Workspace/Account/Requester (not "customer"), "Feature Request" in full, Actor split into Staff Actor and Agent Actor, Verdict (Check) vs Review Decision (PM), Same Need vs Duplicate. Kept template terms; Operator marked as not a Signal role. No decision record (none passed the decision test).
+Skills used: domain-modeling. Docs changed/created: GLOSSARY.md.
+
+2026-10-28T20:30:00Z — Prompt: "Spec it"
+Summary: Ran to-spec. Renamed explore/signal to 001-check-before-create (exploration commits ship with the spec). Wrote docs/specs/001-check-before-create.md (status draft): contract-first REST + MCP tools (check, create with check/skip reason, support, comment, search, get, metrics), verdict agent design with degraded mode, Drizzle schema, idempotent Crewday seed on build/dev, events and metrics, minimal internal UI, TDD testing decisions, frozen ~25-pair Held-Out Set, human and MCP acceptance scenarios, open-demo Exposure exception, build order service → MCP → UI. Wrote decision docs/decisions/0001-postgres-pgvector-neon-drizzle.md (Proposed). Named candidates 002 (review queue, merge/split, live fragmentation) and 003 (understand and evaluate); no issues opened. Nothing pushed.
+Skills used: to-spec. Docs changed/created: docs/specs/001-check-before-create.md, docs/decisions/0001-postgres-pgvector-neon-drizzle.md.
+
+2026-10-28T20:40:00Z — Prompt: "Accept the spec"
+Summary: Set spec 001 to accepted (2026-10-28) and decision 0001 to accepted; no back-pointers needed. Pushed branch 001-check-before-create to origin, created labels candidate/draft/accepted, opened spec issue gaboesquivel/meta-cto#1 labelled accepted (body from to-spec's spec-issue helper), linked it on the spec's Status line, and synced the body.
+Skills used: to-spec. Docs changed/created: docs/specs/001-check-before-create.md, docs/decisions/0001-postgres-pgvector-neon-drizzle.md.
+
+2026-10-28T21:10:00Z — Prompts during build: "Build it"; "max parallel execution in subagents. that should be default"; "run to /to-tasks first if needed for parallel execution"; "going for walk, continue working iteratively fixing bugs until we have working build on the branch and vercel, one neon instance per branch preview"; "what neon link?"
+Summary: Build of spec 001 started. Neon creation via `vercel integration add neon` needs the user to accept Neon's Marketplace terms in the browser (https://vercel.com/gaboesquivel/~/integrations/accept-terms/neon?source=cli) — pending. Added drizzle-orm, @neondatabase/serverless, drizzle-kit, @electric-sql/pglite@0.3.16 (0.5 dropped pgvector). Committed schema/migration/repository (468751a, 3 PGlite tests) and contracts/ports/Crewday seed data (bd88faa). Ran to-tasks: 9 sub-issues of #1 (#6,#10,#3,#9,#4,#8,#5,#2,#7) with blocked-by links; Tasks checklist in the spec. Saved feedback memory: max parallel subagents by default.
+Skills used: build, to-tasks. Docs changed/created: docs/specs/001-check-before-create.md.
+Question (user → assistant): "what neon link?" Answer: https://vercel.com/gaboesquivel/~/integrations/accept-terms/neon?source=cli (accept Neon Marketplace terms for the gaboesquivel team).
+
+2026-10-28T22:30:00Z — Build progress (user away: "continue working iteratively fixing bugs until we have working build on the branch and vercel, one neon instance per branch preview"; "ah yeah I accept all specs and task, build everything on the branch")
+Summary: Ran tasks 01–04 and 06–08 as seven parallel workers in worktrees, integrated each with ancestry/overlap checks and a full suite run per batch; built task 05 (runtime) directly, test-first. Fixed baseline (vitest now excludes nested .eve snapshots), removed the seed's duplicate embedder, excluded drizzle/meta from formatting. All code tasks ticked in the spec; draft PR gaboesquivel/meta-cto#11 opened and bound. Suite: 34 files, 293 tests; `pnpm build` passes. Aligned ARCHITECTURE.md, DESIGN.md and /llms.txt. GitHub Actions CI never fired on PR/push events; dispatched it manually on the branch. Task 09 blocked: Neon still needs the user to accept Marketplace terms.
+Skills used: build, to-tasks. Docs changed/created: ARCHITECTURE.md, DESIGN.md, docs/specs/001-check-before-create.md, docs/INTEROP.md.
+Status: GitHub Actions CI (manually dispatched, run 40782661717) passed on the branch; Vercel preview of 8ef0af3 is READY with pages and MCP discovery at 200 and the Signal API at 503 service_unavailable (no DATABASE_URL yet). Neon still blocked on the user accepting Marketplace terms; task 09 (Neon per-branch previews, migrate/seed, acceptance, eval) pending.
+
+2026-10-28T23:50:00Z — Prompt: "Accepted, continue" (Neon terms accepted)
+Summary: Created free Neon database meta-cto-app-db (iad1, Neon Auth off) via `vercel integration add neon`, connected to meta-cto-app for production/preview/development; committed the two Neon agent skills the integration installed. First preview build migrated and seeded (40 embeddings) but used the main branch; enabled "Create Database Branch For Deployment: Preview" (with "Require Active Resource Before Deploy") on the project connection via the Vercel dashboard. Live Check on the preview was degraded: the judge fell back to the template chat model anthropic/claude-sonnet-4-20250514, which the AI Gateway no longer serves (GatewayModelNotFoundError). Fixed test-first: judge defaults to anthropic/claude-sonnet-5.5 (SIGNAL_JUDGE_MODEL override), dropped unsupported temperature. Live judge returns correct Same Need with reason in ~2.8s.
+Skills used: built-in-browser. Docs changed/created: none.
+
+2026-10-29T00:05:00Z — Prompt: "max parallel execution" (mid-turn) during task 09
+Summary: Enabled Neon preview branching (confirmed: deployment integration ran, preview migrated/seeded its own branch). Raised judge timeout to 20s (Sonnet 5.5 took 7.7s for 10 candidates; 8s degraded live Checks) with SIGNAL_JUDGE_TIMEOUT_MS override. Ran both acceptance journeys on the branch preview: all steps passed (step 4 related slots held other neighbors than Sofia's request). Added `--local` eval mode (in-memory seeded Postgres, real models) and fixed eval scoring so a dropped "different" target counts as correct. Held-out eval: Same-Need Precision 100% (10/10), recall 100%, related precision 62.5%; recorded in the spec. Task 09 ticked; spec status implemented.
+Skills used: build. Docs changed/created: docs/specs/001-check-before-create.md, ARCHITECTURE.md, evals/signal-verdict/report.md.
