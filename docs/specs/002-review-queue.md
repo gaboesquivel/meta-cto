@@ -1,6 +1,6 @@
 # 002 — Review queue: confirm duplicates, keep the evidence, show prevention
 
-Status: accepted (2026-10-29)
+Status: accepted (2026-10-29) · Issue: [#13](https://github.com/gaboesquivel/meta-cto/issues/13)
 Slice: MVP slice 1, journey 3 (Product Manager review) ([PRODUCT.md](../../PRODUCT.md#core-journeys)); builds on [spec 001](001-check-before-create.md)
 Decisions: [0002 Measure prevention with confirmed duplicates; duplicates as reversible associations](../decisions/0002-fragmentation-and-duplicate-association.md) (Accepted), [0001](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 
