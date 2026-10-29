@@ -21,5 +21,5 @@ export const signalToolDescriptions = {
   search_feature_requests:
     "Search or list feature requests (q is semantic) with support and account counts. To decide whether to create a new request, use check_feature_request instead.",
   support_feature_request:
-    "Add a customer account's support to an existing feature request by id. Preferred over creating when check_feature_request returned a same_need candidate; pass its checkId. Returns the feature request to cite to the customer.",
+    "Add a customer account's support to an existing feature request by id. Preferred over creating when check_feature_request returned a same_need candidate; pass its checkId. Returns the feature request to cite to the customer. One support per account: a repeat fails with already_supported (details carry the existing support and feature request); add a comment with comment_on_feature_request instead.",
 } as const satisfies Record<(typeof signalMcpToolNames)[number], string>;
