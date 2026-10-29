@@ -310,3 +310,7 @@ Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick).
 2026-10-29T03:34:20Z — build progress
 Summary: Integrated 003 task 07 (#29) at 40ed8eb after fix round (next build failed: import.meta.dirname undefined in webpack; dirs now resolve from cwd at call time). qa 793 tests green, build green.
 Skills used: build. Docs changed: docs/specs/003-prove-the-verdict.md (tick), ARCHITECTURE.md, docs/INTEROP.md (worker).
+
+2026-10-29T03:39:41Z — build: task 08
+Summary: Aligned ARCHITECTURE/DESIGN/GLOSSARY; verified preview d6bb4a1 via vercel curl (fail-closed pilot, demo unchanged, origin isolation, /proof gated); recorded Verification; spec 003 implemented. Human-labeled steps pending.
+Skills used: build. Docs changed: ARCHITECTURE.md, DESIGN.md, GLOSSARY.md, docs/specs/003-prove-the-verdict.md.
