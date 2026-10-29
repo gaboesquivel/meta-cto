@@ -1,6 +1,6 @@
 # 003 — Prove the verdict before slice 3
 
-Status: accepted (2026-10-29) · Issue: [#22](https://github.com/gaboesquivel/meta-cto/issues/22)
+Status: implemented (2026-10-29) · Issue: [#22](https://github.com/gaboesquivel/meta-cto/issues/22)
 Slice: proof run between MVP slice 1 and slice 3 ([PRODUCT.md](../../PRODUCT.md#mvp-slices)); builds on [spec 001](001-check-before-create.md) and [spec 002](002-review-queue.md)
 Decisions: [0003 Prove the verdict before slice 3](../decisions/0003-proof-before-slice-3.md) (Accepted), [0002](../decisions/0002-fragmentation-and-duplicate-association.md) (Accepted), [0001](../decisions/0001-postgres-pgvector-neon-drizzle.md) (Accepted)
 
@@ -102,6 +102,18 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 - **Goodhart on 85%.** v2 is frozen before any run and run once per prompt version, with every run logged.
 - **Cost:** about 200 pilot Checks plus v2 readings and one backlog scan; within existing AI Gateway limits (assumption).
 
+## Verification (2026-10-29)
+
+Branch preview of `d6bb4a1` (own Neon branch, Vercel Authentication; read-only GETs through `vercel curl`). Steps that need no human labels or new secrets:
+
+- Step 2, pilot access without a configured key: `/api/metrics` with `x-signal-pilot-key` → 503 `pilot_key_required` ("pilot access is off"); `/api/proof` without Operator access → 503 with a resolution. Pass.
+- Demo unchanged: `/api/metrics` → 200, `origin: demo`, Suspected Duplication over the 41 seeded requests, counts present; `/review` → 200. Pass.
+- Origin isolation: `/api/metrics?origin=eval` → 200 with zero eval Checks, separate from demo. Pass.
+- `/proof` without Operator access → 200 with "Sign in as Operator" and no report data; `/openapi.json` lists `/api/proof`. Pass.
+- Local: `pnpm qa` 67 files / 793 tests and `pnpm build` green; `pnpm signal:pilot:check` reports the empty templates as not ready.
+
+Pending, needs people (not faked): steps 1 and 3–7 need `SIGNAL_PILOT_KEY` set on the deployment, a person-authored pilot backlog, feedback set and need-cluster Answer Key (frozen), Held-Out Set v2 with at least 60 person-confirmed same-need positives (frozen), the backlog scan and Product Manager reviews (including blind ones). The Proof Report reads Inconclusive until then.
+
 ## Tasks
 
 - [x] 01: Record Origin on Checks and events (#23) — [d5ff563](https://github.com/gaboesquivel/meta-cto/commit/d5ff563a2cedcd48467d604ddf78a0e827b75d37)
@@ -111,4 +123,4 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 - [x] 05: Score agent correctness and PM agreement (#27) — [9d8278f](https://github.com/gaboesquivel/meta-cto/commit/9d8278f2a98228145c821e536ad6b3519c2e1c7d)
 - [x] 06: Held-Out Set v2 runner with intervals (#28) — [a645ce4](https://github.com/gaboesquivel/meta-cto/commit/a645ce47e8def8075cbf94a5acb2346eda1bfa8c)
 - [x] 07: Proof Report (#29) — [40ed8eb](https://github.com/gaboesquivel/meta-cto/commit/40ed8eb3d43a89cd04529c2bf477a4947768d2d3)
-- [ ] 08: Wire, verify on a preview and align docs (#30)
+- [x] 08: Wire, verify on a preview and align docs (#30) — [d6bb4a1](https://github.com/gaboesquivel/meta-cto/commit/d6bb4a119f9a58e5df2ac418b70133dccf80bc42)
