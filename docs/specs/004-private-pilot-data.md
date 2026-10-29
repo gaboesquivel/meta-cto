@@ -64,7 +64,7 @@ The v1 Held-Out Set stays public: it was published before this decision and rema
 
 ## Tasks
 
-- [ ] 01: Private data folder outside the repository (#33)
+- [x] 01: Private data folder outside the repository (#33) — [e365f96](https://github.com/gaboesquivel/meta-cto/commit/e365f9690c78be038a88724531f085bbe08aaf73)
 - [ ] 02: Store pilot ground truth and v2 readings in the database (#34)
 - [ ] 03: Proof Report reads the database (#35)
 - [ ] 04: Verify on a preview and align docs (#36)
