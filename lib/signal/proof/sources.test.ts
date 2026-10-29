@@ -12,6 +12,7 @@ import { computeMetrics } from "@/evals/signal-verdict/metrics";
 import { fingerprint, PILOT_FILES } from "@/lib/pilot-load/files";
 import { pilotFixture } from "@/lib/pilot-load/fixture";
 
+import { buildProofReport } from "./report";
 import { loadProofInputs } from "./sources";
 import type { ProofSourceDeps } from "./sources";
 
@@ -75,9 +76,11 @@ const entry = (overrides: Partial<RunLogEntry> = {}): RunLogEntry => {
   };
 };
 
-const evalDir = ({ entries = [entry()], lock = true, changed = false } = {}) => {
+const evalDir = ({ entries = [entry()], lock = true, changed = false, emptied = false } = {}) => {
   const dir = mkdtempSync(path.join(tmpdir(), "proof-eval-"));
-  writeJson(dir, V2_SET_FILE, changed ? [...PAIRS, pair("v2-03")] : PAIRS);
+  let set = changed ? [...PAIRS, pair("v2-03")] : PAIRS;
+  if (emptied) set = [];
+  writeJson(dir, V2_SET_FILE, set);
   if (lock) {
     writeJson(dir, V2_LOCK_FILE, {
       fingerprint: PRINT,
@@ -120,6 +123,7 @@ describe("loadProofInputs", () => {
       expectedBacklogDuplicateRate: 0.15,
       feedback: 2,
       frozen: true,
+      frozenFeedback: 2,
       readable: true,
       unconfirmed: 0,
     });
@@ -131,8 +135,14 @@ describe("loadProofInputs", () => {
     const changed = await loadProofInputs(deps({ pilotDir: pilotDir({ changed: true }) }));
     expect(changed.pilotFiles).toMatchObject({ changed: true, readable: true, ready: false });
 
-    const missing = await loadProofInputs(deps({ pilotDir: path.join(tmpdir(), "no-such-dir") }));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const missingDir = path.join(tmpdir(), "no-such-dir");
+    const missing = await loadProofInputs(deps({ pilotDir: missingDir }));
     expect(missing.pilotFiles.readable).toBe(false);
+    const message = missing.pilotFiles.readable ? "" : missing.pilotFiles.message;
+    expect(message).toMatch(/missing/iu);
+    expect(message).not.toContain(missingDir);
+    expect(message).not.toMatch(/ENOENT/u);
     expect(missing.answerKeyScores).toBeNull();
   });
 
@@ -189,9 +199,30 @@ describe("loadProofInputs", () => {
     });
   });
 
+  it("reports an unreadable v2 set with a stable message, not the server path", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const dir = evalDir();
+    writeFileSync(path.join(dir, V2_SET_FILE), "{not json", "utf-8");
+    const inputs = await loadProofInputs(deps({ evalDir: dir }));
+    expect(inputs.heldOutV2.readable).toBe(false);
+    const message = inputs.heldOutV2.readable ? "" : inputs.heldOutV2.message;
+    expect(message).toMatch(/not valid JSON/iu);
+    expect(message).not.toContain(dir);
+  });
+
   it("flags a v2 set changed after freeze and a set that is not frozen", async () => {
     const changed = await loadProofInputs(deps({ evalDir: evalDir({ changed: true }) }));
     expect(changed.heldOutV2).toMatchObject({ changed: true, frozen: true });
+
+    const emptied = await loadProofInputs(deps({ evalDir: evalDir({ emptied: true }) }));
+    expect(emptied.heldOutV2).toMatchObject({ changed: true, frozen: true, pairs: 0 });
+    const report = buildProofReport(emptied);
+    expect(report.readiness.readingResets.join(" ")).toMatch(
+      /changed after freeze: reading reset/u,
+    );
+    const sameNeed = report.bars.find((bar) => bar.key === "sameNeedPrecision");
+    expect(sameNeed?.verdict).toBe("inconclusive");
+    expect(sameNeed?.reasons.join(" ")).toMatch(/reading reset/u);
 
     const open = await loadProofInputs(deps({ evalDir: evalDir({ lock: false }) }));
     expect(open.heldOutV2).toMatchObject({ changed: false, frozen: false });

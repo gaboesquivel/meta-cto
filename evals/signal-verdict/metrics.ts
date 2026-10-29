@@ -1,7 +1,8 @@
 import type { Verdict } from "@/lib/signal/contracts";
+import { SAME_NEED_BAR } from "@/lib/signal/proof/bars";
 
 /** Same-Need Precision below this on the Held-Out Set triggers the kill criterion (PRODUCT.md). */
-export const KILL_LINE = 0.85;
+export const KILL_LINE = SAME_NEED_BAR;
 
 export type ExpectedVerdict = Exclude<Verdict, "unknown">;
 /** The Check's verdict for the target, or "absent" when the target was not among the candidates. */

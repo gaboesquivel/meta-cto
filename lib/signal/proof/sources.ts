@@ -1,3 +1,5 @@
+import { ZodError } from "zod";
+
 import {
   checkV2Ready,
   loadHeldOutV2,
@@ -43,8 +45,19 @@ export interface ProofSourceDeps {
   promptVersion: () => string;
 }
 
-const firstLine = (error: unknown) =>
-  (error instanceof Error ? error.message : String(error)).split("\n")[0] ?? "unknown error";
+/**
+ * A stable, path-free reason for an unreadable file set, safe to show in the report. The raw
+ * error (which may name server paths) goes to the server log only.
+ */
+const unreadableReason = (label: string, error: unknown): string => {
+  console.error(`[signal] proof report: ${label} unreadable`, error);
+  if (error instanceof SyntaxError) return "a file is not valid JSON.";
+  if (error instanceof ZodError) return "a file does not match its expected shape.";
+  const code = (error as { code?: unknown } | null)?.code;
+  if (code === "ENOENT") return "a file is missing from this deployment.";
+  if (code === "EACCES" || code === "EPERM") return "a file cannot be opened on this deployment.";
+  return "they could not be read; check the server log.";
+};
 
 const readPilot = (dir: string): { labels: AnswerKeyLabels | null; state: PilotFilesState } => {
   try {
@@ -61,6 +74,7 @@ const readPilot = (dir: string): { labels: AnswerKeyLabels | null; state: PilotF
         feedback: status.counts.feedback,
         frozen: status.frozen,
         frozenAt: lock?.frozenAt ?? null,
+        frozenFeedback: lock?.feedback ?? null,
         messages: status.messages,
         readable: true,
         ready: status.ready,
@@ -68,7 +82,10 @@ const readPilot = (dir: string): { labels: AnswerKeyLabels | null; state: PilotF
       },
     };
   } catch (error) {
-    return { labels: null, state: { message: firstLine(error), readable: false } };
+    return {
+      labels: null,
+      state: { message: unreadableReason("pilot files", error), readable: false },
+    };
   }
 };
 
@@ -89,7 +106,10 @@ const readV2 = (dir: string) => {
     };
     return { lock, state };
   } catch (error) {
-    return { lock: null, state: { message: firstLine(error), readable: false } as const };
+    return {
+      lock: null,
+      state: { message: unreadableReason("Held-Out Set v2", error), readable: false } as const,
+    };
   }
 };
 

@@ -74,6 +74,7 @@ export interface RunLogEntry {
 
 const entryKeySchema = z
   .object({
+    counts: z.object({ completed: z.number(), failures: z.number() }).loose(),
     fingerprint: z.string().nullable(),
     promptVersion: z.string(),
     set: z.string(),
@@ -94,25 +95,36 @@ export const appendRunLog = (entry: RunLogEntry, dir = evalDir()): void => {
   appendFileSync(path.join(dir, RUN_LOG_FILE), `${JSON.stringify(entry)}\n`, "utf-8");
 };
 
+type RunKey = Pick<RunLogEntry, "counts" | "fingerprint" | "promptVersion" | "set" | "status">;
+
 /**
- * A run is a repeat when an earlier run (completed or failed, not refused) used the same set,
- * fingerprint and prompt version. Failed runs count: they already showed the set to that prompt.
+ * Whether any pair reached the Check (and so the judge). A run that failed before that — service
+ * unavailable, a target that would not resolve — is logged as failed with nothing completed or
+ * failed, and never counts as a reading or makes a later run a repeat.
+ */
+export const judgedPairs = (entry: Pick<RunLogEntry, "counts" | "status">): boolean =>
+  entry.status !== "refused" && entry.counts.completed + entry.counts.failures > 0;
+
+/**
+ * A run is a repeat when an earlier run that judged pairs (completed or failed mid-run) used the
+ * same set, fingerprint and prompt version. Failed runs count once pairs were judged: they
+ * already showed the set to that prompt.
  */
 export const isRepeatRun = (
-  entries: Pick<RunLogEntry, "fingerprint" | "promptVersion" | "set" | "status">[],
+  entries: RunKey[],
   key: { fingerprint: string; promptVersion: string; set: string },
 ): boolean =>
   entries.some(
     (e) =>
-      e.status !== "refused" &&
+      judgedPairs(e) &&
       e.set === key.set &&
       e.fingerprint === key.fingerprint &&
       e.promptVersion === key.promptVersion,
   );
 
 /**
- * The reading the Proof Report shows: the latest non-repeat, non-refused v2 run on the frozen
- * fingerprint. Null when there is none, or when the set changed after freeze (reading reset).
+ * The reading the Proof Report shows: the latest non-repeat v2 run on the frozen fingerprint that
+ * judged pairs. Null when there is none, or when the set changed after freeze (reading reset).
  */
 export const currentV2Reading = (
   entries: RunLogEntry[],
@@ -121,10 +133,7 @@ export const currentV2Reading = (
   if (!lock) return null;
   const readings = entries.filter(
     (e) =>
-      e.set === "held-out-v2" &&
-      e.status !== "refused" &&
-      !e.repeat &&
-      e.fingerprint === lock.fingerprint,
+      e.set === "held-out-v2" && judgedPairs(e) && !e.repeat && e.fingerprint === lock.fingerprint,
   );
   return readings.at(-1) ?? null;
 };

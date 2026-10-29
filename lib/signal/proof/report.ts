@@ -1,18 +1,22 @@
-import {
-  MIN_SAME_NEED_POSITIVES,
-  precisionReading,
-  RELATED_NEED_BAR,
-  SAME_NEED_BAR,
-  verdictFor,
-  wilsonInterval,
-} from "@/evals/signal-verdict/readings";
-import type { BarVerdict, Interval, PrecisionReading } from "@/evals/signal-verdict/readings";
 import type { ReviewMetrics } from "@/lib/signal/contracts";
 import type {
   AgentCorrectness,
   AnswerKeyScores,
   PmAgreement,
 } from "@/lib/signal/service/answer-key";
+
+import {
+  BASELINE_SHARE,
+  MIN_SAME_NEED_POSITIVES,
+  minPilotFilings,
+  precisionReading,
+  RELATED_NEED_BAR,
+  REVIEW_COVERAGE_BAR,
+  SAME_NEED_BAR,
+  verdictFor,
+  wilsonInterval,
+} from "./bars";
+import type { BarVerdict, Interval, PrecisionReading } from "./bars";
 
 /**
  * The Proof Report (spec 003, decision 0003): every preset bar with its value, counts, 95%
@@ -21,17 +25,16 @@ import type {
  *
  * Verdict rules: a bar passes only when its whole 95% interval clears the bar and its minimums are
  * met; it fails only when the interval is wholly on the wrong side; anything else is inconclusive,
- * with the reasons listed. Interval math and the precision rules come from the eval readings.
+ * with the reasons listed. Bars, interval math and the precision rules live in `bars.ts`.
  */
 
-export type { BarVerdict, Interval } from "@/evals/signal-verdict/readings";
-
-/** "About 200 filings": pilot Checks (one per feedback item filed) before the intake bars apply. */
-export const MIN_PILOT_FILINGS = 200;
-/** Review Coverage bar, also applied to the backlog review behind the baseline. */
-export const REVIEW_COVERAGE_BAR = 0.8;
-/** Pilot Intake Duplicate Rate must be at most this share of the backlog baseline. */
-export const BASELINE_SHARE = 0.5;
+export type { BarVerdict, Interval } from "./bars";
+/** `MIN_PILOT_FILINGS`: the filings minimum when the frozen feedback count is unknown. */
+export {
+  BASELINE_SHARE,
+  DEFAULT_MIN_PILOT_FILINGS as MIN_PILOT_FILINGS,
+  REVIEW_COVERAGE_BAR,
+} from "./bars";
 
 export type PilotFilesState =
   | { message: string; readable: false }
@@ -43,6 +46,8 @@ export type PilotFilesState =
       feedback: number;
       frozen: boolean;
       frozenAt: string | null;
+      /** Feedback items in the pilot lock (the filings minimum); null or absent when not frozen. */
+      frozenFeedback?: number | null;
       messages: string[];
       readable: true;
       ready: boolean;
@@ -202,14 +207,17 @@ const finish = (bar: Omit<ProofBar, "consequence" | "verdict">, verdict: BarVerd
   verdict: bar.reasons.length > 0 && verdict === "pass" ? "inconclusive" : verdict,
 });
 
+/** One filing per frozen pilot feedback item; about 200 when the frozen count is unknown. */
+const filingsMinimum = (files: PilotFilesState): number =>
+  minPilotFilings(files.readable ? (files.frozenFeedback ?? null) : null);
+
 const metricsReasons = (input: ProofInputs): string[] => {
   const metrics = input.pilotMetrics;
   if (!metrics) {
     return [`Pilot metrics are unavailable: ${input.pilotMetricsError ?? "not read."}`];
   }
-  return metrics.checks < MIN_PILOT_FILINGS
-    ? [`${metrics.checks} of about ${MIN_PILOT_FILINGS} filings so far.`]
-    : [];
+  const minimum = filingsMinimum(input.pilotFiles);
+  return metrics.checks < minimum ? [`${metrics.checks} of about ${minimum} filings so far.`] : [];
 };
 
 const pilotFilesReasons = (files: PilotFilesState): string[] => {
@@ -304,7 +312,7 @@ const coverageBar = (input: ProofInputs): ProofBar => {
   const metrics = input.pilotMetrics;
   const reasons = metricsReasons(input);
   const base = {
-    bar: `≥ 80% over about ${MIN_PILOT_FILINGS} filings`,
+    bar: `≥ ${pct(REVIEW_COVERAGE_BAR)} over about ${filingsMinimum(input.pilotFiles)} filings`,
     baseline: null,
     interval: null,
     key: "reviewCoverage" as const,
@@ -315,10 +323,11 @@ const coverageBar = (input: ProofInputs): ProofBar => {
   if (!metrics) return finish({ ...base, counts: {}, reasons, value: null }, "inconclusive");
   const { rate, reviewed, total } = metrics.reviewCoverage;
   if (rate === null) reasons.push("There are no new Feature Requests to review yet.");
+  // Review never "ends", so coverage under the bar is work in progress, not a failure.
   let verdict: BarVerdict = "inconclusive";
   if (reasons.length === 0 && rate !== null) {
-    verdict = rate >= REVIEW_COVERAGE_BAR ? "pass" : "fail";
-    if (verdict === "fail") reasons.push(`Review Coverage is ${pct(rate)}, under 80%.`);
+    if (rate >= REVIEW_COVERAGE_BAR) verdict = "pass";
+    else reasons.push(`Review Coverage is ${pct(rate)}, under 80%: keep reviewing.`);
   }
   return finish(
     { ...base, counts: { filings: metrics.checks, reviewed, total }, reasons, value: rate },

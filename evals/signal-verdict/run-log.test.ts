@@ -76,6 +76,14 @@ describe("isRepeatRun", () => {
     assert.equal(isRepeatRun([entry({ fingerprint: "sha256:def" })], key), false);
     assert.equal(isRepeatRun([entry({ set: "held-out" })], key), false);
   });
+
+  test("ignores a run that failed before any pair reached the judge", () => {
+    const preJudge = entry({
+      counts: { completed: 0, failures: 0, pairs: 2, sameNeedPositives: 1 },
+      status: "failed",
+    });
+    assert.equal(isRepeatRun([preJudge], key), false);
+  });
 });
 
 describe("run log file", () => {
@@ -107,5 +115,16 @@ describe("currentV2Reading", () => {
     assert.equal(currentV2Reading([entry()], null), null);
     assert.equal(currentV2Reading([entry({ set: "held-out" })], lock), null);
     assert.equal(currentV2Reading([entry({ fingerprint: "sha256:old" })], lock), null);
+  });
+
+  test("skips runs that failed before any pair reached the judge", () => {
+    const judged = entry({ promptVersion: "pv-1" });
+    const preJudge = entry({
+      counts: { completed: 0, failures: 0, pairs: 2, sameNeedPositives: 1 },
+      promptVersion: "pv-2",
+      status: "failed",
+    });
+    assert.equal(currentV2Reading([judged, preJudge], lock), judged);
+    assert.equal(currentV2Reading([preJudge], lock), null);
   });
 });

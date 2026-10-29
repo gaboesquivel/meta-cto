@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { ReviewMetrics } from "@/lib/signal/contracts";
 import type { AnswerKeyScores } from "@/lib/signal/service/answer-key";
 
-import { buildProofReport, MIN_PILOT_FILINGS } from "./report";
+import { DEFAULT_MIN_PILOT_FILINGS } from "./bars";
+import { buildProofReport } from "./report";
 import type { HeldOutV2State, PilotFilesState, ProofBarKey, ProofInputs, V2Run } from "./report";
 
 const metrics = (overrides: Partial<ReviewMetrics> = {}): ReviewMetrics => ({
@@ -36,6 +37,7 @@ const pilotFiles = (overrides: Partial<Extract<PilotFilesState, { readable: true
     feedback: 210,
     frozen: true,
     frozenAt: "2026-10-30T09:00:00.000Z",
+    frozenFeedback: 210,
     messages: [],
     readable: true,
     ready: true,
@@ -216,9 +218,36 @@ describe("Intake Duplicate Rate bar", () => {
     expect(text).toMatch(/Review Coverage is 50%/u);
   });
 
-  it(`is inconclusive under ${MIN_PILOT_FILINGS} filings`, () => {
-    const text = reasonsOf({ pilotMetrics: metrics({ checks: 120 }) }, "intakeDuplicateRate");
+  it("is inconclusive under the frozen pilot feedback count", () => {
+    const text = reasonsOf(
+      { pilotFiles: pilotFiles({ frozenFeedback: 210 }), pilotMetrics: metrics({ checks: 205 }) },
+      "intakeDuplicateRate",
+    );
+    expect(text).toMatch(/205 of about 210 filings/u);
+  });
+
+  it(`falls back to ${DEFAULT_MIN_PILOT_FILINGS} filings when the feedback count is unknown`, () => {
+    const text = reasonsOf(
+      {
+        pilotFiles: { message: "missing", readable: false },
+        pilotMetrics: metrics({ checks: 120 }),
+      },
+      "intakeDuplicateRate",
+    );
     expect(text).toMatch(/120 of about 200 filings/u);
+  });
+
+  it("uses a smaller frozen pilot for the filings minimum", () => {
+    const report = buildProofReport(
+      inputs({
+        pilotFiles: pilotFiles({ frozenFeedback: 100 }),
+        pilotMetrics: metrics({ checks: 100 }),
+      }),
+    );
+    expect(barOf(report, "intakeDuplicateRate").verdict).toBe("pass");
+    const coverage = barOf(report, "reviewCoverage");
+    expect(coverage.verdict).toBe("pass");
+    expect(coverage.bar).toMatch(/about 100 filings/u);
   });
 
   it("is inconclusive when the backlog baseline is unreviewed", () => {
@@ -271,21 +300,24 @@ describe("Intake Duplicate Rate bar", () => {
 });
 
 describe("Review Coverage bar", () => {
-  it("fails under 80% once about 200 filings are in", () => {
+  it("is inconclusive under 80% (keep reviewing), never fail, and the overall verdict follows", () => {
     const report = buildProofReport(
       inputs({
         pilotMetrics: metrics({ reviewCoverage: { rate: 0.5, reviewed: 90, total: 180 } }),
       }),
     );
     const bar = barOf(report, "reviewCoverage");
-    expect(bar.verdict).toBe("fail");
+    expect(bar.verdict).toBe("inconclusive");
+    expect(bar.consequence).toBeNull();
     expect(bar.counts).toEqual({ filings: 220, reviewed: 90, total: 180 });
-    expect(bar.consequence).toMatch(/keep reviewing/iu);
+    expect(bar.reasons.join(" ")).toMatch(/Review Coverage is 50%, under 80%: keep reviewing/u);
+    expect(report.verdict).toBe("inconclusive");
+    expect(report.slice3).toBe("not_yet");
   });
 
   it("is inconclusive under the filing minimum, even at full coverage", () => {
     expect(reasonsOf({ pilotMetrics: metrics({ checks: 50 }) }, "reviewCoverage")).toMatch(
-      /50 of about 200 filings/u,
+      /50 of about 210 filings/u,
     );
   });
 
