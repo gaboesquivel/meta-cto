@@ -268,3 +268,7 @@ Skills used: explore, grill. Docs changed: none.
 2026-10-29T02:24:50Z — "to spec"
 Summary: Moved to to-spec for the proof slice (PRODUCT.md diff not written separately; carried into the spec).
 Skills used: to-spec. Docs changed: (see next entry).
+
+2026-10-29T02:26:21Z — to-spec result
+Summary: Wrote spec 003 (draft) and decision 0003 (Proposed) on branch 003-prove-the-verdict; not pushed, no issue opened.
+Skills used: to-spec. Docs changed/created: docs/specs/003-prove-the-verdict.md, docs/decisions/0003-proof-before-slice-3.md.
