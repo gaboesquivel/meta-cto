@@ -104,7 +104,7 @@ Real customers, customer sign-in or portals, external sign-in beyond the Pilot K
 
 ## Tasks
 
-- [ ] 01: Record Origin on Checks and events (#23)
+- [x] 01: Record Origin on Checks and events (#23) — [d5ff563](https://github.com/gaboesquivel/meta-cto/commit/d5ff563a2cedcd48467d604ddf78a0e827b75d37)
 - [ ] 02: Pilot Workspace behind a Pilot Key (#24)
 - [ ] 03: Load the pilot backlog and Answer Key (#25)
 - [ ] 04: Blind review in the Review Queue (#26)
